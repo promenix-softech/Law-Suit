@@ -1,0 +1,13 @@
+{
+  "name": "civil-suits",
+  "private": true,
+  "packageManager": "pnpm@10.28.0",
+  "scripts": {
+    "dev": "pnpm --filter web dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "test:unit": "pnpm -r test",
+    "test:db": "bash scripts/test-db.sh"
+  }
+}

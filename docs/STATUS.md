@@ -1,0 +1,33 @@
+# STATUS — Civil Suits
+
+**Current phase:** 0 — Setup (started 2026-10-20)
+**Next milestone:** Phase 1 demo (end of week 4) — single-case upload → OCR → review → drafts → PDF/A
+
+## Done (Phase 0)
+- [x] Monorepo: pnpm workspaces (`apps/web`, `packages/domain`, `supabase/`)
+- [x] Next.js 16 app scaffold + court-fee / suit-type calculator page
+- [x] `packages/domain`: court fee (Sch. I Art. 1), commercial/12A check, DRT fee, interest calculator, e-filing file names, case lifecycle — 28 unit tests
+- [x] Supabase core schema migration: 23 tables, enums, RLS on every table, maker-checker trigger, append-only hash-chained audit log
+- [x] RLS test suite on local Postgres (`pnpm test:db`)
+- [x] Claude Code setup: CLAUDE.md, 8 agents, 9 skills, hooks (destructive-command guard, env/migration guard, PII scan, stop-on-red-tests, session-start status)
+- [x] CI workflow (lint, typecheck, unit, DB/RLS tests, build)
+
+## Next (Phase 0 → 1)
+- [ ] NDA signed with client; receive 1 redacted sample file + format preferences
+- [ ] Create Supabase **dev** project (Mumbai, Free tier) and link; apply migration
+- [ ] Vercel project linked to repo (Hobby for demo; Pro before billing)
+- [ ] Synthetic fixture generator: 10 fake cases → scanned-look 100-page PDF
+- [ ] Auth (Supabase Auth + TOTP for admin/approver) and role dashboards
+- [ ] Upload → storage → `documents`; worker skeleton (Docker: LibreOffice, OCRmyPDF, qpdf)
+- [ ] Sarvam OCR + Haiku classification + Sonnet extraction behind one AI module with cost logging
+- [ ] First templates (1 bank, EN + MR): demand notice, plaint, vakalatnama, affidavit/SOT, BBE 2026 certificate draft
+- [ ] Time-and-motion study of 3–5 suits with client clerk
+
+## Blocked / waiting on client
+See `docs/open-questions.md`.
+
+## Legal items pending verification ([[LEGAL_REVIEW]])
+- BBE Act 2026 Second Schedule certificate wording (gazette text)
+- Court-fee slabs below ₹1 lakh; cap (₹3L vs ₹10L)
+- Advocates' Welfare Fund stamp amount (statute ₹20)
+- Order XXXVII exact averment; Marathi legal terms marked †
