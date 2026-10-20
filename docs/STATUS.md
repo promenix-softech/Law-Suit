@@ -73,7 +73,7 @@
 
 ## Done (slice 11 — Phase 2 start)
 - [x] Bulk upload (`/dashboard/batches`, admin): one PDF with many loan files → worker splits, OCRs locally (OCRmyPDF), classifies pages in code (sanction letter, agreement, statement, NPA notice, …) and groups them by loan account (OCR slips tolerated) → admin reviews and confirms → worker creates the cases and per-case scans. Account numbers are never stored (last 4 only); originals purged 7 days after closing. Security review PASS after fixes; applied to the demo DB
-- [x] Field tasks: drafter/admin assign collect-docs / notary / e-filing / dispatch tasks; phone-first `/dashboard/tasks` with start, note and photo proof. **Security fix:** a field user could re-point their task to any case (and so see it); now only progress columns can change
+- [x] Field tasks: drafter/admin assign collect-docs / notary / e-filing / dispatch tasks; phone-first `/dashboard/tasks` with start, note and photo proof. **Security fix:** a field user could re-point their task to any case (and so see it); now only progress columns can change, closed tasks are frozen, office links are re-checked for admins too, and field staff see a case only while a task on it is open. Security review PASS (2nd round); applied to the demo DB
 - [x] Interim application template (commercial + urgent relief), all grounds flagged `[[LEGAL_REVIEW]]`
 - Claude Haiku page classification is not wired (no Anthropic key); the in-code classifier is the default and the review step catches mistakes
 

@@ -82,7 +82,8 @@ export default async function TasksPage() {
             <ul className="mt-2 space-y-1 text-sm">
               {closed.map((t) => (
                 <li key={t.id}>
-                  {KIND_LABEL[t.kind] ?? title(t.kind)} · {one(t.cases as Rel<{ case_no_internal: string }>)?.case_no_internal}
+                  {/* A closed task no longer opens its case for field staff, so only the task is listed. */}
+                  {KIND_LABEL[t.kind] ?? title(t.kind)}
                   {t.done_at ? ` · ${fmtDate(t.done_at)}` : ""}
                 </li>
               ))}
