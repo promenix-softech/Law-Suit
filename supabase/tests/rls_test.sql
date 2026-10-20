@@ -231,6 +231,42 @@ select pg_temp.act_as('00000000-0000-0000-0000-0000000000b9');
 select pg_temp.expect((select count(*) from storage.objects) = 0, 'other org sees no case files');
 rollback;
 
+-- OCR: jobs and page text follow the document's case
+insert into public.documents (id, org_id, case_id, storage_path, sha256, uploaded_by) values
+  ('e0000000-0000-0000-0000-000000000002', '11111111-1111-1111-1111-111111111111',
+   'c0000000-0000-0000-0000-000000000002', 'x/y/scans/b.pdf', repeat('0', 64), '00000000-0000-0000-0000-0000000000d2');
+
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000d2');
+insert into public.ocr_jobs (org_id, document_id, provider_job_id, language)
+values ('11111111-1111-1111-1111-111111111111', 'e0000000-0000-0000-0000-000000000002', 'job-1', 'en-IN');
+insert into public.document_pages (org_id, document_id, page_no, ocr_text_enc)
+values ('11111111-1111-1111-1111-111111111111', 'e0000000-0000-0000-0000-000000000002', 1, '\x00');
+select pg_temp.expect((select count(*) from public.document_pages) = 1, 'assigned drafter records OCR job and page text');
+rollback;
+
+do $$
+begin
+  -- drafter1 is drafter of case 1 and approver; case 2 is not theirs to edit
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000d1', true);
+  set local role authenticated;
+  begin
+    insert into public.ocr_jobs (org_id, document_id, provider_job_id, language)
+    values ('11111111-1111-1111-1111-111111111111', 'e0000000-0000-0000-0000-000000000002', 'job-2', 'en-IN');
+    raise exception 'FAIL: non-editor started OCR';
+  exception when insufficient_privilege then
+    raise notice 'ok - only the case editor can start OCR';
+  end;
+  begin
+    insert into public.document_pages (org_id, document_id, page_no)
+    values ('11111111-1111-1111-1111-111111111111', 'e0000000-0000-0000-0000-000000000002', 9);
+    raise exception 'FAIL: non-editor wrote page text';
+  exception when insufficient_privilege then
+    raise notice 'ok - only the case editor can write page text';
+  end;
+  reset role;
+end $$;
+
 select pg_temp.expect(
   not exists (select 1 from pg_tables where schemaname = 'public' and not rowsecurity),
   'RLS enabled on every public table');

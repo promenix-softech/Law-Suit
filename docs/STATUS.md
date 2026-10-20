@@ -25,11 +25,19 @@
 - [x] Affidavit in support / statement of truth (commercial) v1: stamp-paper blank top, deponent, flagged prescribed declarations, jurat; stored as `statement_of_truth` for commercial suits
 - [x] DOCX renderer: bordered stamp boxes, stamp-paper spacer; samples in `docs/samples/` (checked via LibreOffice PDF render)
 
+## Done (Phase 1, slice 5 — OCR)
+- [x] Sarvam Document Intelligence (digitise, `sarvamai` SDK 1.1.12): start job from a stored scan (EN/MR), poll status, fetch per-page Markdown; ≤10 pages per job
+- [x] `ocr_jobs` table + RLS; `document_pages` insert/update for case editors; `usage_events` insert for case editors (₹0.50/page planning cost); RLS tests added; applied to demo DB
+- [x] OCR text encrypted with AES-256-GCM (`lib/crypto.ts`, `FIELD_ENCRYPTION_KEY` in Vercel) and shown decrypted only on `/dashboard/cases/[id]/documents/[docId]`
+- [x] Case advances `case_created → docs_uploaded` on upload and `→ extraction_review` after OCR
+- [x] Web unit tests (vitest): encryption round-trip/tamper, result mapping, and SDK wiring against a local mock server
+- Not verified live: api.sarvam.ai is unreachable from the build sandbox — first real run happens on the deployed site
+
 ## Next (Phase 1)
+- [ ] Field extraction from OCR text (Sarvam `extract` with a JSON schema, or Claude) + drafter review UI with confidence and source page
 - [ ] Demand notice in Marathi (needs † glossary terms confirmed)
 - [ ] BBE 2026 certificate (needs gazette text)
 - [ ] Worker (Docker on VPS): DOCX→PDF/A, OCRmyPDF; needs a VPS
-- [ ] OCR + extraction (needs SARVAM_API_KEY, ANTHROPIC_API_KEY) and review UI
 **Next milestone:** Phase 1 demo (end of week 4) — single-case upload → OCR → review → drafts → PDF/A
 
 ## Done (Phase 0)

@@ -5,6 +5,7 @@ import { TopBar } from "@/components/top-bar";
 import { createClient } from "@/lib/supabase/server";
 import { caseStatus, draftStatus, fmtDate, title } from "@/lib/ui";
 import { DecideDraft, GenerateDraft, MediationOutcome, MediationStart, NoticeForm, SubmitDraft, UploadScan } from "./case-actions";
+import { OcrControls } from "./ocr-controls";
 
 export const metadata = { title: "Case — Civil Suits" };
 
@@ -113,6 +114,17 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
       .eq("case_id", id)
       .order("doc_kind"),
   ]);
+
+  const docIds = (docs ?? []).map((d) => d.id);
+  const { data: ocrJobs } = docIds.length
+    ? await supabase
+        .from("ocr_jobs")
+        .select("id, document_id, status, pages_succeeded, error, created_at")
+        .in("document_id", docIds)
+        .order("created_at", { ascending: false })
+    : { data: [] };
+  const latestJob = new Map<string, NonNullable<typeof ocrJobs>[number]>();
+  (ocrJobs ?? []).forEach((j) => latestJob.has(j.document_id) || latestJob.set(j.document_id, j));
 
   const roleNames = (roles ?? []).map((r) => r.role as string);
   const isApprover = roleNames.includes("approver");
@@ -282,18 +294,14 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
 
         <Section title={`Documents (${docs?.length ?? 0})`} subtitle="Scans are stored privately; links expire in 5 minutes" delay={300}>
           {canEdit && <UploadScan orgId={c.org_id} caseId={c.id} />}
-          <ul className="mt-4 grid gap-2 sm:grid-cols-2">
+          <ul className="mt-4 space-y-2">
             {docs?.map((d) => (
-              <li key={d.id}>
-                <a
-                  className="row-hover flex items-center justify-between rounded-xl px-3 py-2 text-sm"
-                  href={signed.get(d.storage_path)}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <span className="truncate">📄 {d.storage_path.split("/").pop()?.replace(/^\d+-/, "")}</span>
-                  <span className="muted shrink-0 pl-2">{fmtDate(d.created_at)}</span>
+              <li key={d.id} className="row-hover flex flex-wrap items-center justify-between gap-3 rounded-xl px-3 py-2 text-sm">
+                <a className="min-w-0 flex-1 truncate hover:underline" href={signed.get(d.storage_path)} target="_blank" rel="noreferrer">
+                  📄 {d.storage_path.split("/").pop()?.replace(/^\d+-/, "")}{" "}
+                  <span className="muted">· {fmtDate(d.created_at)}</span>
                 </a>
+                <OcrControls documentId={d.id} caseId={c.id} job={latestJob.get(d.id) ?? null} canEdit={canEdit} />
               </li>
             ))}
             {!docs?.length && <p className="muted text-sm">No scans uploaded yet.</p>}

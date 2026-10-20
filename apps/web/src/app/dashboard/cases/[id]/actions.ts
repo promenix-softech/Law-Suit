@@ -40,7 +40,7 @@ export async function recordUpload(input: z.infer<typeof UploadInput>): Promise<
   const supabase = await createClient();
   if (!supabase) return { ok: false, error: "Database is not configured." };
 
-  const { data: c } = await supabase.from("cases").select("org_id").eq("id", caseId).single();
+  const { data: c } = await supabase.from("cases").select("id, org_id, status").eq("id", caseId).single();
   if (!c) return { ok: false, error: "Case not found." };
   if (!path.startsWith(`${c.org_id}/${caseId}/scans/`)) return { ok: false, error: "Invalid storage path." };
 
@@ -48,6 +48,7 @@ export async function recordUpload(input: z.infer<typeof UploadInput>): Promise<
     .from("documents")
     .insert({ org_id: c.org_id, case_id: caseId, storage_path: path, sha256, doc_type: "scan" });
   if (error) return { ok: false, error: "You cannot add documents to this case." };
+  await setCaseStatus(supabase, c, "docs_uploaded");
 
   revalidatePath(`/dashboard/cases/${caseId}`);
   return { ok: true, message: "Document uploaded." };
