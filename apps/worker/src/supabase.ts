@@ -23,8 +23,8 @@ export function supabaseStore(sb: SupabaseClient): Store {
       if (error || !data) throw new Error("Could not read an input file");
       return Buffer.from(await data.arrayBuffer());
     },
-    async upload(path, body, contentType) {
-      const { error } = await sb.storage.from(BUCKET).upload(path, body, { contentType, upsert: false });
+    async upload(path, body, contentType, bucket = BUCKET) {
+      const { error } = await sb.storage.from(bucket).upload(path, body, { contentType, upsert: false });
       if (error) throw new Error("Could not store the output file");
     },
   };
@@ -84,6 +84,41 @@ export function supabaseDb(sb: SupabaseClient): Db {
       return out;
     },
 
+    async caseExport(caseId) {
+      // Explicit columns: *_enc ciphertext and OCR text never leave in an export.
+      const { data: c, error } = await sb
+        .from("cases")
+        .select(
+          "case_no_internal, status, suit_type, claim_amount_paise, specified_value_paise, is_commercial, needs_12a, urgent_interim_relief, cnr_no, filing_no, created_at, " +
+            "courts(name, district, court_type), bank_branches(branch_name, ifsc, banks(name)), " +
+            "parties(role, position, name, father_name, address, aadhaar_last4), " +
+            "loans(account_last4, facility_type, sanction_date, sanction_amount_paise, roi_bps, npa_date, outstanding_paise, interest_upto_date), " +
+            "notices(dispatch_mode, tracking_no, sent_at, served_at), mediations(authority, applied_at, outcome, report_date, report_path), " +
+            "drafts(doc_kind, language, status, current_version, draft_versions(version, docx_path, pdf_path, diff_summary, created_at), approvals(decision, comments, created_at)), " +
+            "documents(storage_path, sha256, page_count, doc_type, created_at), filings(efiling_no, court_fee_paise, txn_id, filed_at, status), " +
+            "doc_jobs(kind, status, output_path, created_at)",
+        )
+        .eq("id", caseId)
+        .single();
+      if (error || !c) throw new Error("Case not found");
+      const row = c as unknown as Record<string, unknown> & {
+        case_no_internal: string;
+        documents: { storage_path: string }[] | null;
+        drafts: { draft_versions: { docx_path: string | null; pdf_path: string | null }[] }[] | null;
+        mediations: { report_path: string | null }[] | null;
+        doc_jobs: { kind: string; status: string; output_path: string | null }[] | null;
+      };
+      const files = [
+        ...(row.documents ?? []).map((d) => d.storage_path),
+        ...(row.drafts ?? []).flatMap((d) => d.draft_versions.flatMap((v) => [v.docx_path, v.pdf_path])),
+        ...(row.mediations ?? []).map((m) => m.report_path),
+        // Earlier bundles, but not earlier exports (an export never contains another export).
+        ...(row.doc_jobs ?? []).filter((j) => j.kind === "efiling_bundle" && j.status === "done").map((j) => j.output_path),
+      ].filter((p): p is string => !!p);
+      const { case_no_internal, ...tables } = row;
+      return { caseNo: case_no_internal, tables, files };
+    },
+
     async logUsage(job: Job, kind, qty, meta) {
       await sb.from("usage_events").insert({ org_id: job.org_id, case_id: job.case_id, kind, qty, cost_paise: 0, meta });
     },
@@ -99,6 +134,27 @@ export async function claim(sb: SupabaseClient): Promise<Job | null> {
 export async function complete(sb: SupabaseClient, id: string, path: string, meta: Record<string, unknown>) {
   const { error } = await sb.rpc("complete_doc_job", { job_id: id, out_path: path, meta });
   if (error) throw new Error(`complete failed: ${error.message}`);
+}
+
+/** Case exports carry every file and party name of a case; they are removed after `days`. */
+export async function expireExports(sb: SupabaseClient, days = Number(process.env.EXPORT_KEEP_DAYS ?? 7)): Promise<number> {
+  const cutoff = new Date(Date.now() - days * 86_400_000).toISOString();
+  const { data } = await sb
+    .from("doc_jobs")
+    .select("id, output_path, output_meta")
+    .eq("kind", "case_export")
+    .eq("status", "done")
+    .not("output_path", "is", null)
+    .lt("created_at", cutoff)
+    .limit(100);
+  let removed = 0;
+  for (const j of (data ?? []) as { id: string; output_path: string; output_meta: Record<string, unknown> }[]) {
+    const { error } = await sb.storage.from("case-exports").remove([j.output_path]);
+    if (error) continue;
+    await sb.from("doc_jobs").update({ output_path: null, output_meta: { ...j.output_meta, expired: true } }).eq("id", j.id);
+    removed++;
+  }
+  return removed;
 }
 
 export async function fail(sb: SupabaseClient, id: string, err: string) {

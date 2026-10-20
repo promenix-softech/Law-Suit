@@ -10,7 +10,14 @@ import type { ActionResult } from "./actions";
  * annexures must belong to this case, a bundle needs an approved case) and RLS checks
  * that the user may edit the case; the worker does the conversion off Vercel.
  */
-async function queue(caseId: string, kind: "draft_pdf" | "efiling_bundle", payload: object): Promise<ActionResult> {
+const QUEUED: Record<Kind, string> = {
+  draft_pdf: "PDF/A conversion queued.",
+  efiling_bundle: "E-filing bundle queued.",
+  case_export: "Case export queued.",
+};
+type Kind = "draft_pdf" | "efiling_bundle" | "case_export";
+
+async function queue(caseId: string, kind: Kind, payload: object): Promise<ActionResult> {
   const supabase = await createClient();
   if (!supabase) return { ok: false, error: "Database is not configured." };
   const { data: c } = await supabase.from("cases").select("org_id").eq("id", caseId).single();
@@ -24,7 +31,13 @@ async function queue(caseId: string, kind: "draft_pdf" | "efiling_bundle", paylo
     return { ok: false, error: "You cannot queue this job for this case." };
   }
   revalidatePath(`/dashboard/cases/${caseId}`);
-  return { ok: true, message: kind === "draft_pdf" ? "PDF/A conversion queued." : "E-filing bundle queued." };
+  return { ok: true, message: QUEUED[kind] };
+}
+
+/** Admin only (enforced by the database): ZIP of the case's data and files. */
+export async function queueExport(caseId: string): Promise<ActionResult> {
+  if (!z.uuid().safeParse(caseId).success) return { ok: false, error: "Invalid request." };
+  return queue(caseId, "case_export", {});
 }
 
 export async function queueDraftPdf(caseId: string, draftVersionId: string): Promise<ActionResult> {

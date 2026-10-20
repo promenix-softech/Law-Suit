@@ -11,7 +11,7 @@ import { ExtractionReview, type ReviewRow } from "./extraction-review";
 import { peopleWithRole } from "@/lib/people";
 import { AssignForm } from "./assign-form";
 import { OcrControls } from "./ocr-controls";
-import { BundleForm, MakePdf } from "./job-controls";
+import { BundleForm, ExportCase, MakePdf } from "./job-controls";
 
 const BUNDLE_READY = ["approved", "notary_stamp", "efiling_ready", "filed"];
 type JobRow = {
@@ -142,6 +142,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
   const jobs = (jobRows ?? []) as JobRow[];
   const pdfJob = (versionId: string) => jobs.find((j) => j.kind === "draft_pdf" && j.payload.draft_version_id === versionId);
   const bundles = jobs.filter((j) => j.kind === "efiling_bundle");
+  const exports = jobs.filter((j) => j.kind === "case_export").slice(0, 3);
 
   const docIds = (docs ?? []).map((d) => d.id);
   const { data: ocrJobs } = docIds.length
@@ -202,6 +203,13 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
   if (paths.length) {
     const { data } = await supabase.storage.from("case-files").createSignedUrls(paths, SIGNED_URL_SECONDS);
     data?.forEach((s) => s.path && s.signedUrl && signed.set(s.path, s.signedUrl));
+  }
+  // Exports sit in their own bucket; storage RLS only lets admins sign them.
+  const exportPaths = exports.flatMap((e) => (e.output_path ? [e.output_path] : []));
+  const exportUrls = new Map<string, string>();
+  if (exportPaths.length) {
+    const { data } = await supabase.storage.from("case-exports").createSignedUrls(exportPaths, SIGNED_URL_SECONDS);
+    data?.forEach((s) => s.path && s.signedUrl && exportUrls.set(s.path, s.signedUrl));
   }
 
   const loan = one(c.loans);
@@ -321,6 +329,24 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
               <Field label="Drafter">{nameOf(c.assigned_drafter)}</Field>
               <Field label="Approver">{nameOf(c.assigned_approver)}</Field>
             </dl>
+          )}
+          {roleNames.includes("admin") && (
+            <div className="mt-5 flex flex-wrap items-start gap-3 border-t border-white/20 pt-4">
+              <ExportCase caseId={c.id} />
+              {exports.map((e) => (
+                <span key={e.id} className="inline-flex items-center gap-2 text-sm">
+                  <span className={`pill ${JOB_TONE[e.status]}`}>{title(e.status)}</span>
+                  {e.output_path && exportUrls.get(e.output_path) ? (
+                    <a className="btn px-3 py-1 text-xs" href={exportUrls.get(e.output_path)}>
+                      ⬇ {e.output_meta.fileName} · {((e.output_meta.bytes ?? 0) / 1048576).toFixed(1)} MB
+                    </a>
+                  ) : (
+                    <span className="muted">{fmtDate(e.created_at)}</span>
+                  )}
+                  {e.error && <span className="text-red-600 dark:text-red-400">{e.error}</span>}
+                </span>
+              ))}
+            </div>
           )}
         </Section>
 

@@ -2,6 +2,7 @@
 // poppler). Skipped where they are not installed. Synthetic data only.
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { strFromU8, unzipSync } from "fflate";
 import { describe, expect, it } from "vitest";
 import { buildAffidavit, buildVakalatnama, type CaptionInput } from "@civil-suits/templates";
 import { renderDocx } from "@civil-suits/templates/docx";
@@ -102,6 +103,33 @@ describe("caseStore", () => {
   });
 });
 
+describe("case export", () => {
+  const job: Job = { id: "j9", org_id: ORG, case_id: CASE, kind: "case_export", payload: {} };
+  const exportDb = (files: string[]) =>
+    ({
+      caseExport: async () => ({ caseNo: "DEMO/2026/0001", tables: { status: "approved", parties: [{ name: "Ramesh Demo Patil" }] }, files }),
+    }) as unknown as Db;
+
+  it("zips case.json and every file under files/<folder>/", async () => {
+    const store = memoryStore({
+      [`${ORG}/${CASE}/scans/1-loan.pdf`]: Buffer.from("%PDF-scan"),
+      [`${ORG}/${CASE}/drafts/plaint-en-v1.docx`]: Buffer.from("PKdocx"),
+    });
+    const res = await runJob(job, store, exportDb([`${ORG}/${CASE}/scans/1-loan.pdf`, `${ORG}/${CASE}/drafts/plaint-en-v1.docx`]));
+    expect(res.path).toBe(`${ORG}/${CASE}/exports/j9/DEMO_2026_0001_export.zip`);
+    const zip = unzipSync(new Uint8Array(store.files[res.path]!));
+    expect(Object.keys(zip).sort()).toEqual(["README.txt", "case.json", "files/drafts/plaint-en-v1.docx", "files/scans/1-loan.pdf"]);
+    const json = JSON.parse(strFromU8(zip["case.json"]!));
+    expect(json.caseNo).toBe("DEMO/2026/0001");
+    expect(json.parties[0].name).toBe("Ramesh Demo Patil");
+  });
+
+  it("refuses a file outside the case", async () => {
+    const store = memoryStore({ [`22222222-2222-2222-2222-222222222222/${CASE}/scans/x.pdf`]: Buffer.from("x") });
+    await expect(runJob(job, store, exportDb([`22222222-2222-2222-2222-222222222222/${CASE}/scans/x.pdf`]))).rejects.toBeInstanceOf(JobError);
+  });
+});
+
 describe.skipIf(!toolsPresent)("worker jobs (real converters)", () => {
   it("converts a draft DOCX to PDF/A-2b next to it", async () => {
     const docx = `${ORG}/${CASE}/drafts/vakalatnama-en-v1.docx`;
@@ -137,6 +165,9 @@ describe.skipIf(!toolsPresent)("worker jobs (real converters)", () => {
         documents: { doc1: { storagePath: `${ORG}/${CASE}/scans/scan.png` } },
       }),
       logUsage: async (_j, _k, qty) => void usage.push(qty),
+      caseExport: async () => {
+        throw new Error("unused");
+      },
     };
     const job: Job = {
       id: "j2",

@@ -1,5 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { strToU8, zipSync } from "fflate";
 import { buildBundleIndex, courtTitle, type CaptionInput } from "@civil-suits/templates";
 import { renderDocx } from "@civil-suits/templates/docx";
 import {
@@ -20,8 +21,16 @@ export interface Job {
   id: string;
   org_id: string;
   case_id: string;
-  kind: "draft_pdf" | "efiling_bundle";
+  kind: "draft_pdf" | "efiling_bundle" | "case_export";
   payload: Record<string, unknown>;
+}
+
+export interface CaseExport {
+  caseNo: string;
+  /** Rows of the case's tables, without *_enc ciphertext columns. */
+  tables: Record<string, unknown>;
+  /** Storage paths of every file belonging to the case. */
+  files: string[];
 }
 
 export interface CaseForBundle {
@@ -33,15 +42,19 @@ export interface CaseForBundle {
   documents: Record<string, { storagePath: string }>;
 }
 
+/** case-files: scans, drafts, bundles. case-exports: admin-only ZIPs, deleted after 7 days. */
+export type Bucket = "case-files" | "case-exports";
+
 export interface Store {
   download(path: string): Promise<Buffer>;
-  upload(path: string, body: Buffer, contentType: string): Promise<void>;
+  upload(path: string, body: Buffer, contentType: string, bucket?: Bucket): Promise<void>;
 }
 
 export interface Db {
   draftVersion(id: string): Promise<{ docxPath: string } | null>;
   caseForBundle(caseId: string): Promise<CaseForBundle>;
   logUsage(job: Job, kind: "suit_pack", qty: number, meta: Record<string, unknown>): Promise<void>;
+  caseExport(caseId: string): Promise<CaseExport>;
 }
 
 export interface Result {
@@ -73,16 +86,51 @@ export function caseStore(store: Store, job: Job): Store {
       if (body.length > MAX_INPUT_BYTES) throw new JobError("An input file is larger than 40 MB");
       return body;
     },
-    async upload(path, body, contentType) {
+    async upload(path, body, contentType, bucket) {
       check(path);
-      await store.upload(path, body, contentType);
+      await store.upload(path, body, contentType, bucket);
     },
   };
 }
 
 export async function runJob(job: Job, store: Store, db: Db): Promise<Result> {
   const s = caseStore(store, job);
-  return job.kind === "draft_pdf" ? draftPdf(job, s, db) : efilingBundle(job, s, db);
+  if (job.kind === "draft_pdf") return draftPdf(job, s, db);
+  if (job.kind === "case_export") return caseExport(job, s, db);
+  return efilingBundle(job, s, db);
+}
+
+/** Exports above this size are refused. Supabase Free caps uploads at 50 MB; Pro allows more. */
+export const MAX_EXPORT_BYTES = Number(process.env.EXPORT_MAX_MB ?? 45) * 1024 * 1024;
+
+/**
+ * ZIP of the case: case.json (rows, ciphertext columns left out) plus every stored file under
+ * files/<folder>/<name>. Written to the case's exports folder for the admin to download.
+ */
+async function caseExport(job: Job, store: Store, db: Db): Promise<Result> {
+  const data = await db.caseExport(job.case_id);
+  const entries: Record<string, Uint8Array> = {
+    "case.json": strToU8(JSON.stringify({ exportedAt: new Date().toISOString(), caseNo: data.caseNo, ...data.tables }, null, 2)),
+    "README.txt": strToU8(
+      "Civil Suits case export.\n" +
+        "case.json holds the case record, parties, loan, notices, mediation, drafts and document list.\n" +
+        "Encrypted fields (OCR text, extracted values, PAN/account/DOB/phone) are not included; ask the\n" +
+        "office admin for a decrypted export if it is needed.\nfiles/ holds every stored scan and draft.\n",
+    ),
+  };
+  let bytes = 0;
+  for (const path of [...new Set(data.files)]) {
+    const body = await store.download(path);
+    bytes += body.length;
+    if (bytes > MAX_EXPORT_BYTES) throw new JobError("Case files exceed the export size limit");
+    // files/<folder>/<name> — org and case ids are dropped from the archive paths.
+    entries[`files/${path.split("/").slice(2).join("/")}`] = body;
+  }
+  const zip = Buffer.from(zipSync(entries, { level: 6 }));
+  const name = `${data.caseNo.replace(/[^A-Za-z0-9-]+/g, "_").slice(0, 40)}_export.zip`;
+  const path = `${job.org_id}/${job.case_id}/exports/${job.id}/${name}`;
+  await store.upload(path, zip, "application/zip", "case-exports");
+  return { path, meta: { fileName: name, bytes: zip.length, files: data.files.length } };
 }
 
 /** Draft DOCX → PDF/A-2b stored next to the DOCX. */

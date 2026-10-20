@@ -1,6 +1,6 @@
 import { JobError, runJob } from "./jobs";
 import { ToolError } from "./tools";
-import { claim, complete, fail, serviceClient, supabaseDb, supabaseStore } from "./supabase";
+import { claim, complete, expireExports, fail, serviceClient, supabaseDb, supabaseStore } from "./supabase";
 
 const IDLE_MS = Number(process.env.POLL_INTERVAL_MS ?? 5000);
 let stopping = false;
@@ -17,7 +17,13 @@ async function main() {
   const store = supabaseStore(sb);
   const db = supabaseDb(sb);
   log("worker started");
+  let lastSweep = 0;
   while (!stopping) {
+    if (Date.now() - lastSweep > 3_600_000) {
+      lastSweep = Date.now();
+      const removed = await expireExports(sb).catch(() => 0);
+      if (removed) log("exports expired", { count: removed });
+    }
     let job;
     try {
       job = await claim(sb);

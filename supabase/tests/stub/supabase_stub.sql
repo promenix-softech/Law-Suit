@@ -21,6 +21,11 @@ language sql stable as $$
   select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
 $$;
 
+create or replace function auth.role() returns text
+language sql stable as $$
+  select nullif(current_setting('request.jwt.claim.role', true), '')
+$$;
+
 create schema if not exists storage;
 create table if not exists storage.buckets (
   id text primary key,
@@ -50,6 +55,7 @@ grant execute on function storage.foldername(text) to anon, authenticated;
 grant usage on schema auth, public to anon, authenticated;
 grant select on auth.users to authenticated;
 grant execute on function auth.uid() to anon, authenticated;
+grant execute on function auth.role() to anon, authenticated, service_role;
 alter default privileges in schema public grant select, insert, update, delete on tables to authenticated;
 alter default privileges in schema public grant usage, select on sequences to authenticated;
 grant usage on schema public to service_role;

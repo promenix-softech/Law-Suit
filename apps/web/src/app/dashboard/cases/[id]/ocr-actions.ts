@@ -44,6 +44,13 @@ async function loadScan(supabase: Supabase, documentId: string, pipeline: "digit
     .eq("status", "running");
   if (count) return "A job is already running for this document.";
 
+  // Paid API: per-user hourly and per-office daily caps (env overrides, DB counts).
+  const { data: withinQuota } = await supabase.rpc("ai_quota_ok", {
+    per_user_hour: Number(process.env.AI_JOBS_PER_USER_HOUR ?? 60),
+    per_org_day: Number(process.env.AI_JOBS_PER_ORG_DAY ?? 1000),
+  });
+  if (!withinQuota) return "AI processing limit reached for now. Try again later or ask the admin.";
+
   const ext = doc.storage_path.split(".").pop()?.toLowerCase() ?? "";
   const contentType = MIME[ext];
   if (!contentType) return "Only PDF, JPG or PNG scans can be processed.";

@@ -6,3 +6,4 @@ export * from "./vakalatnama";
 export * from "./affidavit";
 export * from "./bundleIndex";
 export * from "./originalApplication";
+export * from "./taxInvoice";

@@ -46,8 +46,33 @@
 - [x] Security fix: DB trigger `guard_case_assignment` — only admins can change assignment/org/creator (previously the assigned drafter could change their own approver via the drafter update policy). Tests added; verified on live DB
 - [x] Audit log page (`/dashboard/audit`, admin): latest 100 entries, filter by entity, `verify_audit_chain()` recomputes the SHA-256 chain (tamper test added); live chain verified intact
 
+## Done (slice 8 — document worker, 21 Oct)
+- [x] `doc_jobs` queue (ADR 0002): users enqueue, only the worker (service role) claims/completes; one active job per case/version; RLS tests
+- [x] `path_in_case()`: documents and draft versions can only point inside `{org}/{case}/` (worker reads with the service role); security review PASS after fixes
+- [x] `apps/worker`: DOCX → PDF/A-2b (LibreOffice), annexure OCR (OCRmyPDF), e-filing bundle (index → plaint → exhibits A, B… → vakalatnama → SOT) merged by Ghostscript with bookmarks, A4/25 MB/encryption/PDF-A checks; converters get no secrets; Dockerfile; CI job with real converters
+- [x] Case page: Make PDF/A, Prepare e-filing bundle, job status; sample bundle in `docs/samples/`
+- [x] Synthetic scanned loan files (300 DPI, skew, noise) + expected-field manifest: `pnpm --filter @civil-suits/worker synthetic-scans`
+- Applied to the live demo DB. Not running yet: needs a VPS for the worker
+
+## Done (slice 9 — DRT)
+- [x] `recoveryForum()`: civil < ₹3L ≤ commercial < ₹20L ≤ DRT (bank debts), DRT fee; plaint refused for ₹20L+ bank debts
+- [x] DRT Original Application template (RDB Act s.19), DRT format profile (TNR 13, double, 5/2.5 cm); Maharashtra DRT benches list; sample DOCX
+- [x] Demo case DEMO-2026-0010 (₹20.9L) moved to "Debts Recovery Tribunal, Pune (Demo)"
+- Pending legal: OA form parts/verification, bench jurisdiction (open questions 10–11), e-DRT format
+
+## Done (slice 10 — billing, export, ops) — local, tests green, NOT yet applied to the demo DB
+- [x] Billing domain: GST split (CGST/SGST vs IGST), graduated slabs + monthly minimum, invoice number (≤16 chars, per FY), GSTIN checksum
+- [x] `billing_plans`, `invoices` (immutable amounts, forward-only status), `billable_suit_packs()` (one per case, IST month; survives case deletion); usage rows for billing can no longer be forged by app users
+- [x] Admin billing page, tax invoice DOCX (Rule 46 particulars), `create-invoice` script (service role)
+- [x] Case export ZIP (admin only) via worker into private `case-exports` bucket, expired after 7 days
+- [x] AI spend guard: `ai_quota_ok()` per user/hour and per office/day before every Sarvam call
+- [x] Runbooks: `docs/runbooks/breach.md`, `retention-erasure.md`; `scripts/backup.sh` (encrypted pg_dump) + `scripts/restore-drill.sh` (verified locally, audit chain recomputed)
+- Security review: blocking finding (billing loss on case delete) fixed with tests; migrations 20261021020000–040000 to apply
+
 ## Next (Phase 1)
-- [ ] TOTP MFA for admin and approver (plan C4)
+- [ ] Owner: approve applying migrations 20261021020000/030000/040000 to the demo DB
+- [ ] Owner: VPS for the worker (Docker), service-role key there only; run converters without network before real data
+- [ ] TOTP MFA for admin and approver (plan C4) — on hold at owner's request
 - [ ] Demand notice in Marathi (needs † glossary terms confirmed)
 - [ ] BBE 2026 certificate (needs gazette text)
 - [ ] Worker (Docker on VPS): DOCX→PDF/A, OCRmyPDF; needs a VPS

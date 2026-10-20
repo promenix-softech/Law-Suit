@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { ActionResult } from "./actions";
-import { queueBundle, queueDraftPdf } from "./job-actions";
+import { queueBundle, queueDraftPdf, queueExport } from "./job-actions";
 
 function Status({ result }: { result: ActionResult | null }) {
   if (!result) return null;
@@ -25,6 +25,30 @@ export function MakePdf({ caseId, versionId }: { caseId: string; versionId: stri
         onClick={() => start(async () => setResult(await queueDraftPdf(caseId, versionId)))}
       >
         {pending ? "Queueing…" : "Make PDF/A"}
+      </button>
+      <Status result={result} />
+    </span>
+  );
+}
+
+export function ExportCase({ caseId }: { caseId: string }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [result, setResult] = useState<ActionResult | null>(null);
+  return (
+    <span className="inline-flex flex-col gap-1">
+      <button
+        className="btn"
+        disabled={pending}
+        onClick={() =>
+          start(async () => {
+            const r = await queueExport(caseId);
+            setResult(r);
+            if (r.ok) router.refresh();
+          })
+        }
+      >
+        {pending ? "Queueing…" : "⬇ Export case (ZIP)"}
       </button>
       <Status result={result} />
     </span>

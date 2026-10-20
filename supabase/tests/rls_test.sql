@@ -537,6 +537,216 @@ exception when unique_violation then
 end $$;
 rollback;
 
+-- billing: usage rows that feed invoices cannot be forged by app users
+do $$
+begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000d2', true);
+  set local role authenticated;
+  begin
+    insert into public.usage_events (org_id, case_id, kind, qty) values
+      ('11111111-1111-1111-1111-111111111111', 'c0000000-0000-0000-0000-000000000002', 'suit_pack', 1);
+    raise exception 'FAIL: user logged a suit pack';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into public.usage_events (org_id, case_id, kind, qty) values
+      ('11111111-1111-1111-1111-111111111111', 'c0000000-0000-0000-0000-000000000002', 'ocr_page', -5);
+    raise exception 'FAIL: negative usage accepted';
+  exception when insufficient_privilege then null;
+  end;
+  insert into public.usage_events (org_id, case_id, kind, qty) values
+    ('11111111-1111-1111-1111-111111111111', 'c0000000-0000-0000-0000-000000000002', 'ocr_page', 3);
+  raise notice 'ok - users log only positive OCR/LLM usage';
+  reset role;
+end $$;
+
+insert into public.usage_events (org_id, case_id, kind, qty, created_at) values
+  ('11111111-1111-1111-1111-111111111111', 'c0000000-0000-0000-0000-000000000001', 'suit_pack', 1, '2026-10-05T06:00:00Z'),
+  ('11111111-1111-1111-1111-111111111111', 'c0000000-0000-0000-0000-000000000001', 'suit_pack', 1, '2026-10-09T06:00:00Z'),
+  ('11111111-1111-1111-1111-111111111111', 'c0000000-0000-0000-0000-000000000002', 'suit_pack', 1, '2026-09-30T20:00:00Z');
+insert into public.invoices (id, org_id, invoice_no, fy, period_start, period_end, lines, taxable_paise, cgst_paise, sgst_paise, total_paise)
+values ('b1000000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', 'PS/2026-27/0001', '2026-27',
+        '2026-10-01', '2026-10-31', '[]', 10000000, 900000, 900000, 11800000);
+
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+select pg_temp.expect((select count(*) from public.invoices) = 1, 'admin reads own invoices');
+-- case 2's first pack is 1 Oct 01:30 IST; case 1 counts once despite two bundles
+select pg_temp.expect(public.billable_suit_packs('11111111-1111-1111-1111-111111111111', '2026-10-01', '2026-10-31') = 2,
+  'one billable suit pack per case, by IST month');
+rollback;
+
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000d2');
+select pg_temp.expect((select count(*) from public.invoices) = 0 and (select count(*) from public.billing_plans) = 0,
+  'non-admins see no invoices or plans');
+select pg_temp.expect(public.billable_suit_packs('11111111-1111-1111-1111-111111111111', '2026-10-01', '2026-10-31') = 0,
+  'non-admins cannot count billable packs');
+rollback;
+
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000b9');
+select pg_temp.expect((select count(*) from public.invoices) = 0, 'other org sees no invoices');
+select pg_temp.expect(public.billable_suit_packs('11111111-1111-1111-1111-111111111111', '2026-10-01', '2026-10-31') = 0,
+  'other org cannot count our packs');
+rollback;
+
+do $$
+begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', true);
+  set local role authenticated;
+  begin
+    insert into public.invoices (org_id, invoice_no, fy, period_start, period_end, lines, taxable_paise, total_paise)
+    values ('11111111-1111-1111-1111-111111111111', 'X/1', '2026-27', '2026-11-01', '2026-11-30', '[]', 0, 0);
+    raise exception 'FAIL: admin wrote an invoice';
+  exception when insufficient_privilege then
+    raise notice 'ok - app users cannot write invoices';
+  end;
+  reset role;
+end $$;
+
+do $$
+begin
+  begin
+    update public.invoices set total_paise = 1, taxable_paise = 1, cgst_paise = 0, sgst_paise = 0
+     where id = 'b1000000-0000-0000-0000-000000000001';
+    raise exception 'FAIL: invoice amount changed';
+  exception when raise_exception then
+    if sqlerrm like 'FAIL%' then raise; end if;
+  end;
+  begin
+    delete from public.invoices where id = 'b1000000-0000-0000-0000-000000000001';
+    raise exception 'FAIL: invoice deleted';
+  exception when raise_exception then
+    if sqlerrm like 'FAIL%' then raise; end if;
+  end;
+  update public.invoices set status = 'paid', paid_at = now(), payment_ref = 'NEFT-DEMO'
+   where id = 'b1000000-0000-0000-0000-000000000001';
+  raise notice 'ok - invoice amounts are immutable, payment status can be recorded';
+end $$;
+
+-- deleting a billed case does not remove its suit pack from the bill
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+delete from public.cases where id = 'c0000000-0000-0000-0000-000000000001';
+select pg_temp.expect(public.billable_suit_packs('11111111-1111-1111-1111-111111111111', '2026-10-01', '2026-10-31') = 2,
+  'a deleted case still counts as billed');
+rollback;
+
+-- the worker's service-role path counts packs; admins cannot change plans, invoices or usage
+begin;
+set local role service_role;
+select set_config('request.jwt.claim.role', 'service_role', true);
+select pg_temp.expect(public.billable_suit_packs('11111111-1111-1111-1111-111111111111', '2026-10-01', '2026-10-31') = 2,
+  'service role counts billable packs');
+rollback;
+
+do $$
+declare n int;
+begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', true);
+  set local role authenticated;
+  begin
+    insert into public.billing_plans (org_id, effective_from, slabs, recipient_state)
+    values ('11111111-1111-1111-1111-111111111111', '2026-01-01', '[{"upTo":null,"ratePaise":1}]', '27');
+    raise exception 'FAIL: admin wrote a plan';
+  exception when insufficient_privilege then null;
+  end;
+  update public.invoices set status = 'cancelled' where id = 'b1000000-0000-0000-0000-000000000001';
+  get diagnostics n = row_count;
+  if n <> 0 then raise exception 'FAIL: admin updated an invoice'; end if;
+  update public.usage_events set qty = 0;
+  get diagnostics n = row_count;
+  if n <> 0 then raise exception 'FAIL: user updated usage'; end if;
+  delete from public.usage_events;
+  get diagnostics n = row_count;
+  if n <> 0 then raise exception 'FAIL: user deleted usage'; end if;
+  raise notice 'ok - app users cannot change plans, invoices or usage';
+  reset role;
+end $$;
+
+-- invoice status only moves forward
+do $$
+begin
+  update public.invoices set status = 'issued' where id = 'b1000000-0000-0000-0000-000000000001';
+  raise exception 'FAIL: paid invoice went back to issued';
+exception when raise_exception then
+  if sqlerrm like 'FAIL%' then raise; end if;
+  raise notice 'ok - invoice status cannot go backwards';
+end $$;
+do $$
+begin
+  update public.invoices set payment_ref = 'OTHER' where id = 'b1000000-0000-0000-0000-000000000001';
+  raise exception 'FAIL: payment reference rewritten';
+exception when raise_exception then
+  if sqlerrm like 'FAIL%' then raise; end if;
+  raise notice 'ok - payment details are recorded once';
+end $$;
+
+-- case export: admins only
+do $$
+begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000d2', true);
+  set local role authenticated;
+  begin
+    insert into public.doc_jobs (org_id, case_id, kind) values
+      ('11111111-1111-1111-1111-111111111111', 'c0000000-0000-0000-0000-000000000002', 'case_export');
+    raise exception 'FAIL: drafter exported a case';
+  exception when raise_exception then
+    if sqlerrm like 'FAIL%' then raise; end if;
+    raise notice 'ok - only admins can export a case';
+  end;
+  reset role;
+end $$;
+
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+insert into public.doc_jobs (org_id, case_id, kind) values
+  ('11111111-1111-1111-1111-111111111111', 'c0000000-0000-0000-0000-000000000002', 'case_export');
+select pg_temp.expect((select count(*) from public.doc_jobs where kind = 'case_export') = 1, 'admin queues a case export');
+rollback;
+
+insert into storage.objects (bucket_id, name) values
+  ('case-exports', '11111111-1111-1111-1111-111111111111/c0000000-0000-0000-0000-000000000002/exports/j/CS-2_export.zip');
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+select pg_temp.expect((select count(*) from storage.objects where bucket_id = 'case-exports') = 1, 'admin can read case exports');
+rollback;
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000d2');
+select pg_temp.expect((select count(*) from storage.objects where bucket_id = 'case-exports') = 0,
+  'the assigned drafter cannot read case exports');
+rollback;
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000b9');
+select pg_temp.expect((select count(*) from storage.objects where bucket_id = 'case-exports') = 0,
+  'another org''s admin cannot read case exports');
+rollback;
+do $$
+begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', true);
+  set local role authenticated;
+  begin
+    insert into storage.objects (bucket_id, name) values
+      ('case-exports', '11111111-1111-1111-1111-111111111111/c0000000-0000-0000-0000-000000000002/exports/x/y.zip');
+    raise exception 'FAIL: user wrote to case-exports';
+  exception when insufficient_privilege then
+    raise notice 'ok - only the worker writes case exports';
+  end;
+  reset role;
+end $$;
+
+-- AI spend guard
+begin;
+insert into public.ocr_jobs (org_id, document_id, provider_job_id, language, created_by)
+select '11111111-1111-1111-1111-111111111111', 'e0000000-0000-0000-0000-000000000002', 'rl-' || g, 'en-IN',
+       '00000000-0000-0000-0000-0000000000d2'
+from generate_series(1, 3) g;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000d2');
+select pg_temp.expect(public.ai_quota_ok(5, 100) and not public.ai_quota_ok(3, 100) and not public.ai_quota_ok(5, 3),
+  'AI quota counts per user per hour and per org per day');
+rollback;
+
 select pg_temp.expect(
   not exists (select 1 from pg_tables where schemaname = 'public' and not rowsecurity),
   'RLS enabled on every public table');

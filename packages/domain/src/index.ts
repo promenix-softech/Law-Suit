@@ -8,3 +8,4 @@ export * from "./lifecycle";
 export * from "./words";
 export * from "./forum";
 export * from "./drtBenches";
+export * from "./billing";
