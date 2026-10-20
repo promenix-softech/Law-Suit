@@ -14,13 +14,16 @@
 - [x] UI: submit for approval (drafter), approve / return with comments (approver), status badges, last decision shown; approver queue on the dashboard; new version resets a draft to `draft`
 - [x] Plaint template v1 (ordinary / Order XXXVII / commercial) with court fee from code, 12A paragraph (or a filing-block flag when the report is missing), statement of truth vs verification; golden test; sample in `docs/samples/`
 
+## Done (Phase 1, slice 3)
+- [x] Notice dispatch (mode, tracking no., date) → case `notice_sent`; plaint cites the dispatch date
+- [x] Sec 12A stage: application (authority, date) → `mediation_12a`; outcome + mediator's report upload + report date (new column) → `drafting`; plaint cites the report; `needs12A` blocks skipping mediation
+- [x] UI redesign: frosted-glass design system (`globals.css`), animated ambient backdrop, cursor-following light on cards, hover lift, shine on primary buttons, glass top bar, lifecycle stepper, status pills; light + dark; respects reduced motion. Screenshots in `docs/samples/ui-home-*.png`
+
 ## Next (Phase 1)
 - [ ] Demand notice in Marathi (needs † glossary terms confirmed)
 - [ ] Vakalatnama, affidavit/SOT templates; BBE 2026 certificate (needs gazette text)
-- [ ] Notice dispatch + 12A mediation stages in the UI (feed notice date and mediation report into the plaint)
 - [ ] Worker (Docker on VPS): DOCX→PDF/A, OCRmyPDF; needs a VPS
 - [ ] OCR + extraction (needs SARVAM_API_KEY, ANTHROPIC_API_KEY) and review UI
-- [ ] Approval flow UI (approver approves/returns drafts)
 **Next milestone:** Phase 1 demo (end of week 4) — single-case upload → OCR → review → drafts → PDF/A
 
 ## Done (Phase 0)

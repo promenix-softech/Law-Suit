@@ -1,15 +1,10 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { commercialCheck, formatINR, maharashtraCourtFee } from "@civil-suits/domain";
+import { CASE_STATUSES, commercialCheck, formatINR, maharashtraCourtFee } from "@civil-suits/domain";
+import { TopBar } from "@/components/top-bar";
 import { createClient } from "@/lib/supabase/server";
-import { DecideDraft, GenerateDraft, SubmitDraft, UploadScan } from "./case-actions";
-
-const DRAFT_STATUS: Record<string, { label: string; cls: string }> = {
-  draft: { label: "Draft", cls: "bg-zinc-100 dark:bg-zinc-800" },
-  in_approval: { label: "Awaiting approval", cls: "bg-amber-100 text-amber-900 dark:bg-amber-900 dark:text-amber-100" },
-  returned: { label: "Returned", cls: "bg-red-100 text-red-900 dark:bg-red-900 dark:text-red-100" },
-  approved: { label: "Approved", cls: "bg-green-100 text-green-900 dark:bg-green-900 dark:text-green-100" },
-};
+import { caseStatus, draftStatus, fmtDate, title } from "@/lib/ui";
+import { DecideDraft, GenerateDraft, MediationOutcome, MediationStart, NoticeForm, SubmitDraft, UploadScan } from "./case-actions";
 
 export const metadata = { title: "Case — Civil Suits" };
 
@@ -23,12 +18,72 @@ function courtFee(paise: number | null): string {
   try {
     return formatINR(maharashtraCourtFee(paise));
   } catch {
-    return "Pending legal verification (below ₹1 lakh)";
+    return "Pending verification";
   }
 }
 
-const fmtDate = (d: string | null) =>
-  d ? new Date(d).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", year: "numeric" }) : "—";
+const STEPS = [
+  "case_created",
+  "docs_uploaded",
+  "extraction_review",
+  "notice_generated",
+  "notice_sent",
+  "mediation_12a",
+  "drafting",
+  "in_approval",
+  "approved",
+  "efiling_ready",
+  "filed",
+] as const;
+
+function Stepper({ status, needs12A }: { status: string; needs12A: boolean }) {
+  const steps = STEPS.filter((s) => s !== "mediation_12a" || needs12A);
+  const at = CASE_STATUSES.indexOf(status as (typeof CASE_STATUSES)[number]);
+  return (
+    <ol className="flex min-w-max items-center gap-1">
+      {steps.map((s, i) => {
+        const idx = CASE_STATUSES.indexOf(s);
+        const done = idx < at;
+        const current = s === status;
+        return (
+          <li key={s} className="flex items-center gap-1">
+            <span
+              className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium transition ${
+                current
+                  ? "bg-gradient-to-r from-indigo-500 to-violet-500 text-white shadow-lg shadow-violet-500/30"
+                  : done
+                    ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                    : "muted bg-white/20 dark:bg-white/5"
+              }`}
+            >
+              {done ? "✓" : i + 1} {caseStatus(s)[0]}
+            </span>
+            {i < steps.length - 1 && <span className={`h-px w-4 ${done ? "bg-emerald-500/50" : "bg-current opacity-15"}`} />}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <dt className="label">{label}</dt>
+      <dd className="mt-0.5 text-sm font-medium">{children}</dd>
+    </div>
+  );
+}
+
+function Section({ title: t, subtitle, children, delay = 0 }: { title: string; subtitle?: string; children: React.ReactNode; delay?: number }) {
+  return (
+    <section className="glass-card fade-up p-6" style={{ animationDelay: `${delay}ms` }}>
+      <h2 className="text-lg font-semibold">{t}</h2>
+      {subtitle && <p className="muted mt-0.5 text-sm">{subtitle}</p>}
+      <div className="mt-4">{children}</div>
+    </section>
+  );
+}
 
 export default async function CasePage({ params }: PageProps<"/dashboard/cases/[id]">) {
   const { id } = await params;
@@ -40,13 +95,14 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
   const { data: c } = await supabase
     .from("cases")
     .select(
-      "id, org_id, case_no_internal, status, suit_type, claim_amount_paise, is_commercial, needs_12a, urgent_interim_relief, assigned_drafter, courts(name), bank_branches(branch_name, ifsc, banks(name)), parties(id, name, role, address, aadhaar_last4, position), loans(facility_type, account_last4, sanction_date, sanction_amount_paise, roi_bps, npa_date, outstanding_paise, interest_upto_date)",
+      "id, org_id, case_no_internal, status, suit_type, claim_amount_paise, is_commercial, needs_12a, urgent_interim_relief, assigned_drafter, courts(name), bank_branches(branch_name, ifsc, banks(name)), parties(id, name, role, address, aadhaar_last4, position), loans(facility_type, account_last4, sanction_date, sanction_amount_paise, roi_bps, npa_date, outstanding_paise, interest_upto_date), notices(id, dispatch_mode, tracking_no, sent_at), mediations(id, authority, applied_at, outcome, report_date, report_path)",
     )
     .eq("id", id)
     .maybeSingle();
   if (!c) notFound();
 
-  const [{ data: roles }, { data: docs }, { data: drafts }] = await Promise.all([
+  const [{ data: profile }, { data: roles }, { data: docs }, { data: drafts }] = await Promise.all([
+    supabase.from("profiles").select("full_name, organizations(name)").eq("id", auth.user.id).single(),
     supabase.from("user_roles").select("role").eq("user_id", auth.user.id),
     supabase.from("documents").select("id, storage_path, created_at").eq("case_id", id).order("created_at", { ascending: false }),
     supabase
@@ -58,13 +114,18 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
       .order("doc_kind"),
   ]);
 
-  const isAdmin = roles?.some((r) => r.role === "admin") ?? false;
-  const isApprover = roles?.some((r) => r.role === "approver") ?? false;
-  const canEdit = isAdmin || c.assigned_drafter === auth.user.id;
+  const roleNames = (roles ?? []).map((r) => r.role as string);
+  const isApprover = roleNames.includes("approver");
+  const canEdit = roleNames.includes("admin") || c.assigned_drafter === auth.user.id;
 
+  const mediations = [...(c.mediations ?? [])];
+  const notices = [...(c.notices ?? [])].sort((a, b) => (b.sent_at ?? "").localeCompare(a.sent_at ?? ""));
   const versions = (drafts ?? []).flatMap((d) => d.draft_versions ?? []);
-
-  const paths = [...(docs ?? []).map((d) => d.storage_path), ...versions.map((v) => v.docx_path).filter(Boolean)] as string[];
+  const paths = [
+    ...(docs ?? []).map((d) => d.storage_path),
+    ...versions.map((v) => v.docx_path),
+    ...mediations.map((m) => m.report_path),
+  ].filter(Boolean) as string[];
   const signed = new Map<string, string>();
   if (paths.length) {
     const { data } = await supabase.storage.from("case-files").createSignedUrls(paths, SIGNED_URL_SECONDS);
@@ -74,160 +135,222 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
   const loan = one(c.loans);
   const branch = one(c.bank_branches) as { branch_name: string; ifsc: string | null; banks: Rel<{ name: string }> } | null;
   const claim = c.claim_amount_paise == null ? null : Number(c.claim_amount_paise);
-  const check = claim == null ? null : commercialCheck({ specifiedValuePaise: claim, lenderIsBank: true, urgentInterimRelief: c.urgent_interim_relief });
+  const check =
+    claim == null ? null : commercialCheck({ specifiedValuePaise: claim, lenderIsBank: true, urgentInterimRelief: c.urgent_interim_relief });
+  const [statusLabel, statusTone] = caseStatus(c.status);
+  const parties = [...(c.parties ?? [])].sort((a, b) => a.position - b.position);
 
   return (
-    <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-10">
-      <Link href="/dashboard" className="text-sm text-zinc-500 hover:underline">
-        ← All cases
-      </Link>
-      <header className="mt-2 flex flex-wrap items-baseline justify-between gap-2">
-        <h1 className="text-2xl font-semibold">{c.case_no_internal}</h1>
-        <span className="rounded-full bg-zinc-100 px-3 py-1 text-sm dark:bg-zinc-800">{c.status.replaceAll("_", " ")}</span>
-      </header>
+    <>
+      <TopBar
+        org={one(profile?.organizations as Rel<{ name: string }>)?.name}
+        name={profile?.full_name}
+        roles={roleNames}
+      />
+      <main className="mx-auto w-full max-w-6xl flex-1 space-y-5 px-4 pb-16 pt-8">
+        <div className="fade-up">
+          <Link href="/dashboard" className="muted text-sm hover:underline">
+            ← All cases
+          </Link>
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <h1 className="text-3xl font-semibold tracking-tight">{c.case_no_internal}</h1>
+            <span className={`pill ${statusTone}`}>{statusLabel}</span>
+            {c.is_commercial && <span className="pill pill-violet">Commercial</span>}
+          </div>
+          <p className="muted mt-1 text-sm">
+            {parties[0]?.name ?? "—"} · {one(branch?.banks ?? null)?.name ?? "—"}, {branch?.branch_name ?? "—"}
+          </p>
+        </div>
 
-      <div className="mt-6 grid gap-6 md:grid-cols-2">
-        <section className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
-          <h2 className="font-medium">Bank &amp; court</h2>
-          <dl className="mt-2 grid grid-cols-2 gap-y-1 text-sm">
-            <dt className="text-zinc-500">Bank</dt>
-            <dd>{one(branch?.banks ?? null)?.name ?? "—"}</dd>
-            <dt className="text-zinc-500">Branch</dt>
-            <dd>{branch?.branch_name ?? "—"}</dd>
-            <dt className="text-zinc-500">Court</dt>
-            <dd>{(one(c.courts) as { name: string } | null)?.name ?? "—"}</dd>
-          </dl>
-        </section>
+        <div className="glass-card fade-up overflow-x-auto p-4" style={{ animationDelay: "60ms" }}>
+          <Stepper status={c.status} needs12A={c.needs_12a} />
+        </div>
 
-        <section className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
-          <h2 className="font-medium">Claim (computed in code)</h2>
-          <dl className="mt-2 grid grid-cols-2 gap-y-1 text-sm">
-            <dt className="text-zinc-500">Claim incl. interest</dt>
-            <dd className="font-medium">{claim == null ? "—" : formatINR(claim)}</dd>
-            <dt className="text-zinc-500">Court fee</dt>
-            <dd>{courtFee(claim)}</dd>
-            <dt className="text-zinc-500">Suit type</dt>
-            <dd>{check?.isCommercial ? "Commercial suit" : "Ordinary / summary"}</dd>
-            <dt className="text-zinc-500">Sec 12A mediation</dt>
-            <dd>{check?.needs12A ? "Required before filing" : "Not required"}</dd>
-          </dl>
-        </section>
+        <div className="grid gap-5 md:grid-cols-3">
+          <div className="glass-card fade-up p-6 md:col-span-1" style={{ animationDelay: "100ms" }}>
+            <p className="label">Claim incl. interest</p>
+            <p className="gradient-text mt-1 text-3xl font-semibold tracking-tight">{claim == null ? "—" : formatINR(claim)}</p>
+            <dl className="mt-5 grid grid-cols-2 gap-4">
+              <Field label="Court fee">{courtFee(claim)}</Field>
+              <Field label="Sec 12A">{check?.needs12A ? "Required" : "Not required"}</Field>
+              <Field label="Suit type">{check?.isCommercial ? "Commercial" : c.suit_type === "summary_o37" ? "Summary (O.37)" : "Ordinary"}</Field>
+              <Field label="Court">{(one(c.courts) as { name: string } | null)?.name ?? "—"}</Field>
+            </dl>
+            <p className="muted mt-4 text-xs">Computed in code from the loan data — never by AI.</p>
+          </div>
 
-        <section className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
-          <h2 className="font-medium">Parties</h2>
-          <ul className="mt-2 space-y-1 text-sm">
-            {[...(c.parties ?? [])]
-              .sort((a, b) => a.position - b.position)
-              .map((p) => (
-                <li key={p.id}>
-                  <span className="font-medium">{p.name}</span> · {p.role.replace("_", "-")}
-                  {p.aadhaar_last4 && <span className="text-zinc-500"> · Aadhaar XXXX-XXXX-{p.aadhaar_last4}</span>}
+          <div className="glass-card fade-up p-6" style={{ animationDelay: "140ms" }}>
+            <p className="label">Loan</p>
+            {loan ? (
+              <dl className="mt-3 grid grid-cols-2 gap-4">
+                <Field label="Facility">{loan.facility_type ?? "—"}</Field>
+                <Field label="Account">{loan.account_last4 ? `XXXXXX${loan.account_last4}` : "—"}</Field>
+                <Field label="Sanctioned">
+                  {loan.sanction_amount_paise == null ? "—" : formatINR(Number(loan.sanction_amount_paise))}
+                </Field>
+                <Field label="On">{fmtDate(loan.sanction_date)}</Field>
+                <Field label="Rate">{loan.roi_bps == null ? "—" : `${(loan.roi_bps / 100).toFixed(2)}% p.a.`}</Field>
+                <Field label="NPA date">{fmtDate(loan.npa_date)}</Field>
+              </dl>
+            ) : (
+              <p className="muted mt-3 text-sm">No loan details yet.</p>
+            )}
+          </div>
+
+          <div className="glass-card fade-up p-6" style={{ animationDelay: "180ms" }}>
+            <p className="label">Parties</p>
+            <ul className="mt-3 space-y-3">
+              {parties.map((p) => (
+                <li key={p.id} className="flex items-center gap-3">
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-indigo-400/40 to-violet-400/40 text-xs font-semibold">
+                    {p.name
+                      .split(" ")
+                      .map((w: string) => w[0])
+                      .slice(0, 2)
+                      .join("")}
+                  </span>
+                  <div>
+                    <p className="text-sm font-medium">{p.name}</p>
+                    <p className="muted text-xs">
+                      {title(p.role)}
+                      {p.aadhaar_last4 && ` · Aadhaar XXXX-XXXX-${p.aadhaar_last4}`}
+                    </p>
+                  </div>
                 </li>
               ))}
-          </ul>
-        </section>
-
-        <section className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
-          <h2 className="font-medium">Loan</h2>
-          {loan ? (
-            <dl className="mt-2 grid grid-cols-2 gap-y-1 text-sm">
-              <dt className="text-zinc-500">Facility</dt>
-              <dd>{loan.facility_type ?? "—"}</dd>
-              <dt className="text-zinc-500">Account</dt>
-              <dd>{loan.account_last4 ? `XXXXXX${loan.account_last4}` : "—"}</dd>
-              <dt className="text-zinc-500">Sanctioned</dt>
-              <dd>
-                {loan.sanction_amount_paise == null ? "—" : formatINR(Number(loan.sanction_amount_paise))} on{" "}
-                {fmtDate(loan.sanction_date)}
-              </dd>
-              <dt className="text-zinc-500">Rate</dt>
-              <dd>{loan.roi_bps == null ? "—" : `${(loan.roi_bps / 100).toFixed(2)}% p.a.`}</dd>
-              <dt className="text-zinc-500">NPA date</dt>
-              <dd>{fmtDate(loan.npa_date)}</dd>
-              <dt className="text-zinc-500">Outstanding</dt>
-              <dd>
-                {loan.outstanding_paise == null ? "—" : formatINR(Number(loan.outstanding_paise))} as on{" "}
-                {fmtDate(loan.interest_upto_date)}
-              </dd>
-            </dl>
-          ) : (
-            <p className="mt-2 text-sm text-zinc-500">No loan details yet.</p>
-          )}
-        </section>
-      </div>
-
-      <section className="mt-8">
-        <h2 className="text-lg font-medium">Documents ({docs?.length ?? 0})</h2>
-        {canEdit && (
-          <div className="mt-3">
-            <UploadScan orgId={c.org_id} caseId={c.id} />
+            </ul>
           </div>
-        )}
-        <ul className="mt-3 space-y-1 text-sm">
-          {docs?.map((d) => (
-            <li key={d.id}>
-              <a className="underline" href={signed.get(d.storage_path)} target="_blank" rel="noreferrer">
-                {d.storage_path.split("/").pop()}
-              </a>{" "}
-              <span className="text-zinc-500">· {fmtDate(d.created_at)}</span>
-            </li>
-          ))}
-          {!docs?.length && <li className="text-zinc-500">No scans uploaded yet.</li>}
-        </ul>
-      </section>
-
-      <section className="mt-8">
-        <h2 className="text-lg font-medium">Drafts</h2>
-        {canEdit && (
-          <div className="mt-3 flex flex-wrap gap-4">
-            <GenerateDraft caseId={c.id} kind="demand_notice" label="Generate demand notice" />
-            <GenerateDraft caseId={c.id} kind="plaint" label="Generate plaint" />
-          </div>
-        )}
-        <div className="mt-4 space-y-3">
-          {drafts?.map((d) => {
-            const vs = [...(d.draft_versions ?? [])].sort((a, b) => b.version - a.version);
-            const last = [...(d.approvals ?? [])].sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
-            const st = DRAFT_STATUS[d.status] ?? DRAFT_STATUS.draft!;
-            return (
-              <div key={d.id} className="rounded-lg border border-zinc-200 p-4 text-sm dark:border-zinc-800">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-medium capitalize">
-                    {d.doc_kind.replaceAll("_", " ")} ({d.language})
-                  </span>
-                  <span className={`rounded-full px-2 py-0.5 text-xs ${st.cls}`}>{st.label}</span>
-                </div>
-                <ul className="mt-2 space-y-0.5">
-                  {vs.map((v) => (
-                    <li key={v.version}>
-                      <a className="underline" href={v.docx_path ? signed.get(v.docx_path) : undefined}>
-                        v{v.version} (DOCX)
-                      </a>{" "}
-                      <span className="text-zinc-500">· {fmtDate(v.created_at)}</span>
-                    </li>
-                  ))}
-                </ul>
-                {last && (
-                  <p className="mt-2 text-zinc-600 dark:text-zinc-400">
-                    Last decision: <span className="font-medium">{last.decision}</span>
-                    {last.comments && <> — “{last.comments}”</>} · {fmtDate(last.created_at)}
-                  </p>
-                )}
-                {canEdit && (d.status === "draft" || d.status === "returned") && (
-                  <div className="mt-2">
-                    <SubmitDraft draftId={d.id} />
-                  </div>
-                )}
-                {isApprover && d.status === "in_approval" && d.created_by !== auth.user.id && <DecideDraft draftId={d.id} />}
-              </div>
-            );
-          })}
-          {!drafts?.length && <p className="text-sm text-zinc-500">No drafts yet.</p>}
         </div>
-        <p className="mt-3 text-xs text-zinc-500">
-          Paragraphs marked [[LEGAL_REVIEW]] (highlighted in the DOCX) must be checked by the advocate before use.
-        </p>
-      </section>
-    </main>
+
+        <div className="grid gap-5 lg:grid-cols-2">
+          <Section title="Demand notice dispatch" subtitle="Record how and when the notice was sent" delay={220}>
+            <ul className="space-y-2">
+              {notices.map((n) => (
+                <li key={n.id} className="flex items-center justify-between rounded-xl bg-white/20 px-3 py-2 text-sm dark:bg-white/5">
+                  <span>
+                    {title(n.dispatch_mode ?? "—")} {n.tracking_no && <span className="muted">· {n.tracking_no}</span>}
+                  </span>
+                  <span className="muted">{fmtDate(n.sent_at)}</span>
+                </li>
+              ))}
+              {!notices.length && <p className="muted text-sm">Not dispatched yet.</p>}
+            </ul>
+            {canEdit && (
+              <div className="mt-4">
+                <NoticeForm caseId={c.id} />
+              </div>
+            )}
+          </Section>
+
+          {c.needs_12a ? (
+            <Section title="Sec 12A pre-institution mediation" subtitle="Mandatory before filing a commercial suit" delay={260}>
+              {mediations.map((m) => (
+                <div key={m.id} className="mb-3 rounded-xl bg-white/20 px-3 py-2 text-sm dark:bg-white/5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium">{m.authority}</span>
+                    <span className={`pill ${m.outcome === "pending" ? "pill-amber" : m.outcome === "settled" ? "pill-green" : "pill-violet"}`}>
+                      {title(m.outcome ?? "pending")}
+                    </span>
+                  </div>
+                  <p className="muted mt-1">
+                    Applied {fmtDate(m.applied_at)}
+                    {m.report_date && ` · Report ${fmtDate(m.report_date)}`}
+                    {m.report_path && (
+                      <>
+                        {" · "}
+                        <a href={signed.get(m.report_path)} target="_blank" rel="noreferrer" className="underline">
+                          view report
+                        </a>
+                      </>
+                    )}
+                  </p>
+                  {canEdit && m.outcome === "pending" && (
+                    <div className="mt-3">
+                      <MediationOutcome orgId={c.org_id} caseId={c.id} mediationId={m.id} />
+                    </div>
+                  )}
+                </div>
+              ))}
+              {!mediations.length && (canEdit ? <MediationStart caseId={c.id} /> : <p className="muted text-sm">Not started.</p>)}
+            </Section>
+          ) : (
+            <Section title="Sec 12A pre-institution mediation" delay={260}>
+              <p className="muted text-sm">Not required for this case.</p>
+            </Section>
+          )}
+        </div>
+
+        <Section title={`Documents (${docs?.length ?? 0})`} subtitle="Scans are stored privately; links expire in 5 minutes" delay={300}>
+          {canEdit && <UploadScan orgId={c.org_id} caseId={c.id} />}
+          <ul className="mt-4 grid gap-2 sm:grid-cols-2">
+            {docs?.map((d) => (
+              <li key={d.id}>
+                <a
+                  className="row-hover flex items-center justify-between rounded-xl px-3 py-2 text-sm"
+                  href={signed.get(d.storage_path)}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <span className="truncate">📄 {d.storage_path.split("/").pop()?.replace(/^\d+-/, "")}</span>
+                  <span className="muted shrink-0 pl-2">{fmtDate(d.created_at)}</span>
+                </a>
+              </li>
+            ))}
+            {!docs?.length && <p className="muted text-sm">No scans uploaded yet.</p>}
+          </ul>
+        </Section>
+
+        <Section title="Drafts" subtitle="Generated from verified case data · approval enforced by the database" delay={340}>
+          {canEdit && (
+            <div className="flex flex-wrap gap-3">
+              <GenerateDraft caseId={c.id} kind="demand_notice" label="Generate demand notice" />
+              <GenerateDraft caseId={c.id} kind="plaint" label="Generate plaint" />
+            </div>
+          )}
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            {drafts?.map((d) => {
+              const vs = [...(d.draft_versions ?? [])].sort((a, b) => b.version - a.version);
+              const last = [...(d.approvals ?? [])].sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+              const [label, tone] = draftStatus(d.status);
+              return (
+                <div key={d.id} className="glass-card p-5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-semibold">
+                      {title(d.doc_kind)} <span className="muted text-xs uppercase">{d.language}</span>
+                    </span>
+                    <span className={`pill ${tone}`}>{label}</span>
+                  </div>
+                  <ul className="mt-3 flex flex-wrap gap-2">
+                    {vs.map((v) => (
+                      <li key={v.version}>
+                        <a className="btn px-3 py-1 text-xs" href={v.docx_path ? signed.get(v.docx_path) : undefined}>
+                          ⬇ v{v.version} · {fmtDate(v.created_at)}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                  {last && (
+                    <p className="muted mt-3 text-sm">
+                      Last decision: <span className="font-medium">{title(last.decision)}</span>
+                      {last.comments && <> — “{last.comments}”</>}
+                    </p>
+                  )}
+                  {canEdit && (d.status === "draft" || d.status === "returned") && (
+                    <div className="mt-3">
+                      <SubmitDraft draftId={d.id} />
+                    </div>
+                  )}
+                  {isApprover && d.status === "in_approval" && d.created_by !== auth.user.id && <DecideDraft draftId={d.id} />}
+                </div>
+              );
+            })}
+            {!drafts?.length && <p className="muted text-sm">No drafts yet.</p>}
+          </div>
+          <p className="muted mt-4 text-xs">
+            Paragraphs marked [[LEGAL_REVIEW]] (highlighted in the DOCX) must be checked by the advocate before use.
+          </p>
+        </Section>
+      </main>
+    </>
   );
 }

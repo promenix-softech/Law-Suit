@@ -1,23 +1,24 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { formatINR } from "@civil-suits/domain";
+import { TopBar } from "@/components/top-bar";
 import { createClient } from "@/lib/supabase/server";
-import { signOut } from "../login/actions";
+import { caseStatus, title } from "@/lib/ui";
 
 export const metadata = { title: "Dashboard — Civil Suits" };
 
-const STATUS_LABEL: Record<string, string> = {
-  case_created: "Case created",
-  docs_uploaded: "Docs uploaded",
-  extraction_review: "Extraction review",
-  notice_generated: "Notice generated",
-  notice_sent: "Notice sent",
-  mediation_12a: "12A mediation",
-  drafting: "Drafting",
-  in_approval: "In approval",
-  approved: "Approved",
-  filed: "Filed",
-};
+type Rel<T> = T | T[] | null;
+const one = <T,>(v: Rel<T>): T | null => (Array.isArray(v) ? (v[0] ?? null) : v);
+
+function Stat({ label, value, hint, delay }: { label: string; value: number; hint: string; delay: number }) {
+  return (
+    <div className="glass-card fade-up p-5" style={{ animationDelay: `${delay}ms` }}>
+      <p className="label">{label}</p>
+      <p className="mt-2 text-3xl font-semibold tracking-tight">{value}</p>
+      <p className="muted mt-1 text-xs">{hint}</p>
+    </div>
+  );
+}
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -33,9 +34,12 @@ export default async function DashboardPage() {
     supabase.from("user_roles").select("role").eq("user_id", auth.user.id),
     supabase
       .from("cases")
-      .select("id, case_no_internal, status, suit_type, claim_amount_paise, is_commercial, needs_12a")
+      .select("id, case_no_internal, status, suit_type, claim_amount_paise, is_commercial, needs_12a, parties(name, position)")
       .order("case_no_internal"),
-    supabase.from("tasks").select("id, kind, status, due_at, cases(case_no_internal)").eq("assignee_id", auth.user.id),
+    supabase
+      .from("tasks")
+      .select("id, kind, status, due_at, case_id, cases(case_no_internal)")
+      .eq("assignee_id", auth.user.id),
     supabase
       .from("drafts")
       .select("id, doc_kind, created_by, updated_at, case_id, cases(case_no_internal)")
@@ -43,105 +47,111 @@ export default async function DashboardPage() {
       .order("updated_at"),
   ]);
 
-  const org = profile?.organizations as { name: string } | { name: string }[] | null | undefined;
-  const orgName = Array.isArray(org) ? org[0]?.name : org?.name;
-  const isApprover = roles?.some((r) => r.role === "approver") ?? false;
+  const orgName = one(profile?.organizations as Rel<{ name: string }>)?.name;
+  const roleNames = (roles ?? []).map((r) => r.role as string);
+  const isApprover = roleNames.includes("approver");
   // Maker-checker: an approver's queue never shows their own drafts.
   const queue = (pending ?? []).filter((d) => d.created_by !== auth.user.id);
+  const firstName = profile?.full_name?.split(" ")[0];
 
   return (
-    <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-10">
-      <header className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">{orgName ?? "Civil Suits"}</h1>
-          <p className="text-sm text-zinc-500">
-            {profile?.full_name} · {roles?.map((r) => r.role).join(", ") || "no role"}
-          </p>
-        </div>
-        <form action={signOut}>
-          <button className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm dark:border-zinc-700">
-            Sign out
-          </button>
-        </form>
-      </header>
+    <>
+      <TopBar org={orgName} name={profile?.full_name} roles={roleNames} />
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-16 pt-8">
+        <h1 className="fade-up text-3xl font-semibold tracking-tight">
+          Good day{firstName ? `, ${firstName}` : ""}
+        </h1>
+        <p className="muted fade-up mt-1 text-sm">Here is where your cases stand.</p>
 
-      {isApprover && (
-        <section className="mt-8">
-          <h2 className="text-lg font-medium">Awaiting my approval ({queue.length})</h2>
-          <ul className="mt-3 space-y-2 text-sm">
-            {queue.map((d) => {
-              const c = d.cases as { case_no_internal: string } | { case_no_internal: string }[] | null;
-              const caseNo = Array.isArray(c) ? c[0]?.case_no_internal : c?.case_no_internal;
-              return (
-                <li key={d.id} className="rounded-md border border-amber-300 px-3 py-2 dark:border-amber-800">
-                  <Link href={`/dashboard/cases/${d.case_id}`} className="font-medium underline">
-                    {caseNo}
-                  </Link>{" "}
-                  · {d.doc_kind.replaceAll("_", " ")}
-                </li>
-              );
-            })}
-            {!queue.length && <li className="text-zinc-500">Nothing waiting for approval.</li>}
-          </ul>
+        <section className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <Stat label="Cases" value={cases?.length ?? 0} hint="Visible to you" delay={60} />
+          <Stat label="Commercial" value={cases?.filter((c) => c.is_commercial).length ?? 0} hint="Sec 12A applies" delay={120} />
+          <Stat label="Awaiting approval" value={isApprover ? queue.length : (pending?.length ?? 0)} hint={isApprover ? "In your queue" : "Across your cases"} delay={180} />
+          <Stat label="My tasks" value={tasks?.length ?? 0} hint="Assigned to you" delay={240} />
         </section>
-      )}
 
-      <section className="mt-8">
-        <h2 className="text-lg font-medium">Cases ({cases?.length ?? 0})</h2>
-        <div className="mt-3 overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-zinc-50 text-zinc-500 dark:bg-zinc-900">
-              <tr>
-                <th className="px-3 py-2">Case</th>
-                <th className="px-3 py-2">Status</th>
-                <th className="px-3 py-2">Suit type</th>
-                <th className="px-3 py-2 text-right">Claim</th>
-                <th className="px-3 py-2">12A</th>
-              </tr>
-            </thead>
-            <tbody>
-              {cases?.map((c) => (
-                <tr key={c.id} className="border-t border-zinc-200 dark:border-zinc-800">
-                  <td className="px-3 py-2 font-medium">
-                    <Link href={`/dashboard/cases/${c.id}`} className="underline">
-                      {c.case_no_internal}
-                    </Link>
-                  </td>
-                  <td className="px-3 py-2">{STATUS_LABEL[c.status] ?? c.status}</td>
-                  <td className="px-3 py-2">{c.suit_type ?? "—"}</td>
-                  <td className="px-3 py-2 text-right">
-                    {c.claim_amount_paise != null ? formatINR(Number(c.claim_amount_paise)) : "—"}
-                  </td>
-                  <td className="px-3 py-2">{c.needs_12a ? "Required" : "—"}</td>
-                </tr>
+        {isApprover && (
+          <section className="mt-8">
+            <h2 className="text-lg font-semibold">Awaiting my approval</h2>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {queue.map((d) => (
+                <Link key={d.id} href={`/dashboard/cases/${d.case_id}`} className="glass-card block p-4">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold">{one(d.cases as Rel<{ case_no_internal: string }>)?.case_no_internal}</span>
+                    <span className="pill pill-amber">Review</span>
+                  </div>
+                  <p className="muted mt-2 text-sm">{title(d.doc_kind)}</p>
+                </Link>
               ))}
-              {!cases?.length && (
-                <tr>
-                  <td colSpan={5} className="px-3 py-6 text-center text-zinc-500">
-                    No cases visible to you.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+              {!queue.length && <p className="muted text-sm">Nothing waiting for approval.</p>}
+            </div>
+          </section>
+        )}
 
-      <section className="mt-8">
-        <h2 className="text-lg font-medium">My tasks ({tasks?.length ?? 0})</h2>
-        <ul className="mt-3 space-y-2 text-sm">
-          {tasks?.map((t) => {
-            const c = t.cases as { case_no_internal: string } | { case_no_internal: string }[] | null;
-            const caseNo = Array.isArray(c) ? c[0]?.case_no_internal : c?.case_no_internal;
-            return (
-              <li key={t.id} className="rounded-md border border-zinc-200 px-3 py-2 dark:border-zinc-800">
-                {t.kind} · {caseNo} · {t.status}
-              </li>
-            );
-          })}
-          {!tasks?.length && <li className="text-zinc-500">No tasks assigned.</li>}
-        </ul>
-      </section>
-    </main>
+        <section className="mt-8">
+          <h2 className="text-lg font-semibold">Cases</h2>
+          <div className="glass-card mt-3 overflow-x-auto p-2">
+            <table className="w-full min-w-[640px] text-left text-sm">
+              <thead>
+                <tr className="label">
+                  <th className="px-4 py-3 font-semibold">Case</th>
+                  <th className="px-4 py-3 font-semibold">Borrower</th>
+                  <th className="px-4 py-3 font-semibold">Status</th>
+                  <th className="px-4 py-3 font-semibold">Type</th>
+                  <th className="px-4 py-3 text-right font-semibold">Claim</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cases?.map((c) => {
+                  const [label, tone] = caseStatus(c.status);
+                  const borrower = [...(c.parties ?? [])].sort((a, b) => a.position - b.position)[0]?.name;
+                  return (
+                    <tr key={c.id} className="row-hover">
+                      <td className="rounded-l-xl px-4 py-3">
+                        <Link href={`/dashboard/cases/${c.id}`} className="font-semibold hover:underline">
+                          {c.case_no_internal}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3">{borrower ?? "—"}</td>
+                      <td className="px-4 py-3">
+                        <span className={`pill ${tone}`}>{label}</span>
+                      </td>
+                      <td className="muted px-4 py-3">
+                        {c.is_commercial ? "Commercial" : c.suit_type === "summary_o37" ? "Summary (O.37)" : "Ordinary"}
+                      </td>
+                      <td className="rounded-r-xl px-4 py-3 text-right font-medium tabular-nums">
+                        {c.claim_amount_paise != null ? formatINR(Number(c.claim_amount_paise)) : "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+                {!cases?.length && (
+                  <tr>
+                    <td colSpan={5} className="muted px-4 py-8 text-center">
+                      No cases visible to you.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="mt-8">
+          <h2 className="text-lg font-semibold">My tasks</h2>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {tasks?.map((t) => (
+              <Link key={t.id} href={`/dashboard/cases/${t.case_id}`} className="glass-card block p-4">
+                <p className="font-semibold">{title(t.kind)}</p>
+                <p className="muted mt-1 text-sm">
+                  {one(t.cases as Rel<{ case_no_internal: string }>)?.case_no_internal} · {title(t.status)}
+                </p>
+              </Link>
+            ))}
+            {!tasks?.length && <p className="muted text-sm">No tasks assigned.</p>}
+          </div>
+        </section>
+      </main>
+    </>
   );
 }

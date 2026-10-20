@@ -46,7 +46,7 @@ export async function recordUpload(input: z.infer<typeof UploadInput>): Promise<
 }
 
 const CASE_SELECT =
-  "id, org_id, case_no_internal, status, suit_type, is_commercial, urgent_interim_relief, claim_amount_paise, organizations(name), courts(name, district), bank_branches(branch_name, banks(name)), parties(name, role, address, position), loans(facility_type, account_last4, sanction_date, sanction_amount_paise, roi_bps, npa_date, outstanding_paise, interest_upto_date), notices(sent_at), mediations(outcome, report_path, updated_at)";
+  "id, org_id, case_no_internal, status, needs_12a, suit_type, is_commercial, urgent_interim_relief, claim_amount_paise, organizations(name), courts(name, district), bank_branches(branch_name, banks(name)), parties(name, role, address, position), loans(facility_type, account_last4, sanction_date, sanction_amount_paise, roi_bps, npa_date, outstanding_paise, interest_upto_date), notices(sent_at), mediations(outcome, report_path, report_date)";
 
 type CaseRow = {
   id: string;
@@ -78,7 +78,7 @@ type CaseDetail = CaseRow & {
   parties: PartyRow[] | null;
   loans: Rel<LoanRow>;
   notices: { sent_at: string | null }[] | null;
-  mediations: { outcome: string | null; report_path: string | null; updated_at: string }[] | null;
+  mediations: { outcome: string | null; report_path: string | null; report_date: string | null }[] | null;
 };
 
 function courtFeeOrNull(paise: number): number | null {
@@ -126,8 +126,8 @@ function buildModel(kind: DocKind, c: CaseDetail, version: number): DocModel | s
   const claim = Number(c.claim_amount_paise ?? loan.outstanding_paise);
   const sent = (c.notices ?? []).flatMap((n) => (n.sent_at ? [n.sent_at] : [])).sort().pop();
   const med = (c.mediations ?? []).find(
-    (m): m is { outcome: "failed" | "non_starter"; report_path: string; updated_at: string } =>
-      (m.outcome === "failed" || m.outcome === "non_starter") && !!m.report_path,
+    (m): m is { outcome: "failed" | "non_starter"; report_path: string; report_date: string } =>
+      (m.outcome === "failed" || m.outcome === "non_starter") && !!m.report_path && !!m.report_date,
   );
   const suitType: SuitType = c.suit_type ?? (c.is_commercial ? "commercial" : "ordinary");
 
@@ -142,7 +142,7 @@ function buildModel(kind: DocKind, c: CaseDetail, version: number): DocModel | s
     claimAsOn: loan.interest_upto_date,
     courtFeePaise: courtFeeOrNull(claim),
     notice: sent ? { date: sent.slice(0, 10) } : null,
-    mediation: med ? { reportDate: String(med.updated_at).slice(0, 10), outcome: med.outcome } : null,
+    mediation: med ? { reportDate: med.report_date, outcome: med.outcome } : null,
     urgentInterimRelief: c.urgent_interim_relief,
     filingDate: todayIST(),
   });
@@ -155,8 +155,106 @@ function courtTitle(name: string, district: string): string {
   return base.endsWith(suffix) ? base.slice(0, -suffix.length) : base;
 }
 
-async function setCaseStatus(supabase: Supabase, c: CaseRow, to: CaseStatus) {
-  if (canTransition(c.status, to)) await supabase.from("cases").update({ status: to }).eq("id", c.id);
+async function setCaseStatus(supabase: Supabase, c: { id: string; status: CaseStatus; needs_12a?: boolean }, to: CaseStatus) {
+  if (canTransition(c.status, to, { needs12A: c.needs_12a })) await supabase.from("cases").update({ status: to }).eq("id", c.id);
+}
+
+const IsoDate = z.iso.date();
+
+const NoticeInput = z.object({
+  caseId: z.uuid(),
+  mode: z.enum(["rpad", "speed_post", "email", "hand"]),
+  trackingNo: z.string().trim().max(100).optional(),
+  sentOn: IsoDate,
+});
+
+/** Records dispatch of the demand notice; moves the case to notice_sent. */
+export async function recordNotice(input: z.infer<typeof NoticeInput>): Promise<ActionResult> {
+  const parsed = NoticeInput.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Check the dispatch details." };
+  const { caseId, mode, trackingNo, sentOn } = parsed.data;
+  if (sentOn > todayIST()) return { ok: false, error: "Dispatch date cannot be in the future." };
+
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, error: "Database is not configured." };
+  const { data: c } = await supabase.from("cases").select("id, org_id, status, needs_12a").eq("id", caseId).single();
+  if (!c) return { ok: false, error: "Case not found." };
+
+  const { error } = await supabase.from("notices").insert({
+    org_id: c.org_id,
+    case_id: caseId,
+    dispatch_mode: mode,
+    tracking_no: trackingNo || null,
+    sent_at: `${sentOn}T12:00:00+05:30`,
+  });
+  if (error) return { ok: false, error: "You cannot record notices for this case." };
+  await setCaseStatus(supabase, c, "notice_sent");
+
+  revalidatePath(`/dashboard/cases/${caseId}`);
+  return { ok: true, message: "Notice dispatch recorded." };
+}
+
+const MediationStart = z.object({
+  caseId: z.uuid(),
+  authority: z.string().trim().min(3).max(200),
+  appliedOn: IsoDate,
+});
+
+/** Sec 12A: records the pre-institution mediation application. */
+export async function startMediation(input: z.infer<typeof MediationStart>): Promise<ActionResult> {
+  const parsed = MediationStart.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Check the mediation details." };
+  const { caseId, authority, appliedOn } = parsed.data;
+  if (appliedOn > todayIST()) return { ok: false, error: "Application date cannot be in the future." };
+
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, error: "Database is not configured." };
+  const { data: c } = await supabase.from("cases").select("id, org_id, status, needs_12a").eq("id", caseId).single();
+  if (!c) return { ok: false, error: "Case not found." };
+
+  const { error } = await supabase
+    .from("mediations")
+    .insert({ org_id: c.org_id, case_id: caseId, authority, applied_at: appliedOn, outcome: "pending" });
+  if (error) return { ok: false, error: "You cannot record mediation for this case." };
+  await setCaseStatus(supabase, c, "mediation_12a");
+
+  revalidatePath(`/dashboard/cases/${caseId}`);
+  return { ok: true, message: "Mediation application recorded." };
+}
+
+const MediationOutcome = z.object({
+  caseId: z.uuid(),
+  mediationId: z.uuid(),
+  outcome: z.enum(["failed", "non_starter", "settled"]),
+  reportDate: IsoDate,
+  reportPath: z.string().min(1).max(500),
+});
+
+/** Records the mediator's report (already uploaded by the browser under the case folder). */
+export async function recordMediationOutcome(input: z.infer<typeof MediationOutcome>): Promise<ActionResult> {
+  const parsed = MediationOutcome.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Check the outcome details." };
+  const { caseId, mediationId, outcome, reportDate, reportPath } = parsed.data;
+  if (reportDate > todayIST()) return { ok: false, error: "Report date cannot be in the future." };
+
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, error: "Database is not configured." };
+  const { data: c } = await supabase.from("cases").select("id, org_id, status").eq("id", caseId).single();
+  if (!c) return { ok: false, error: "Case not found." };
+  if (!reportPath.startsWith(`${c.org_id}/${caseId}/mediation/`)) return { ok: false, error: "Invalid report path." };
+
+  const { data: updated, error } = await supabase
+    .from("mediations")
+    .update({ outcome, report_date: reportDate, report_path: reportPath })
+    .eq("id", mediationId)
+    .eq("case_id", caseId)
+    .select("id");
+  if (error || !updated?.length) return { ok: false, error: "You cannot update this mediation." };
+  // Failed / non-starter: the suit can now be drafted. Settled: the case stays for closure.
+  if (outcome !== "settled") await setCaseStatus(supabase, c, "drafting");
+
+  revalidatePath(`/dashboard/cases/${caseId}`);
+  return { ok: true, message: "Mediation outcome recorded." };
 }
 
 const DocKindSchema = z.enum(["demand_notice", "plaint"]);

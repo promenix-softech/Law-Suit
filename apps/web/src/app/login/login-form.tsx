@@ -8,30 +8,15 @@ export function LoginForm() {
   return (
     <form action={action} className="mt-8 space-y-4">
       <label className="block">
-        <span className="text-sm font-medium">Email</span>
-        <input
-          name="email"
-          type="email"
-          required
-          autoComplete="username"
-          className="mt-1 w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 dark:border-zinc-700"
-        />
+        <span className="label">Email</span>
+        <input name="email" type="email" required autoComplete="username" className="input-glass mt-2" />
       </label>
       <label className="block">
-        <span className="text-sm font-medium">Password</span>
-        <input
-          name="password"
-          type="password"
-          required
-          autoComplete="current-password"
-          className="mt-1 w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 dark:border-zinc-700"
-        />
+        <span className="label">Password</span>
+        <input name="password" type="password" required autoComplete="current-password" className="input-glass mt-2" />
       </label>
-      {state.error && <p className="text-sm text-red-600">{state.error}</p>}
-      <button
-        disabled={pending}
-        className="w-full rounded-md bg-zinc-900 px-3 py-2 text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
-      >
+      {state.error && <p className="text-sm text-red-600 dark:text-red-400">{state.error}</p>}
+      <button disabled={pending} className="btn btn-primary w-full py-3">
         {pending ? "Signing in…" : "Sign in"}
       </button>
     </form>

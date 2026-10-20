@@ -11,10 +11,19 @@ function compute(input: string, urgent: boolean) {
   try {
     fee = formatINR(maharashtraCourtFee(paise));
   } catch {
-    fee = "Slabs below ₹1,00,000 pending legal verification";
+    fee = "Pending legal verification (below ₹1 lakh)";
   }
   const c = commercialCheck({ specifiedValuePaise: paise, lenderIsBank: true, urgentInterimRelief: urgent });
   return { fee, claim: formatINR(paise), ...c };
+}
+
+function Stat({ label, value, tone }: { label: string; value: string; tone?: string }) {
+  return (
+    <div className="glass-card p-4">
+      <p className="label">{label}</p>
+      <p className={`mt-1 text-lg font-semibold ${tone ?? ""}`}>{value}</p>
+    </div>
+  );
 }
 
 export function CourtFeeCalculator() {
@@ -23,34 +32,25 @@ export function CourtFeeCalculator() {
   const r = compute(amount, urgent);
 
   return (
-    <div className="mt-6 space-y-4">
-      <label className="block">
-        <span className="text-sm font-medium">Claim incl. interest to filing (₹)</span>
-        <input
-          inputMode="decimal"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          className="mt-1 w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 dark:border-zinc-700"
-        />
-      </label>
-      <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" checked={urgent} onChange={(e) => setUrgent(e.target.checked)} />
-        Urgent interim relief sought
-      </label>
+    <div className="mt-6 space-y-5">
+      <div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
+        <label className="block">
+          <span className="label">Claim incl. interest to filing (₹)</span>
+          <input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} className="input-glass mt-2 text-lg" />
+        </label>
+        <label className="btn cursor-pointer select-none">
+          <input type="checkbox" checked={urgent} onChange={(e) => setUrgent(e.target.checked)} className="accent-violet-500" />
+          Urgent interim relief
+        </label>
+      </div>
 
       {r && (
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-          <dt className="text-zinc-500">Claim</dt>
-          <dd>{r.claim}</dd>
-          <dt className="text-zinc-500">Court fee</dt>
-          <dd className="font-medium">{r.fee}</dd>
-          <dt className="text-zinc-500">Suit type</dt>
-          <dd>{r.isCommercial ? "Commercial suit" : "Ordinary / summary suit"}</dd>
-          <dt className="text-zinc-500">Sec 12A mediation</dt>
-          <dd>{r.needs12A ? "Required before filing" : "Not required"}</dd>
-          <dt className="text-zinc-500">Verification</dt>
-          <dd>{r.needsStatementOfTruth ? "Statement of truth" : "CPC verification"}</dd>
-        </dl>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Stat label="Court fee" value={r.fee} tone="gradient-text" />
+          <Stat label="Suit type" value={r.isCommercial ? "Commercial" : "Ordinary / summary"} />
+          <Stat label="Sec 12A mediation" value={r.needs12A ? "Required" : "Not required"} />
+          <Stat label="Verification" value={r.needsStatementOfTruth ? "Statement of truth" : "CPC verification"} />
+        </div>
       )}
     </div>
   );
