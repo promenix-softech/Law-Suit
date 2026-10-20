@@ -1,15 +1,9 @@
 import { amountInWordsINR, formatINR, type Paise } from "@civil-suits/domain";
+import { caption, type CaptionInput } from "./caption";
 import { formatDateIN } from "./demandNotice";
 import type { Block, DocModel } from "./model";
 
-export type SuitType = "ordinary" | "summary_o37" | "commercial";
-
-export interface PlaintInput {
-  court: { name: string; place: string };
-  year: number;
-  suitType: SuitType;
-  bank: { name: string; branch: string };
-  defendants: { name: string; role: "borrower" | "co_borrower" | "guarantor"; address?: string | null }[];
+export interface PlaintInput extends CaptionInput {
   loan: {
     facilityType: string;
     accountLast4: string | null;
@@ -30,7 +24,6 @@ export interface PlaintInput {
   filingDate: string;
 }
 
-const ROLE_LABEL = { borrower: "Borrower", co_borrower: "Co-Borrower", guarantor: "Guarantor" } as const;
 const pct = (bps: number) => `${(bps / 100).toFixed(2)}% per annum`;
 const rv = (text: string): Block => ({ kind: "para", text, legalReview: true });
 
@@ -40,30 +33,14 @@ const rv = (text: string): Block => ({ kind: "para", text, legalReview: true });
  * advocate — see skill indian-civil-plaint. Amounts and court fee arrive pre-computed.
  */
 export function buildPlaint(input: PlaintInput): DocModel {
-  if (!input.defendants.length) throw new Error("At least one defendant is required");
-  const { loan, bank } = input;
+  const { loan } = input;
   const commercial = input.suitType === "commercial";
   const claim = `${formatINR(input.claimPaise)} (${amountInWordsINR(input.claimPaise)})`;
   let n = 0;
   const p = (text: string, legalReview = false): Block => ({ kind: "para", text: `${++n}. ${text}`, legalReview });
 
   const blocks: Block[] = [
-    { kind: "center", bold: true, lines: [`IN THE COURT OF THE ${input.court.name.toUpperCase()}`, `AT ${input.court.place.toUpperCase()}`] },
-    {
-      kind: "center",
-      lines: [
-        `${commercial ? "COMMERCIAL SUIT" : "SPECIAL CIVIL SUIT"} NO. ________ OF ${input.year}`,
-        ...(input.suitType === "summary_o37" ? ["(Under Order XXXVII of the Code of Civil Procedure, 1908)"] : []),
-      ],
-    },
-    { kind: "para", text: `${bank.name}, ${bank.branch}, through its authorised officer` },
-    { kind: "center", lines: ["… PLAINTIFF"] },
-    { kind: "center", bold: true, lines: ["VERSUS"] },
-    {
-      kind: "list",
-      items: input.defendants.map((d) => `${d.name} (${ROLE_LABEL[d.role]})${d.address ? `, ${d.address}` : ""}`),
-    },
-    { kind: "center", lines: ["… DEFENDANTS"] },
+    ...caption(input),
     { kind: "center", bold: true, lines: [`SUIT FOR RECOVERY OF ${formatINR(input.claimPaise)} WITH INTEREST AND COSTS`] },
     { kind: "para", text: "The Plaintiff above named states as under:" },
 

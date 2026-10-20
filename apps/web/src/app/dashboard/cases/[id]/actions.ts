@@ -3,7 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { canTransition, maharashtraCourtFee, type CaseStatus } from "@civil-suits/domain";
-import { buildDemandNotice, buildPlaint, type DocModel, type SuitType } from "@civil-suits/templates";
+import {
+  buildAffidavit,
+  buildDemandNotice,
+  buildPlaint,
+  buildVakalatnama,
+  type CaptionInput,
+  type DocModel,
+  type SuitType,
+} from "@civil-suits/templates";
 import { renderDocx } from "@/lib/docx";
 import { createClient } from "@/lib/supabase/server";
 
@@ -123,20 +131,25 @@ function buildModel(kind: DocKind, c: CaseDetail, version: number): DocModel | s
 
   const court = one(c.courts);
   if (!court) return "Assign a court to the case first.";
+  const captionInput: CaptionInput = {
+    court: { name: courtTitle(court.name, court.district), place: court.district },
+    year: Number(todayIST().slice(0, 4)),
+    suitType: suitTypeOf(c),
+    bank,
+    defendants: parties.map((p) => ({ name: p.name, role: p.role, address: p.address })),
+  };
+  if (kind === "vakalatnama") return buildVakalatnama(captionInput);
+  if (kind === "affidavit") return buildAffidavit(captionInput);
+
   const claim = Number(c.claim_amount_paise ?? loan.outstanding_paise);
   const sent = (c.notices ?? []).flatMap((n) => (n.sent_at ? [n.sent_at] : [])).sort().pop();
   const med = (c.mediations ?? []).find(
     (m): m is { outcome: "failed" | "non_starter"; report_path: string; report_date: string } =>
       (m.outcome === "failed" || m.outcome === "non_starter") && !!m.report_path && !!m.report_date,
   );
-  const suitType: SuitType = c.suit_type ?? (c.is_commercial ? "commercial" : "ordinary");
 
   return buildPlaint({
-    court: { name: courtTitle(court.name, court.district), place: court.district },
-    year: Number(todayIST().slice(0, 4)),
-    suitType,
-    bank,
-    defendants: parties.map((p) => ({ name: p.name, role: p.role, address: p.address })),
+    ...captionInput,
     loan: loanBase,
     claimPaise: claim,
     claimAsOn: loan.interest_upto_date,
@@ -147,6 +160,9 @@ function buildModel(kind: DocKind, c: CaseDetail, version: number): DocModel | s
     filingDate: todayIST(),
   });
 }
+
+const suitTypeOf = (c: { suit_type: SuitType | null; is_commercial: boolean }): SuitType =>
+  c.suit_type ?? (c.is_commercial ? "commercial" : "ordinary");
 
 /** "Civil Judge Senior Division, Pune (Demo)" → "Civil Judge Senior Division" (place is printed separately). */
 function courtTitle(name: string, district: string): string {
@@ -257,9 +273,17 @@ export async function recordMediationOutcome(input: z.infer<typeof MediationOutc
   return { ok: true, message: "Mediation outcome recorded." };
 }
 
-const DocKindSchema = z.enum(["demand_notice", "plaint"]);
+const DocKindSchema = z.enum(["demand_notice", "plaint", "vakalatnama", "affidavit"]);
 type DocKind = z.infer<typeof DocKindSchema>;
-const LABEL: Record<DocKind, string> = { demand_notice: "Demand notice", plaint: "Plaint" };
+const LABEL: Record<DocKind, string> = {
+  demand_notice: "Demand notice",
+  plaint: "Plaint",
+  vakalatnama: "Vakalatnama",
+  affidavit: "Affidavit",
+};
+
+/** What a generated document advances the case to, if anything. */
+const ADVANCES_TO: Partial<Record<DocKind, CaseStatus>> = { demand_notice: "notice_generated", plaint: "drafting" };
 
 /** Builds a document from case data and stores it as a new draft version (DOCX). */
 export async function generateDraft(caseId: string, kindInput: string): Promise<ActionResult> {
@@ -270,18 +294,21 @@ export async function generateDraft(caseId: string, kindInput: string): Promise<
 
   const { data: c } = await supabase.from("cases").select(CASE_SELECT).eq("id", caseId).single();
   if (!c) return { ok: false, error: "Case not found." };
+  // In a commercial suit the supporting affidavit is the statement of truth.
+  const storedKind =
+    kind.data === "affidavit" && suitTypeOf(c as unknown as CaseDetail) === "commercial" ? "statement_of_truth" : kind.data;
 
   let { data: draft } = await supabase
     .from("drafts")
     .select("id, current_version")
     .eq("case_id", caseId)
-    .eq("doc_kind", kind.data)
+    .eq("doc_kind", storedKind)
     .eq("language", "en")
     .maybeSingle();
   if (!draft) {
     const created = await supabase
       .from("drafts")
-      .insert({ org_id: c.org_id, case_id: caseId, doc_kind: kind.data, language: "en" })
+      .insert({ org_id: c.org_id, case_id: caseId, doc_kind: storedKind, language: "en" })
       .select("id, current_version")
       .single();
     if (created.error) return { ok: false, error: "You cannot draft documents for this case." };
@@ -293,7 +320,7 @@ export async function generateDraft(caseId: string, kindInput: string): Promise<
   if (typeof model === "string") return { ok: false, error: model };
 
   const file = await renderDocx(model);
-  const path = `${c.org_id}/${caseId}/drafts/${kind.data}-en-v${version}-${Date.now()}.docx`;
+  const path = `${c.org_id}/${caseId}/drafts/${storedKind}-en-v${version}-${Date.now()}.docx`;
   const up = await supabase.storage.from(BUCKET).upload(path, file, { contentType: DOCX_MIME });
   if (up.error) return { ok: false, error: "Could not store the generated file." };
 
@@ -304,10 +331,12 @@ export async function generateDraft(caseId: string, kindInput: string): Promise<
   // A new version always needs a fresh approval.
   await supabase.from("drafts").update({ current_version: version, status: "draft" }).eq("id", draft.id);
 
-  await setCaseStatus(supabase, c as CaseRow, kind.data === "demand_notice" ? "notice_generated" : "drafting");
+  const next = ADVANCES_TO[kind.data];
+  if (next) await setCaseStatus(supabase, c as CaseRow, next);
 
   revalidatePath(`/dashboard/cases/${caseId}`);
-  return { ok: true, message: `${LABEL[kind.data]} v${version} generated.` };
+  const label = storedKind === "statement_of_truth" ? "Statement of truth" : LABEL[kind.data];
+  return { ok: true, message: `${label} v${version} generated.` };
 }
 
 /** Drafter sends the current version to the approver. */

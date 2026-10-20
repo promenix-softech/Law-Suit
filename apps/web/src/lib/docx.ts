@@ -1,5 +1,17 @@
 import "server-only";
-import { AlignmentType, Document, Packer, Paragraph, TextRun, convertInchesToTwip } from "docx";
+import {
+  AlignmentType,
+  BorderStyle,
+  Document,
+  Packer,
+  Paragraph,
+  Table,
+  TableCell,
+  TableRow,
+  TextRun,
+  WidthType,
+  convertInchesToTwip,
+} from "docx";
 import { LEGAL_REVIEW, type DocModel } from "@civil-suits/templates";
 
 // Bombay HC e-Filing Rules 2022: A4, Times New Roman 14, 1.5 spacing,
@@ -15,10 +27,34 @@ const run = (text: string, opts: { bold?: boolean; highlight?: boolean } = {}) =
 const para = (children: TextRun[], align?: (typeof AlignmentType)[keyof typeof AlignmentType]) =>
   new Paragraph({ children, alignment: align, spacing: { line: LINE, after: 120 } });
 
+const BOX_BORDER = { style: BorderStyle.SINGLE, size: 8, color: "000000" };
+const NO_BORDER = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
+
+/** Side-by-side bordered boxes (e.g. where stamps are affixed), separated by a gap column. */
+function stampBoxes(labels: string[]): Table {
+  const box = (label: string) =>
+    new TableCell({
+      width: { size: 2600, type: WidthType.DXA },
+      borders: { top: BOX_BORDER, bottom: BOX_BORDER, left: BOX_BORDER, right: BOX_BORDER },
+      children: [
+        new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 600, after: 600 }, children: [run(label)] }),
+      ],
+    });
+  const gap = () =>
+    new TableCell({
+      width: { size: 400, type: WidthType.DXA },
+      borders: { top: NO_BORDER, bottom: NO_BORDER, left: NO_BORDER, right: NO_BORDER },
+      children: [new Paragraph({})],
+    });
+  return new Table({
+    rows: [new TableRow({ children: labels.flatMap((l, i) => (i ? [gap(), box(l)] : [box(l)])) })],
+  });
+}
+
 /** Renders a template DocModel as DOCX. [[LEGAL_REVIEW]] paragraphs are highlighted. */
 export async function renderDocx(doc: DocModel): Promise<Buffer> {
-  const children: Paragraph[] = [
-    para([run(doc.title, { bold: true })], AlignmentType.CENTER),
+  const children: (Paragraph | Table)[] = [
+    ...(doc.title ? [para([run(doc.title, { bold: true })], AlignmentType.CENTER)] : []),
     ...doc.meta.map((m) => para([run(m)], AlignmentType.RIGHT)),
     ...(doc.to.length ? [para([run("To,")]), ...doc.to.map((t) => para([run(t)]))] : []),
   ];
@@ -35,7 +71,12 @@ export async function renderDocx(doc: DocModel): Promise<Buffer> {
       );
     else if (b.kind === "fields") b.rows.forEach(([k, v]) => children.push(para([run(`${k}: `, { bold: true }), run(v)])));
     else if (b.kind === "list") b.items.forEach((t, i) => children.push(para([run(`${i + 1}. ${t}`)])));
-    else b.lines.forEach((l) => children.push(para([run(l)])));
+    else if (b.kind === "boxes") children.push(stampBoxes(b.items), para([]));
+    else if (b.kind === "spacer") {
+      // Blank lines keep the stamp-paper area empty; the note is a small grey hint for the clerk.
+      if (b.note) children.push(para([new TextRun({ text: b.note, font: FONT, size: 16, italics: true, color: "999999" })]));
+      for (let i = 0; i < b.lines; i++) children.push(para([]));
+    } else b.lines.forEach((l) => children.push(para([run(l)])));
   }
 
   const document = new Document({

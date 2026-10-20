@@ -94,7 +94,15 @@ export function UploadScan({ orgId, caseId }: { orgId: string; caseId: string })
   );
 }
 
-export function GenerateDraft({ caseId, kind, label }: { caseId: string; kind: "demand_notice" | "plaint"; label: string }) {
+export function GenerateDraft({
+  caseId,
+  kind,
+  label,
+}: {
+  caseId: string;
+  kind: "demand_notice" | "plaint" | "vakalatnama" | "affidavit";
+  label: string;
+}) {
   const [pending, start] = useTransition();
   const [result, setResult] = useState<ActionResult | null>(null);
   return (

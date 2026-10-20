@@ -9,7 +9,11 @@ export type Block =
   | { kind: "para"; text: string; legalReview?: boolean }
   | { kind: "fields"; rows: [label: string, value: string][] }
   | { kind: "list"; items: string[] }
-  | { kind: "signature"; lines: string[] };
+  | { kind: "signature"; lines: string[] }
+  /** Bordered boxes side by side, e.g. stamps to be affixed. */
+  | { kind: "boxes"; items: string[] }
+  /** Blank vertical space, e.g. the top of a stamp-paper page. */
+  | { kind: "spacer"; lines: number; note?: string };
 
 export interface DocModel {
   templateId: string;
@@ -28,7 +32,7 @@ export const LEGAL_REVIEW = "[[LEGAL_REVIEW]]";
 
 /** Plain-text rendering, used for golden tests and quick previews. */
 export function toPlainText(doc: DocModel): string {
-  const out: string[] = [doc.title, ""];
+  const out: string[] = doc.title ? [doc.title, ""] : [];
   if (doc.meta.length) out.push(...doc.meta, "");
   if (doc.to.length) out.push("To,", ...doc.to, "");
   for (const b of doc.blocks) {
@@ -37,6 +41,8 @@ export function toPlainText(doc: DocModel): string {
     else if (b.kind === "para") out.push(b.legalReview ? `${LEGAL_REVIEW} ${b.text}` : b.text);
     else if (b.kind === "fields") out.push(...b.rows.map(([k, v]) => `${k}: ${v}`));
     else if (b.kind === "list") out.push(...b.items.map((t, i) => `${i + 1}. ${t}`));
+    else if (b.kind === "boxes") out.push(b.items.map((t) => `[ ${t} ]`).join("   "));
+    else if (b.kind === "spacer") out.push(b.note ? `(${b.note})` : "");
     else out.push(...b.lines);
     out.push("");
   }

@@ -305,6 +305,12 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
             <div className="flex flex-wrap gap-3">
               <GenerateDraft caseId={c.id} kind="demand_notice" label="Generate demand notice" />
               <GenerateDraft caseId={c.id} kind="plaint" label="Generate plaint" />
+              <GenerateDraft caseId={c.id} kind="vakalatnama" label="Generate vakalatnama" />
+              <GenerateDraft
+                caseId={c.id}
+                kind="affidavit"
+                label={c.is_commercial ? "Generate statement of truth" : "Generate affidavit"}
+              />
             </div>
           )}
           <div className="mt-5 grid gap-4 md:grid-cols-2">

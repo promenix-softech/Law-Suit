@@ -19,9 +19,15 @@
 - [x] Sec 12A stage: application (authority, date) → `mediation_12a`; outcome + mediator's report upload + report date (new column) → `drafting`; plaint cites the report; `needs12A` blocks skipping mediation
 - [x] UI redesign: frosted-glass design system (`globals.css`), animated ambient backdrop, cursor-following light on cards, hover lift, shine on primary buttons, glass top bar, lifecycle stepper, status pills; light + dark; respects reduced motion. Screenshots in `docs/samples/ui-home-*.png`
 
+## Done (Phase 1, slice 4)
+- [x] Shared `caption()` (court, suit no., parties) used by plaint, vakalatnama, affidavit
+- [x] Vakalatnama v1: welfare-fund + court-fee stamp boxes (amounts flagged), appointment, flagged powers clause, executant + acceptance blocks
+- [x] Affidavit in support / statement of truth (commercial) v1: stamp-paper blank top, deponent, flagged prescribed declarations, jurat; stored as `statement_of_truth` for commercial suits
+- [x] DOCX renderer: bordered stamp boxes, stamp-paper spacer; samples in `docs/samples/` (checked via LibreOffice PDF render)
+
 ## Next (Phase 1)
 - [ ] Demand notice in Marathi (needs † glossary terms confirmed)
-- [ ] Vakalatnama, affidavit/SOT templates; BBE 2026 certificate (needs gazette text)
+- [ ] BBE 2026 certificate (needs gazette text)
 - [ ] Worker (Docker on VPS): DOCX→PDF/A, OCRmyPDF; needs a VPS
 - [ ] OCR + extraction (needs SARVAM_API_KEY, ANTHROPIC_API_KEY) and review UI
 **Next milestone:** Phase 1 demo (end of week 4) — single-case upload → OCR → review → drafts → PDF/A
