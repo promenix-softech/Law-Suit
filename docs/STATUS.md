@@ -14,8 +14,8 @@
 
 ## Next (Phase 0 → 1)
 - [ ] NDA signed with client; receive 1 redacted sample file + format preferences
-- [ ] Create Supabase **dev** project (Mumbai, Free tier) and link; apply migration
-- [ ] Vercel project linked to repo (Hobby for demo; Pro before billing)
+- [ ] Create a separate Supabase project `civil-suits-dev` (Mumbai, ap-south-1) in org "promenix-softech's Org" and apply the migration. **Blocked:** the free plan allows 2 active projects and both slots are taken (`niwaraa`, `promenix-softech's Project`). One must be paused/deleted, or the org upgraded to Pro.
+- [x] Vercel project `civil-suits` (team "Manoj") created separately from `homigo` / `promenix-website`; root `apps/web`, framework Next.js, functions in bom1 (Mumbai). Env vars (Supabase URL/keys, API keys) to be set by the owner in Vercel → Settings → Environment Variables.
 - [ ] Synthetic fixture generator: 10 fake cases → scanned-look 100-page PDF
 - [ ] Auth (Supabase Auth + TOTP for admin/approver) and role dashboards
 - [ ] Upload → storage → `documents`; worker skeleton (Docker: LibreOffice, OCRmyPDF, qpdf)
