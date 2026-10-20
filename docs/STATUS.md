@@ -16,7 +16,8 @@
 - [x] Supabase Auth login (`/login`), session refresh in `src/proxy.ts`, role dashboard (`/dashboard`) filtered by RLS
 - [x] `pnpm --filter web seed:demo` — synthetic org, 5 role users, 10 fake cases (amounts via domain functions)
 - [x] Supabase demo project `Lawsuit` (Singapore) created; both migrations applied; security advisors addressed
-- [ ] Owner: set Vercel env vars → redeploy → run seed → disable public sign-ups. See `docs/DEMO_SETUP.md`.
+- [x] Vercel public env vars set; demo data seeded (5 users, 10 cases); RLS verified per role on the live DB
+- [ ] Owner: disable public sign-ups in Supabase Auth; change demo password after the client demo
 
 ## Next (Phase 0 → 1)
 - [ ] NDA signed with client; receive 1 redacted sample file + format preferences

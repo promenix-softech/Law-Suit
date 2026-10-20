@@ -13,7 +13,9 @@ Accepted advisor warnings: `current_org_id`, `has_role`, `can_see_case`, `can_ed
 
 1. ~~Free a Supabase slot~~ — done (Tokyo project paused).
 2. ~~Create project and apply `supabase/migrations/*.sql`~~ — done.
-3. **Vercel env vars** (owner): `civil-suits` → Settings → Environment Variables
+Done on 2026-10-20: Vercel public env vars set; demo data seeded via SQL (5 users, 10 cases, 4 field tasks); RLS verified per role in the database (admin 10, drafter1 5, drafter2 5, approver 10, field 4). Demo password was shared with the owner in chat, not committed.
+
+3. **Vercel env vars** — public ones done; add server-only keys later: `civil-suits` → Settings → Environment Variables
    - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (Supabase → Project Settings → API)
    - Server-only, never `NEXT_PUBLIC_`: `SUPABASE_SECRET_KEY`, later `ANTHROPIC_API_KEY`, `SARVAM_API_KEY`, `FIELD_ENCRYPTION_KEY`
    - Redeploy after adding.
