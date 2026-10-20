@@ -18,6 +18,16 @@ export function TopBar({ org, name, roles }: { org?: string | null; name?: strin
           <span className="hidden font-semibold sm:inline">{org ?? "Civil Suits"}</span>
         </Link>
         <div className="flex items-center gap-3">
+          {roles.includes("admin") && (
+            <div className="flex items-center gap-1.5">
+              <Link href="/dashboard/cases/new" className="btn btn-primary px-3 py-1.5 text-xs">
+                + New case
+              </Link>
+              <Link href="/dashboard/audit" className="btn hidden px-3 py-1.5 text-xs sm:inline-flex">
+                Audit log
+              </Link>
+            </div>
+          )}
           <div className="hidden text-right sm:block">
             <p className="text-sm font-medium leading-tight">{name}</p>
             <p className="muted text-xs capitalize leading-tight">{roles.join(" · ") || "no role"}</p>

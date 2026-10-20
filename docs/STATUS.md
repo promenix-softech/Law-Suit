@@ -40,7 +40,14 @@
 - [x] Verified on the live DB (rolled back): the assigned drafter can verify and apply; another drafter can neither write nor see the fields
 - Not verified live: the real Sarvam extract call (api.sarvam.ai unreachable from the sandbox)
 
+## Done (Phase 1, slice 7 — admin)
+- [x] Admin opens cases (`/dashboard/cases/new`): case no., branch, court, borrower, drafter + approver (≠), urgent-relief flag
+- [x] Team card on the case page; admin re-assigns drafter/approver
+- [x] Security fix: DB trigger `guard_case_assignment` — only admins can change assignment/org/creator (previously the assigned drafter could change their own approver via the drafter update policy). Tests added; verified on live DB
+- [x] Audit log page (`/dashboard/audit`, admin): latest 100 entries, filter by entity, `verify_audit_chain()` recomputes the SHA-256 chain (tamper test added); live chain verified intact
+
 ## Next (Phase 1)
+- [ ] TOTP MFA for admin and approver (plan C4)
 - [ ] Demand notice in Marathi (needs † glossary terms confirmed)
 - [ ] BBE 2026 certificate (needs gazette text)
 - [ ] Worker (Docker on VPS): DOCX→PDF/A, OCRmyPDF; needs a VPS

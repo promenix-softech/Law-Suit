@@ -267,6 +267,64 @@ begin
   reset role;
 end $$;
 
+-- assignment: the drafter cannot pick their own approver; the admin can re-assign
+do $$
+begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000d2', true);
+  set local role authenticated;
+  begin
+    update public.cases set assigned_approver = '00000000-0000-0000-0000-0000000000f1'
+     where id = 'c0000000-0000-0000-0000-000000000002';
+    raise exception 'FAIL: drafter changed the approver';
+  exception when insufficient_privilege then
+    raise notice 'ok - drafter cannot change case assignment';
+  end;
+  update public.cases set claim_amount_paise = 12345 where id = 'c0000000-0000-0000-0000-000000000002';
+  if not found then raise exception 'FAIL: drafter could not update own case'; end if;
+  raise notice 'ok - drafter can still update other case fields';
+  reset role;
+end $$;
+
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+update public.cases set assigned_approver = '00000000-0000-0000-0000-0000000000a1'
+ where id = 'c0000000-0000-0000-0000-000000000002';
+select pg_temp.expect(
+  (select assigned_approver from public.cases where id = 'c0000000-0000-0000-0000-000000000002')
+    = '00000000-0000-0000-0000-0000000000a1',
+  'admin can re-assign a case');
+rollback;
+
+-- audit chain verification: intact for admin, refused for others
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+select pg_temp.expect((select first_broken_id is null and rows_checked > 0 from public.verify_audit_chain()),
+                      'audit chain verifies intact for admin');
+rollback;
+
+do $$
+begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000d2', true);
+  set local role authenticated;
+  begin
+    perform public.verify_audit_chain();
+    raise exception 'FAIL: non-admin verified audit chain';
+  exception when insufficient_privilege then
+    raise notice 'ok - only admins can verify the audit chain';
+  end;
+  reset role;
+end $$;
+
+-- tamper with one row (as superuser, bypassing the immutability trigger) and expect detection
+alter table public.audit_log disable trigger audit_log_no_update;
+update public.audit_log set action = 'tampered'
+  where id = (select min(id) + 1 from public.audit_log where org_id = '11111111-1111-1111-1111-111111111111');
+alter table public.audit_log enable trigger audit_log_no_update;
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+select pg_temp.expect((select first_broken_id is not null from public.verify_audit_chain()), 'tampered audit row is detected');
+rollback;
+
 select pg_temp.expect(
   not exists (select 1 from pg_tables where schemaname = 'public' and not rowsecurity),
   'RLS enabled on every public table');

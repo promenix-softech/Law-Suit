@@ -8,6 +8,8 @@ import { DecideDraft, GenerateDraft, MediationOutcome, MediationStart, NoticeFor
 import { display, editable, FIELDS } from "@/lib/extract/fields";
 import { decodeField } from "@/lib/extract/stored";
 import { ExtractionReview, type ReviewRow } from "./extraction-review";
+import { peopleWithRole } from "@/lib/people";
+import { AssignForm } from "./assign-form";
 import { OcrControls } from "./ocr-controls";
 
 export const metadata = { title: "Case — Civil Suits" };
@@ -99,7 +101,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
   const { data: c } = await supabase
     .from("cases")
     .select(
-      "id, org_id, case_no_internal, status, suit_type, claim_amount_paise, is_commercial, needs_12a, urgent_interim_relief, assigned_drafter, courts(name), bank_branches(branch_name, ifsc, banks(name)), parties(id, name, role, address, aadhaar_last4, position), loans(facility_type, account_last4, sanction_date, sanction_amount_paise, roi_bps, npa_date, outstanding_paise, interest_upto_date), notices(id, dispatch_mode, tracking_no, sent_at), mediations(id, authority, applied_at, outcome, report_date, report_path)",
+      "id, org_id, case_no_internal, status, suit_type, claim_amount_paise, is_commercial, needs_12a, urgent_interim_relief, assigned_drafter, assigned_approver, courts(name), bank_branches(branch_name, ifsc, banks(name)), parties(id, name, role, address, aadhaar_last4, position), loans(facility_type, account_last4, sanction_date, sanction_amount_paise, roi_bps, npa_date, outstanding_paise, interest_upto_date), notices(id, dispatch_mode, tracking_no, sent_at), mediations(id, authority, applied_at, outcome, report_date, report_path)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -156,6 +158,9 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
       },
     ];
   });
+
+  const [drafters, approvers] = await Promise.all([peopleWithRole(supabase, "drafter"), peopleWithRole(supabase, "approver")]);
+  const nameOf = (uid: string | null) => [...drafters, ...approvers].find((p) => p.id === uid)?.name ?? "—";
 
   const roleNames = (roles ?? []).map((r) => r.role as string);
   const isApprover = roleNames.includes("approver");
@@ -264,6 +269,23 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
             </ul>
           </div>
         </div>
+
+        <Section title="Team" subtitle="Maker–checker: the approver can never be the drafter" delay={200}>
+          {roleNames.includes("admin") ? (
+            <AssignForm
+              caseId={c.id}
+              drafterId={c.assigned_drafter}
+              approverId={c.assigned_approver}
+              drafters={drafters}
+              approvers={approvers}
+            />
+          ) : (
+            <dl className="grid grid-cols-2 gap-4">
+              <Field label="Drafter">{nameOf(c.assigned_drafter)}</Field>
+              <Field label="Approver">{nameOf(c.assigned_approver)}</Field>
+            </dl>
+          )}
+        </Section>
 
         <div className="grid gap-5 lg:grid-cols-2">
           <Section title="Demand notice dispatch" subtitle="Record how and when the notice was sent" delay={220}>
