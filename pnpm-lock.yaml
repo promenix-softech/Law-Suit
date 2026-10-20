@@ -75,6 +75,31 @@ importers:
         specifier: ^4.1.12
         version: 4.1.12(@types/node@20.19.43)(vite@8.3.4(@types/node@20.19.43)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))
 
+  apps/worker:
+    dependencies:
+      '@civil-suits/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
+      '@civil-suits/templates':
+        specifier: workspace:*
+        version: link:../../packages/templates
+      '@supabase/supabase-js':
+        specifier: ^2.118.0
+        version: 2.118.0
+      tsx:
+        specifier: ^4.23.15
+        version: 4.23.15
+    devDependencies:
+      '@types/node':
+        specifier: ^20.19.43
+        version: 20.19.43
+      typescript:
+        specifier: ^5
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.12
+        version: 4.1.12(@types/node@20.19.43)(vite@8.3.4(@types/node@20.19.43)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))
+
   packages/domain:
     devDependencies:
       typescript:
@@ -89,6 +114,9 @@ importers:
       '@civil-suits/domain':
         specifier: workspace:*
         version: link:../domain
+      docx:
+        specifier: ^9.13.0
+        version: 9.13.0
     devDependencies:
       '@types/node':
         specifier: ^20.19.43

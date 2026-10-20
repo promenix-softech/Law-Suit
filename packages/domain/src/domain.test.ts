@@ -106,6 +106,9 @@ describe("efilingFileName", () => {
   it("builds a compliant name", () => {
     expect(efilingFileName("CS/2026/0042", "plaint")).toBe("CS_2026_0042_PLAINT_01.pdf");
   });
+  it("names the e-filing bundle", () => {
+    expect(efilingFileName("CS/2026/0042", "bundle")).toBe("CS_2026_0042_BUNDLE_01.pdf");
+  });
   it("never exceeds 45 chars and stays ASCII", () => {
     const name = efilingFileName("दावा SBI Pune Branch Special Civil Suit Number 2026 000123456", "statement_of_truth", 12);
     expect(name.length).toBeLessThanOrEqual(EFILING_MAX_FILENAME);

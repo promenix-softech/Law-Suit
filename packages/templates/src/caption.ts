@@ -17,6 +17,16 @@ export interface CaptionInput {
   defendants: { name: string; role: PartyRole; address?: string | null }[];
 }
 
+export const suitTypeOf = (c: { suit_type: SuitType | null; is_commercial: boolean }): SuitType =>
+  c.suit_type ?? (c.is_commercial ? "commercial" : "ordinary");
+
+/** "Civil Judge Senior Division, Pune (Demo)" → "Civil Judge Senior Division" (place is printed separately). */
+export function courtTitle(name: string, district: string): string {
+  const base = name.replace(/\s*\(Demo\)$/, "");
+  const suffix = `, ${district}`;
+  return base.endsWith(suffix) ? base.slice(0, -suffix.length) : base;
+}
+
 /** Court heading, suit number line and parties — shared by every pleading in the suit. */
 export function caption(input: CaptionInput, opts: { addresses?: boolean } = {}): Block[] {
   if (!input.defendants.length) throw new Error("At least one defendant is required");

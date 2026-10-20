@@ -8,6 +8,8 @@ import {
   buildDemandNotice,
   buildPlaint,
   buildVakalatnama,
+  courtTitle,
+  suitTypeOf,
   type CaptionInput,
   type DocModel,
   type SuitType,
@@ -160,16 +162,6 @@ function buildModel(kind: DocKind, c: CaseDetail, version: number): DocModel | s
     urgentInterimRelief: c.urgent_interim_relief,
     filingDate: todayIST(),
   });
-}
-
-const suitTypeOf = (c: { suit_type: SuitType | null; is_commercial: boolean }): SuitType =>
-  c.suit_type ?? (c.is_commercial ? "commercial" : "ordinary");
-
-/** "Civil Judge Senior Division, Pune (Demo)" → "Civil Judge Senior Division" (place is printed separately). */
-function courtTitle(name: string, district: string): string {
-  const base = name.replace(/\s*\(Demo\)$/, "");
-  const suffix = `, ${district}`;
-  return base.endsWith(suffix) ? base.slice(0, -suffix.length) : base;
 }
 
 async function setCaseStatus(supabase: Supabase, c: { id: string; status: CaseStatus; needs_12a?: boolean }, to: CaseStatus) {

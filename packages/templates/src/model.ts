@@ -13,7 +13,9 @@ export type Block =
   /** Bordered boxes side by side, e.g. stamps to be affixed. */
   | { kind: "boxes"; items: string[] }
   /** Blank vertical space, e.g. the top of a stamp-paper page. */
-  | { kind: "spacer"; lines: number; note?: string };
+  | { kind: "spacer"; lines: number; note?: string }
+  /** Ruled table with a header row; widths are percentages. */
+  | { kind: "table"; head: string[]; rows: string[][]; widths: number[] };
 
 export interface DocModel {
   templateId: string;
@@ -43,6 +45,7 @@ export function toPlainText(doc: DocModel): string {
     else if (b.kind === "list") out.push(...b.items.map((t, i) => `${i + 1}. ${t}`));
     else if (b.kind === "boxes") out.push(b.items.map((t) => `[ ${t} ]`).join("   "));
     else if (b.kind === "spacer") out.push(b.note ? `(${b.note})` : "");
+    else if (b.kind === "table") out.push(...[b.head, ...b.rows].map((r) => r.join(" | ")));
     else out.push(...b.lines);
     out.push("");
   }

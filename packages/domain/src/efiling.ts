@@ -10,7 +10,8 @@ export type DocKind =
   | "bbe_certificate"
   | "mediation_12a"
   | "annexure"
-  | "list_of_documents";
+  | "list_of_documents"
+  | "bundle";
 
 const DOC_ABBR: Record<DocKind, string> = {
   plaint: "PLAINT",
@@ -22,6 +23,7 @@ const DOC_ABBR: Record<DocKind, string> = {
   mediation_12a: "MED12A",
   annexure: "ANNEX",
   list_of_documents: "LIST_DOCS",
+  bundle: "BUNDLE",
 };
 
 function asciiSafe(s: string): string {

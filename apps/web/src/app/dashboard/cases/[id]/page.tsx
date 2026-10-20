@@ -11,6 +11,20 @@ import { ExtractionReview, type ReviewRow } from "./extraction-review";
 import { peopleWithRole } from "@/lib/people";
 import { AssignForm } from "./assign-form";
 import { OcrControls } from "./ocr-controls";
+import { BundleForm, MakePdf } from "./job-controls";
+
+const BUNDLE_READY = ["approved", "notary_stamp", "efiling_ready", "filed"];
+type JobRow = {
+  id: string;
+  kind: string;
+  payload: { draft_version_id?: string };
+  status: string;
+  output_path: string | null;
+  output_meta: { fileName?: string; pages?: number; bytes?: number; entries?: { title: string; from: number; to: number; mark?: string | null }[] };
+  error: string | null;
+  created_at: string;
+};
+const JOB_TONE: Record<string, string> = { queued: "pill-neutral", running: "pill-amber", done: "pill-green", failed: "pill-red" };
 
 export const metadata = { title: "Case — Civil Suits" };
 
@@ -107,18 +121,27 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
     .maybeSingle();
   if (!c) notFound();
 
-  const [{ data: profile }, { data: roles }, { data: docs }, { data: drafts }] = await Promise.all([
+  const [{ data: profile }, { data: roles }, { data: docs }, { data: drafts }, { data: jobRows }] = await Promise.all([
     supabase.from("profiles").select("full_name, organizations(name)").eq("id", auth.user.id).single(),
     supabase.from("user_roles").select("role").eq("user_id", auth.user.id),
     supabase.from("documents").select("id, storage_path, created_at").eq("case_id", id).order("created_at", { ascending: false }),
     supabase
       .from("drafts")
       .select(
-        "id, doc_kind, language, status, created_by, current_version, draft_versions(version, docx_path, created_at), approvals(decision, comments, created_at)",
+        "id, doc_kind, language, status, created_by, current_version, draft_versions(id, version, docx_path, pdf_path, created_at), approvals(decision, comments, created_at)",
       )
       .eq("case_id", id)
       .order("doc_kind"),
+    supabase
+      .from("doc_jobs")
+      .select("id, kind, payload, status, output_path, output_meta, error, created_at")
+      .eq("case_id", id)
+      .order("created_at", { ascending: false })
+      .limit(30),
   ]);
+  const jobs = (jobRows ?? []) as JobRow[];
+  const pdfJob = (versionId: string) => jobs.find((j) => j.kind === "draft_pdf" && j.payload.draft_version_id === versionId);
+  const bundles = jobs.filter((j) => j.kind === "efiling_bundle");
 
   const docIds = (docs ?? []).map((d) => d.id);
   const { data: ocrJobs } = docIds.length
@@ -171,7 +194,8 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
   const versions = (drafts ?? []).flatMap((d) => d.draft_versions ?? []);
   const paths = [
     ...(docs ?? []).map((d) => d.storage_path),
-    ...versions.map((v) => v.docx_path),
+    ...versions.flatMap((v) => [v.docx_path, v.pdf_path]),
+    ...bundles.map((b) => b.output_path),
     ...mediations.map((m) => m.report_path),
   ].filter(Boolean) as string[];
   const signed = new Map<string, string>();
@@ -404,13 +428,26 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
                     <span className={`pill ${tone}`}>{label}</span>
                   </div>
                   <ul className="mt-3 flex flex-wrap gap-2">
-                    {vs.map((v) => (
-                      <li key={v.version}>
-                        <a className="btn px-3 py-1 text-xs" href={v.docx_path ? signed.get(v.docx_path) : undefined}>
-                          ⬇ v{v.version} · {fmtDate(v.created_at)}
-                        </a>
-                      </li>
-                    ))}
+                    {vs.map((v, i) => {
+                      const job = pdfJob(v.id);
+                      return (
+                        <li key={v.version} className="flex flex-wrap items-start gap-2">
+                          <a className="btn px-3 py-1 text-xs" href={v.docx_path ? signed.get(v.docx_path) : undefined}>
+                            ⬇ v{v.version} DOCX · {fmtDate(v.created_at)}
+                          </a>
+                          {v.pdf_path ? (
+                            <a className="btn px-3 py-1 text-xs" href={signed.get(v.pdf_path)}>
+                              ⬇ PDF/A
+                            </a>
+                          ) : job && job.status !== "failed" ? (
+                            <span className={`pill ${JOB_TONE[job.status]}`}>PDF {job.status}</span>
+                          ) : (
+                            canEdit && i === 0 && <MakePdf caseId={c.id} versionId={v.id} />
+                          )}
+                          {!v.pdf_path && job?.status === "failed" && <span className="pill pill-red">PDF failed</span>}
+                        </li>
+                      );
+                    })}
                   </ul>
                   {last && (
                     <p className="muted mt-3 text-sm">
@@ -431,6 +468,55 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
           </div>
           <p className="muted mt-4 text-xs">
             Paragraphs marked [[LEGAL_REVIEW]] (highlighted in the DOCX) must be checked by the advocate before use.
+          </p>
+        </Section>
+
+        <Section
+          title="E-filing bundle"
+          subtitle="Index → plaint → annexures → vakalatnama → affidavit / SOT · one PDF/A-2b, A4, bookmarked, ≤ 25 MB"
+          delay={380}
+        >
+          {BUNDLE_READY.includes(c.status) ? (
+            canEdit && (
+              <BundleForm
+                caseId={c.id}
+                documents={(docs ?? []).map((d) => ({ id: d.id, name: d.storage_path.split("/").pop()!.replace(/^\d+-/, "") }))}
+              />
+            )
+          ) : (
+            <p className="muted text-sm">Available once the plaint is approved. Only approved drafts go into the bundle.</p>
+          )}
+          {bundles.length > 0 && (
+            <ul className="mt-5 space-y-3">
+              {bundles.map((b) => (
+                <li key={b.id} className="glass-card p-4 text-sm">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={`pill ${JOB_TONE[b.status]}`}>{title(b.status)}</span>
+                    <span className="muted">{fmtDate(b.created_at)}</span>
+                    {b.output_path && (
+                      <a className="btn px-3 py-1 text-xs" href={signed.get(b.output_path)}>
+                        ⬇ {b.output_meta.fileName} · {b.output_meta.pages} pages ·{" "}
+                        {((b.output_meta.bytes ?? 0) / 1048576).toFixed(1)} MB
+                      </a>
+                    )}
+                  </div>
+                  {b.error && <p className="mt-2 text-red-600 dark:text-red-400">{b.error}</p>}
+                  {b.output_meta.entries && (
+                    <ol className="muted mt-2 space-y-0.5">
+                      {b.output_meta.entries.map((e) => (
+                        <li key={`${e.title}-${e.from}`}>
+                          {e.mark ? `Exhibit ${e.mark} – ` : ""}
+                          {e.title} · p. {e.from === e.to ? e.from : `${e.from}–${e.to}`}
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="muted mt-4 text-xs">
+            Built by the document worker. Sign with DSC / eSign and pay court fee on eCourts before filing.
           </p>
         </Section>
       </main>

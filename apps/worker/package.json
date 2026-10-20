@@ -1,0 +1,23 @@
+{
+  "name": "@civil-suits/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/main.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "synthetic-scans": "tsx scripts/synthetic-scans.ts"
+  },
+  "dependencies": {
+    "@civil-suits/domain": "workspace:*",
+    "@civil-suits/templates": "workspace:*",
+    "@supabase/supabase-js": "^2.118.0",
+    "tsx": "^4.23.15"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "typescript": "^5",
+    "vitest": "^4.1.12"
+  }
+}

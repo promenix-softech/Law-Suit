@@ -4,3 +4,4 @@ export * from "./demandNotice";
 export * from "./plaint";
 export * from "./vakalatnama";
 export * from "./affidavit";
+export * from "./bundleIndex";
