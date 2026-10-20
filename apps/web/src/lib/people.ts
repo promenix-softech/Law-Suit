@@ -5,7 +5,7 @@ type Supabase = NonNullable<Awaited<ReturnType<typeof createClient>>>;
 export type Person = { id: string; name: string };
 
 /** Org members holding a role, for assignment pickers (RLS limits rows to the caller's org). */
-export async function peopleWithRole(supabase: Supabase, role: "drafter" | "approver"): Promise<Person[]> {
+export async function peopleWithRole(supabase: Supabase, role: "drafter" | "approver" | "field"): Promise<Person[]> {
   const { data } = await supabase.from("user_roles").select("user_id").eq("role", role);
   const ids = (data ?? []).map((r) => r.user_id);
   if (!ids.length) return [];

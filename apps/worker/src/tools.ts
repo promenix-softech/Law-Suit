@@ -79,6 +79,19 @@ export async function ocrScan(
   return output;
 }
 
+/** Text layer of one page (after OCR), layout-free. */
+export async function pageText(pdf: string, page: number): Promise<string> {
+  return run("pdftotext", ["-f", String(page), "-l", String(page), "-enc", "UTF-8", pdf, "-"]);
+}
+
+/** Copies the given 1-based pages, in that order, into a new PDF. */
+export async function extractPages(src: string, pages: number[], out: string): Promise<string> {
+  if (!pages.length || pages.some((p) => !Number.isInteger(p) || p < 1)) throw new Error("Invalid page list");
+  // Deterministic id: the same pages give the same bytes, so a retried apply can recognise its file.
+  await run("qpdf", ["--deterministic-id", "--empty", "--pages", src, pages.join(","), "--", out]);
+  return out;
+}
+
 export async function pageCount(pdf: string): Promise<number> {
   return Number((await run("qpdf", ["--show-npages", pdf])).trim());
 }

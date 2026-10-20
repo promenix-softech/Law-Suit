@@ -100,7 +100,7 @@ export function GenerateDraft({
   label,
 }: {
   caseId: string;
-  kind: "demand_notice" | "plaint" | "vakalatnama" | "affidavit" | "original_application";
+  kind: "demand_notice" | "plaint" | "vakalatnama" | "affidavit" | "original_application" | "interim_application";
   label: string;
 }) {
   const [pending, start] = useTransition();

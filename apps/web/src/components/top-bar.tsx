@@ -26,6 +26,9 @@ export function TopBar({ org, name, roles }: { org?: string | null; name?: strin
               <Link href="/dashboard/audit" className="btn hidden px-3 py-1.5 text-xs sm:inline-flex">
                 Audit log
               </Link>
+              <Link href="/dashboard/batches" className="btn hidden px-3 py-1.5 text-xs sm:inline-flex">
+                Bulk upload
+              </Link>
               <Link href="/dashboard/billing" className="btn hidden px-3 py-1.5 text-xs sm:inline-flex">
                 Billing
               </Link>

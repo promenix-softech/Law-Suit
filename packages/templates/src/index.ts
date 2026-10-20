@@ -7,3 +7,4 @@ export * from "./affidavit";
 export * from "./bundleIndex";
 export * from "./originalApplication";
 export * from "./taxInvoice";
+export * from "./interimApplication";

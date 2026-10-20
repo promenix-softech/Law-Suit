@@ -69,8 +69,15 @@
 - [x] Runbooks: `docs/runbooks/breach.md`, `retention-erasure.md`; `scripts/backup.sh` (encrypted pg_dump) + `scripts/restore-drill.sh` (verified locally, audit chain recomputed)
 - Security review: blocking finding (billing loss on case delete) fixed with tests; migrations 20261021020000–040000 to apply
 
+- Applied to the demo DB on 22 Oct (owner approved); the usage policy change was applied as `alter policy`
+
+## Done (slice 11 — Phase 2 start)
+- [x] Bulk upload (`/dashboard/batches`, admin): one PDF with many loan files → worker splits, OCRs locally (OCRmyPDF), classifies pages in code (sanction letter, agreement, statement, NPA notice, …) and groups them by loan account (OCR slips tolerated) → admin reviews and confirms → worker creates the cases and per-case scans. Account numbers are never stored (last 4 only); originals purged 7 days after closing. Security review PASS after fixes; applied to the demo DB
+- [x] Field tasks: drafter/admin assign collect-docs / notary / e-filing / dispatch tasks; phone-first `/dashboard/tasks` with start, note and photo proof. **Security fix:** a field user could re-point their task to any case (and so see it); now only progress columns can change
+- [x] Interim application template (commercial + urgent relief), all grounds flagged `[[LEGAL_REVIEW]]`
+- Claude Haiku page classification is not wired (no Anthropic key); the in-code classifier is the default and the review step catches mistakes
+
 ## Next (Phase 1)
-- [ ] Owner: approve applying migrations 20261021020000/030000/040000 to the demo DB
 - [ ] Owner: VPS for the worker (Docker), service-role key there only; run converters without network before real data
 - [ ] TOTP MFA for admin and approver (plan C4) — on hold at owner's request
 - [ ] Demand notice in Marathi (needs † glossary terms confirmed)

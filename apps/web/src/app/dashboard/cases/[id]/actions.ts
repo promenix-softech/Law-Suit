@@ -6,6 +6,7 @@ import { canTransition, drtFee, maharashtraCourtFee, recoveryForum, type CaseSta
 import {
   buildAffidavit,
   buildDemandNotice,
+  buildInterimApplication,
   buildOriginalApplication,
   buildPlaint,
   buildVakalatnama,
@@ -164,6 +165,12 @@ function buildModel(kind: DocKind, c: CaseDetail, version: number): DocModel | s
     defendants: parties.map((p) => ({ name: p.name, role: p.role, address: p.address })),
   };
   if (kind === "vakalatnama") return buildVakalatnama(captionInput);
+  if (kind === "interim_application") {
+    if (captionInput.suitType !== "commercial" || !c.urgent_interim_relief) {
+      return "An interim application is for commercial suits that seek urgent interim relief.";
+    }
+    return buildInterimApplication({ ...captionInput, claimPaise: claim, filingDate: todayIST() });
+  }
   if (kind === "affidavit") return buildAffidavit(captionInput);
 
   const sent = (c.notices ?? []).flatMap((n) => (n.sent_at ? [n.sent_at] : [])).sort().pop();
@@ -287,7 +294,7 @@ export async function recordMediationOutcome(input: z.infer<typeof MediationOutc
   return { ok: true, message: "Mediation outcome recorded." };
 }
 
-const DocKindSchema = z.enum(["demand_notice", "plaint", "vakalatnama", "affidavit", "original_application"]);
+const DocKindSchema = z.enum(["demand_notice", "plaint", "vakalatnama", "affidavit", "original_application", "interim_application"]);
 type DocKind = z.infer<typeof DocKindSchema>;
 const LABEL: Record<DocKind, string> = {
   demand_notice: "Demand notice",
@@ -295,6 +302,7 @@ const LABEL: Record<DocKind, string> = {
   vakalatnama: "Vakalatnama",
   affidavit: "Affidavit",
   original_application: "Original Application",
+  interim_application: "Interim application",
 };
 
 /** What a generated document advances the case to, if anything. */

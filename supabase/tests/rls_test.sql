@@ -736,6 +736,237 @@ begin
   reset role;
 end $$;
 
+-- bulk intake (batches): admin only; the confirmed split must use every page once
+do $$
+begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000d1', true);
+  set local role authenticated;
+  begin
+    insert into public.batches (id, org_id, storage_path, sha256) values
+      ('ba000000-0000-0000-0000-000000000009', '11111111-1111-1111-1111-111111111111',
+       '11111111-1111-1111-1111-111111111111/ba000000-0000-0000-0000-000000000009/x.pdf', repeat('0', 64));
+    raise exception 'FAIL: drafter created a batch';
+  exception when insufficient_privilege then
+    raise notice 'ok - only admins start a bulk intake';
+  end;
+  reset role;
+end $$;
+
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+insert into public.batches (id, org_id, storage_path, sha256) values
+  ('ba000000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111',
+   '11111111-1111-1111-1111-111111111111/ba000000-0000-0000-0000-000000000001/scan.pdf', repeat('0', 64));
+reset role;
+-- worker: claim, then write pages and move to review
+set local role service_role;
+select pg_temp.expect((select count(*) from public.claim_batch()) = 1, 'worker claims the uploaded batch');
+reset role;
+update public.batches set status = 'review', page_count = 4 where id = 'ba000000-0000-0000-0000-000000000001';
+insert into public.batch_pages (org_id, batch_id, page_no, class, group_no)
+select '11111111-1111-1111-1111-111111111111', 'ba000000-0000-0000-0000-000000000001', g, 'other', 1 from generate_series(1, 4) g;
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+select pg_temp.expect((select count(*) from public.batch_pages) = 4, 'admin sees the proposed pages');
+do $$
+begin
+  begin
+    perform public.confirm_batch('ba000000-0000-0000-0000-000000000001', '[{"pages":[1,2,3],"case_no":"NEW-1"}]');
+    raise exception 'FAIL: page left out';
+  exception when raise_exception then
+    if sqlerrm like 'FAIL%' then raise; end if;
+  end;
+  begin
+    perform public.confirm_batch('ba000000-0000-0000-0000-000000000001', '[{"pages":[1,2],"case_no":"NEW-1"},{"pages":[2,3,4],"case_no":"NEW-2"}]');
+    raise exception 'FAIL: page used twice';
+  exception when raise_exception then
+    if sqlerrm like 'FAIL%' then raise; end if;
+  end;
+  begin
+    perform public.confirm_batch('ba000000-0000-0000-0000-000000000001', '[{"pages":[1,2,3,4],"case_no":"CS-1"}]');
+    raise exception 'FAIL: duplicate case number accepted';
+  exception when raise_exception then
+    if sqlerrm like 'FAIL%' then raise; end if;
+  end;
+  raise notice 'ok - a split must use every page once and new case numbers must be free';
+end $$;
+select public.confirm_batch('ba000000-0000-0000-0000-000000000001',
+  '[{"pages":[1,2],"case_no":"NEW-1"},{"pages":[3,4],"case_id":"c0000000-0000-0000-0000-000000000002"}]');
+select pg_temp.expect((select status from public.batches) = 'applying', 'admin confirms a valid split');
+rollback;
+
+-- batches: isolation between offices, and no direct edits of plan/status
+insert into public.cases (id, org_id, case_no_internal, created_by) values
+  ('c2000000-0000-0000-0000-000000000001', '22222222-2222-2222-2222-222222222222', 'OTHER-1',
+   '00000000-0000-0000-0000-0000000000b9');
+insert into public.batches (id, org_id, storage_path, sha256, status, page_count, created_by) values
+  ('ba000000-0000-0000-0000-000000000002', '11111111-1111-1111-1111-111111111111',
+   '11111111-1111-1111-1111-111111111111/ba000000-0000-0000-0000-000000000002/scan.pdf', repeat('0', 64),
+   'review', 2, '00000000-0000-0000-0000-00000000000a');
+insert into public.batch_pages (org_id, batch_id, page_no, class, group_no) values
+  ('11111111-1111-1111-1111-111111111111', 'ba000000-0000-0000-0000-000000000002', 1, 'other', 1),
+  ('11111111-1111-1111-1111-111111111111', 'ba000000-0000-0000-0000-000000000002', 2, 'other', 1);
+insert into storage.objects (bucket_id, name) values
+  ('case-batches', '11111111-1111-1111-1111-111111111111/ba000000-0000-0000-0000-000000000002/scan.pdf');
+
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000b9');
+select pg_temp.expect(
+  (select count(*) from public.batches) = 0 and (select count(*) from public.batch_pages) = 0
+  and (select count(*) from storage.objects where bucket_id = 'case-batches') = 0,
+  'another office sees none of our batches, pages or scans');
+do $$
+begin
+  perform public.confirm_batch('ba000000-0000-0000-0000-000000000002', '[{"pages":[1,2],"case_no":"X-1"}]');
+  raise exception 'FAIL: other office confirmed our batch';
+exception when raise_exception then
+  if sqlerrm like 'FAIL%' then raise; end if;
+  raise notice 'ok - another office cannot confirm our batch';
+end $$;
+rollback;
+
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+do $$
+declare n int;
+begin
+  update public.batches set status = 'applying', plan = '[{"pages":[1,2],"case_no":"X"}]'
+   where id = 'ba000000-0000-0000-0000-000000000002';
+  get diagnostics n = row_count;
+  if n <> 0 then raise exception 'FAIL: admin edited a batch plan directly'; end if;
+  begin
+    perform public.confirm_batch('ba000000-0000-0000-0000-000000000002',
+      '[{"pages":[1,2],"case_id":"c2000000-0000-0000-0000-000000000001"}]');
+    raise exception 'FAIL: plan attached pages to another office''s case';
+  exception when raise_exception then
+    if sqlerrm like 'FAIL%' then raise; end if;
+  end;
+  begin
+    perform public.confirm_batch('ba000000-0000-0000-0000-000000000002',
+      '[{"case_id":"c0000000-0000-0000-0000-000000000002"},{"pages":[1,2],"case_no":"X-2"}]');
+    raise exception 'FAIL: group without pages accepted';
+  exception when raise_exception then
+    if sqlerrm like 'FAIL%' then raise; end if;
+  end;
+  raise notice 'ok - plans go only through confirm_batch, within the office, every group with pages';
+end $$;
+rollback;
+
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000d1');
+select pg_temp.expect((select count(*) from storage.objects where bucket_id = 'case-batches') = 0,
+  'drafters cannot read bulk scans');
+rollback;
+
+do $$
+begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000d1', true);
+  set local role authenticated;
+  begin
+    perform public.claim_batch();
+    raise exception 'FAIL: user claimed a batch';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform public.confirm_batch('ba000000-0000-0000-0000-000000000001', '[]');
+    raise exception 'FAIL: drafter confirmed a split';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into storage.objects (bucket_id, name) values
+      ('case-batches', '11111111-1111-1111-1111-111111111111/ba000000-0000-0000-0000-000000000001/x.pdf');
+    raise exception 'FAIL: drafter uploaded a batch file';
+  exception when insufficient_privilege then null;
+  end;
+  raise notice 'ok - non-admins cannot claim, confirm or upload batches';
+  reset role;
+end $$;
+
+-- field tasks: the assignee updates progress only; re-pointing a task to another case is refused
+do $$
+begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000f1', true);
+  set local role authenticated;
+  begin
+    update public.tasks set case_id = 'c0000000-0000-0000-0000-000000000001'
+     where assignee_id = '00000000-0000-0000-0000-0000000000f1';
+    raise exception 'FAIL: field user moved a task to another case';
+  exception when insufficient_privilege then
+    raise notice 'ok - field user cannot re-point a task to another case';
+  end;
+  reset role;
+end $$;
+
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000f1');
+update public.tasks set status = 'done', note = 'Notarised at Pune' where assignee_id = '00000000-0000-0000-0000-0000000000f1';
+select pg_temp.expect((select done_at is not null and note = 'Notarised at Pune' from public.tasks
+                        where assignee_id = '00000000-0000-0000-0000-0000000000f1'), 'field user completes a task with a note');
+do $$
+begin
+  update public.tasks set status = 'open' where assignee_id = '00000000-0000-0000-0000-0000000000f1';
+  raise exception 'FAIL: closed task reopened';
+exception when insufficient_privilege then
+  raise notice 'ok - a closed task cannot be reopened by the assignee';
+end $$;
+rollback;
+
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000f1');
+do $$
+begin
+  update public.tasks set proof_path = '11111111-1111-1111-1111-111111111111/c0000000-0000-0000-0000-000000000002/scans/x.jpg'
+   where assignee_id = '00000000-0000-0000-0000-0000000000f1';
+  raise exception 'FAIL: proof outside field folder';
+exception when raise_exception then
+  if sqlerrm like 'FAIL%' then raise; end if;
+  raise notice 'ok - proof must sit in the case field folder';
+end $$;
+insert into storage.objects (bucket_id, name) values
+  ('case-files', '11111111-1111-1111-1111-111111111111/c0000000-0000-0000-0000-000000000002/field/proof.jpg');
+select pg_temp.expect(true, 'field user uploads proof for a case they have a task on');
+do $$
+begin
+  insert into storage.objects (bucket_id, name) values
+    ('case-files', '11111111-1111-1111-1111-111111111111/c0000000-0000-0000-0000-000000000001/field/proof.jpg');
+  raise exception 'FAIL: field upload to a case without a task';
+exception when insufficient_privilege then
+  raise notice 'ok - no field upload without an open task on the case';
+end $$;
+rollback;
+
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000d2');
+insert into public.tasks (org_id, case_id, assignee_id, role, kind, instructions) values
+  ('11111111-1111-1111-1111-111111111111', 'c0000000-0000-0000-0000-000000000002',
+   '00000000-0000-0000-0000-0000000000f1', 'field', 'collect_docs', 'Collect original sanction letter');
+select pg_temp.expect((select count(*) from public.tasks where kind = 'collect_docs') = 1, 'case drafter assigns a field task');
+do $$
+begin
+  insert into public.tasks (org_id, case_id, assignee_id, role, kind) values
+    ('11111111-1111-1111-1111-111111111111', 'c0000000-0000-0000-0000-000000000002',
+     '00000000-0000-0000-0000-0000000000d1', 'field', 'notary');
+  raise exception 'FAIL: task given to a non-field user';
+exception when raise_exception then
+  if sqlerrm like 'FAIL%' then raise; end if;
+  raise notice 'ok - tasks go only to field staff';
+end $$;
+rollback;
+
+do $$
+begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000d1', true);
+  set local role authenticated;
+  begin
+    insert into public.tasks (org_id, case_id, assignee_id, role, kind) values
+      ('11111111-1111-1111-1111-111111111111', 'c0000000-0000-0000-0000-000000000002',
+       '00000000-0000-0000-0000-0000000000f1', 'field', 'notary');
+    raise exception 'FAIL: non-editor assigned a task';
+  exception when insufficient_privilege then
+    raise notice 'ok - only the case editor assigns tasks';
+  end;
+  reset role;
+end $$;
+
 -- AI spend guard
 begin;
 insert into public.ocr_jobs (org_id, document_id, provider_job_id, language, created_by)

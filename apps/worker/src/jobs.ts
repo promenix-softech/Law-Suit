@@ -42,11 +42,14 @@ export interface CaseForBundle {
   documents: Record<string, { storagePath: string }>;
 }
 
-/** case-files: scans, drafts, bundles. case-exports: admin-only ZIPs, deleted after 7 days. */
-export type Bucket = "case-files" | "case-exports";
+/**
+ * case-files: scans, drafts, bundles. case-exports: admin-only ZIPs, deleted after 7 days.
+ * case-batches: bulk-intake uploads, {org_id}/{batch_id}/{file}.
+ */
+export type Bucket = "case-files" | "case-exports" | "case-batches";
 
 export interface Store {
-  download(path: string): Promise<Buffer>;
+  download(path: string, bucket?: Bucket): Promise<Buffer>;
   upload(path: string, body: Buffer, contentType: string, bucket?: Bucket): Promise<void>;
 }
 
@@ -80,9 +83,9 @@ export function caseStore(store: Store, job: Job): Store {
     if (!pathInCase(path, job.org_id, job.case_id)) throw new JobError("A file outside this case was referenced");
   };
   return {
-    async download(path) {
+    async download(path, bucket) {
       check(path);
-      const body = await store.download(path);
+      const body = await store.download(path, bucket);
       if (body.length > MAX_INPUT_BYTES) throw new JobError("An input file is larger than 40 MB");
       return body;
     },

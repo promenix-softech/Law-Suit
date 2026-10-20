@@ -1,6 +1,7 @@
 import { JobError, runJob } from "./jobs";
 import { ToolError } from "./tools";
-import { claim, complete, expireExports, fail, serviceClient, supabaseDb, supabaseStore } from "./supabase";
+import { applyBatch, splitBatch } from "./intake";
+import { claim, claimBatch, complete, expireExports, fail, failBatch, purgeBatchOriginals, serviceClient, supabaseDb, supabaseIntakeDb as intakeDb, supabaseStore } from "./supabase";
 
 const IDLE_MS = Number(process.env.POLL_INTERVAL_MS ?? 5000);
 let stopping = false;
@@ -11,6 +12,28 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 /** Logs ids and outcomes only: never names, paths of scans or document text. */
 const log = (msg: string, extra: Record<string, unknown> = {}) =>
   console.log(JSON.stringify({ at: new Date().toISOString(), msg, ...extra }));
+
+/** One bulk-intake step (split or apply), if any batch is waiting. Returns whether it ran. */
+async function runBatch(sb: ReturnType<typeof serviceClient>, store: ReturnType<typeof supabaseStore>): Promise<boolean> {
+  let batch;
+  try {
+    batch = await claimBatch(sb);
+  } catch (e) {
+    log("claim_batch error", { error: (e as Error).message });
+    return false;
+  }
+  if (!batch) return false;
+  const started = Date.now();
+  try {
+    const n = batch.status === "splitting" ? await splitBatch(batch, store, intakeDb(sb)) : await applyBatch(batch, store, intakeDb(sb));
+    log("batch done", { batch: batch.id, step: batch.status, count: n, ms: Date.now() - started });
+  } catch (e) {
+    const message = e instanceof JobError || e instanceof ToolError ? e.message : "Internal error";
+    await failBatch(sb, batch, message);
+    log("batch failed", { batch: batch.id, step: batch.status, error: message, code: e instanceof ToolError ? e.tool : (e as Error).name });
+  }
+  return true;
+}
 
 async function main() {
   const sb = serviceClient();
@@ -23,6 +46,8 @@ async function main() {
       lastSweep = Date.now();
       const removed = await expireExports(sb).catch(() => 0);
       if (removed) log("exports expired", { count: removed });
+      const purged = await purgeBatchOriginals(sb).catch(() => 0);
+      if (purged) log("batch originals purged", { count: purged });
     }
     let job;
     try {
@@ -33,7 +58,7 @@ async function main() {
       continue;
     }
     if (!job) {
-      await sleep(IDLE_MS);
+      if (!(await runBatch(sb, store))) await sleep(IDLE_MS);
       continue;
     }
     const started = Date.now();

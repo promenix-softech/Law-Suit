@@ -138,7 +138,14 @@ export default async function DashboardPage() {
         </section>
 
         <section className="mt-8">
-          <h2 className="text-lg font-semibold">My tasks</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold">My tasks</h2>
+            {!!tasks?.length && (
+              <Link href="/dashboard/tasks" className="btn px-3 py-1 text-xs">
+                Open task view →
+              </Link>
+            )}
+          </div>
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {tasks?.map((t) => (
               <Link key={t.id} href={`/dashboard/cases/${t.case_id}`} className="glass-card block p-4">

@@ -12,6 +12,7 @@ import { peopleWithRole } from "@/lib/people";
 import { AssignForm } from "./assign-form";
 import { OcrControls } from "./ocr-controls";
 import { BundleForm, ExportCase, MakePdf } from "./job-controls";
+import { AssignTask } from "../../tasks/task-controls";
 
 const BUNDLE_READY = ["approved", "notary_stamp", "efiling_ready", "filed"];
 type JobRow = {
@@ -183,7 +184,16 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
     ];
   });
 
-  const [drafters, approvers] = await Promise.all([peopleWithRole(supabase, "drafter"), peopleWithRole(supabase, "approver")]);
+  const [drafters, approvers, fieldStaff, { data: caseTasks }] = await Promise.all([
+    peopleWithRole(supabase, "drafter"),
+    peopleWithRole(supabase, "approver"),
+    peopleWithRole(supabase, "field"),
+    supabase
+      .from("tasks")
+      .select("id, kind, status, due_at, instructions, note, proof_path, assignee_id, done_at")
+      .eq("case_id", id)
+      .order("created_at", { ascending: false }),
+  ]);
   const nameOf = (uid: string | null) => [...drafters, ...approvers].find((p) => p.id === uid)?.name ?? "—";
 
   const roleNames = (roles ?? []).map((r) => r.role as string);
@@ -197,6 +207,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
     ...(docs ?? []).map((d) => d.storage_path),
     ...versions.flatMap((v) => [v.docx_path, v.pdf_path]),
     ...bundles.map((b) => b.output_path),
+    ...(caseTasks ?? []).map((t) => t.proof_path),
     ...mediations.map((m) => m.report_path),
   ].filter(Boolean) as string[];
   const signed = new Map<string, string>();
@@ -314,6 +325,34 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
             </ul>
           </div>
         </div>
+
+        {(canEdit || (caseTasks?.length ?? 0) > 0) && (
+          <Section title="Field tasks" subtitle="Documents, notary, e-filing, dispatch — field staff update from their phone" delay={190}>
+            {caseTasks?.length ? (
+              <ul className="mb-4 space-y-2 text-sm">
+                {caseTasks.map((t) => (
+                  <li key={t.id} className="flex flex-wrap items-center gap-2">
+                    <span className={`pill ${t.status === "done" ? "pill-green" : t.status === "in_progress" ? "pill-amber" : "pill-neutral"}`}>
+                      {title(t.status)}
+                    </span>
+                    <span className="font-medium">{title(t.kind)}</span>
+                    <span className="muted">
+                      {fieldStaff.find((p) => p.id === t.assignee_id)?.name ?? "—"}
+                      {t.due_at ? ` · due ${fmtDate(t.due_at)}` : ""}
+                    </span>
+                    {t.note && <span>“{t.note}”</span>}
+                    {t.proof_path && signed.get(t.proof_path) && (
+                      <a className="btn px-2 py-0.5 text-xs" href={signed.get(t.proof_path)}>
+                        ⬇ Proof
+                      </a>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {canEdit && <AssignTask caseId={c.id} fieldStaff={fieldStaff} />}
+          </Section>
+        )}
 
         <Section title="Team" subtitle="Maker–checker: the approver can never be the drafter" delay={200}>
           {roleNames.includes("admin") ? (
@@ -455,6 +494,9 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
                     kind="affidavit"
                     label={c.is_commercial ? "Generate statement of truth" : "Generate affidavit"}
                   />
+                  {c.is_commercial && c.urgent_interim_relief && (
+                    <GenerateDraft caseId={c.id} kind="interim_application" label="Generate interim application" />
+                  )}
                 </>
               )}
             </div>
