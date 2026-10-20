@@ -1,6 +1,20 @@
 # STATUS — Civil Suits
 
-**Current phase:** 0 — Setup (started 2026-10-20)
+**Current phase:** 1 — Demo build (started 2026-10-20)
+
+## Done (Phase 1, slice 1)
+- [x] `amountInWordsINR` / `numberToWordsIndian` (Lakh/Crore) in domain — tested
+- [x] `packages/templates`: format-neutral DocModel + demand notice v1 (EN), golden-file test; legal-consequence and 12A paragraphs flagged `[[LEGAL_REVIEW]]`
+- [x] DOCX renderer (A4, TNR 14, 1.5 spacing, e-filing margins); sample in `docs/samples/`
+- [x] Storage bucket `case-files` (private, 25 MB, PDF/JPG/PNG/DOCX) with RLS mirroring case visibility; tests added; applied to demo DB
+- [x] Case page `/dashboard/cases/[id]`: parties, loan, claim + court fee + 12A (computed in code), scan upload, demand-notice generation (draft versions), signed links (5 min)
+
+## Next (Phase 1)
+- [ ] Demand notice in Marathi (needs † glossary terms confirmed)
+- [ ] Plaint, vakalatnama, affidavit/SOT templates; BBE 2026 certificate (needs gazette text)
+- [ ] Worker (Docker on VPS): DOCX→PDF/A, OCRmyPDF; needs a VPS
+- [ ] OCR + extraction (needs SARVAM_API_KEY, ANTHROPIC_API_KEY) and review UI
+- [ ] Approval flow UI (approver approves/returns drafts)
 **Next milestone:** Phase 1 demo (end of week 4) — single-case upload → OCR → review → drafts → PDF/A
 
 ## Done (Phase 0)

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { formatINR } from "@civil-suits/domain";
 import { createClient } from "@/lib/supabase/server";
@@ -72,7 +73,11 @@ export default async function DashboardPage() {
             <tbody>
               {cases?.map((c) => (
                 <tr key={c.id} className="border-t border-zinc-200 dark:border-zinc-800">
-                  <td className="px-3 py-2 font-medium">{c.case_no_internal}</td>
+                  <td className="px-3 py-2 font-medium">
+                    <Link href={`/dashboard/cases/${c.id}`} className="underline">
+                      {c.case_no_internal}
+                    </Link>
+                  </td>
                   <td className="px-3 py-2">{STATUS_LABEL[c.status] ?? c.status}</td>
                   <td className="px-3 py-2">{c.suit_type ?? "—"}</td>
                   <td className="px-3 py-2 text-right">
