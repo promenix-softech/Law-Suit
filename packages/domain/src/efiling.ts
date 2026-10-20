@@ -11,7 +11,8 @@ export type DocKind =
   | "mediation_12a"
   | "annexure"
   | "list_of_documents"
-  | "bundle";
+  | "bundle"
+  | "original_application";
 
 const DOC_ABBR: Record<DocKind, string> = {
   plaint: "PLAINT",
@@ -24,6 +25,7 @@ const DOC_ABBR: Record<DocKind, string> = {
   annexure: "ANNEX",
   list_of_documents: "LIST_DOCS",
   bundle: "BUNDLE",
+  original_application: "OA",
 };
 
 function asciiSafe(s: string): string {

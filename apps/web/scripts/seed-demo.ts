@@ -7,7 +7,7 @@
  * Never point this at a production project. Synthetic data only.
  */
 import { createClient } from "@supabase/supabase-js";
-import { calculateInterest, commercialCheck, rupees } from "@civil-suits/domain";
+import { calculateInterest, commercialCheck, recoveryForum, rupees } from "@civil-suits/domain";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const secret = process.env.SUPABASE_SECRET_KEY;
@@ -94,6 +94,16 @@ async function main() {
     );
   }
 
+  let drt = (await must(db.from("courts").select("id").eq("org_id", orgId).eq("name", "Debts Recovery Tribunal, Pune (Demo)"), "DRT lookup"))[0];
+  if (!drt) {
+    drt = await must(
+      db.from("courts")
+        .insert({ org_id: orgId, name: "Debts Recovery Tribunal, Pune (Demo)", district: "Pune", court_type: "drt" })
+        .select("id").single(),
+      "DRT",
+    );
+  }
+
   for (let i = 0; i < 10; i++) {
     const caseNo = `DEMO-2026-${String(i + 1).padStart(4, "0")}`;
     const exists = await must(db.from("cases").select("id").eq("org_id", orgId).eq("case_no_internal", caseNo), "case lookup");
@@ -110,7 +120,8 @@ async function main() {
       db.from("cases").insert({
         org_id: orgId,
         bank_branch_id: branch.id,
-        court_id: court.id,
+        // Bank debts of ₹20 lakh or more go to the DRT.
+        court_id: recoveryForum({ claimPaise: interest.totalPaise, lenderIsBank: true }).forum === "drt" ? drt.id : court.id,
         case_no_internal: caseNo,
         status: STATUSES[i],
         suit_type: check.isCommercial ? "commercial" : "summary_o37",

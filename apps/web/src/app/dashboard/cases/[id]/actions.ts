@@ -2,10 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { canTransition, maharashtraCourtFee, type CaseStatus } from "@civil-suits/domain";
+import { canTransition, drtFee, maharashtraCourtFee, recoveryForum, type CaseStatus } from "@civil-suits/domain";
 import {
   buildAffidavit,
   buildDemandNotice,
+  buildOriginalApplication,
   buildPlaint,
   buildVakalatnama,
   courtTitle,
@@ -57,7 +58,7 @@ export async function recordUpload(input: z.infer<typeof UploadInput>): Promise<
 }
 
 const CASE_SELECT =
-  "id, org_id, case_no_internal, status, needs_12a, suit_type, is_commercial, urgent_interim_relief, claim_amount_paise, organizations(name), courts(name, district), bank_branches(branch_name, banks(name)), parties(name, role, address, position), loans(facility_type, account_last4, sanction_date, sanction_amount_paise, roi_bps, npa_date, outstanding_paise, interest_upto_date), notices(sent_at), mediations(outcome, report_path, report_date)";
+  "id, org_id, case_no_internal, status, needs_12a, suit_type, is_commercial, urgent_interim_relief, claim_amount_paise, organizations(name), courts(name, district, court_type), bank_branches(branch_name, banks(name)), parties(name, role, address, position), loans(facility_type, account_last4, sanction_date, sanction_amount_paise, roi_bps, npa_date, outstanding_paise, interest_upto_date), notices(sent_at), mediations(outcome, report_path, report_date)";
 
 type CaseRow = {
   id: string;
@@ -84,7 +85,7 @@ type CaseDetail = CaseRow & {
   urgent_interim_relief: boolean;
   claim_amount_paise: number | string | null;
   organizations: Rel<{ name: string }>;
-  courts: Rel<{ name: string; district: string }>;
+  courts: Rel<{ name: string; district: string; court_type: string }>;
   bank_branches: Rel<{ branch_name: string; banks: Rel<{ name: string }> }>;
   parties: PartyRow[] | null;
   loans: Rel<LoanRow>;
@@ -134,6 +135,27 @@ function buildModel(kind: DocKind, c: CaseDetail, version: number): DocModel | s
 
   const court = one(c.courts);
   if (!court) return "Assign a court to the case first.";
+  const claim = Number(c.claim_amount_paise ?? loan.outstanding_paise);
+  // Bank debts of ₹20 lakh or more go to the DRT; the civil court has no jurisdiction.
+  const forum = recoveryForum({ claimPaise: claim, lenderIsBank: true }).forum;
+  if (forum === "drt" && kind !== "original_application") return "Claim of ₹20 lakh or more: generate the DRT Original Application instead.";
+  if (kind === "original_application") {
+    if (forum !== "drt") return "The DRT is only for bank debts of ₹20 lakh or more.";
+    if (court.court_type !== "drt") return "Assign a DRT bench as the court for this case first.";
+    const sentOn = (c.notices ?? []).flatMap((n) => (n.sent_at ? [n.sent_at] : [])).sort().pop();
+    return buildOriginalApplication({
+      bench: { name: courtTitle(court.name, court.district), place: court.district },
+      year: Number(todayIST().slice(0, 4)),
+      bank,
+      defendants: parties.map((p) => ({ name: p.name, role: p.role, address: p.address })),
+      loan: loanBase,
+      claimPaise: claim,
+      claimAsOn: loan.interest_upto_date,
+      feePaise: drtFee(claim),
+      notice: sentOn ? { date: sentOn.slice(0, 10) } : null,
+      filingDate: todayIST(),
+    });
+  }
   const captionInput: CaptionInput = {
     court: { name: courtTitle(court.name, court.district), place: court.district },
     year: Number(todayIST().slice(0, 4)),
@@ -144,7 +166,6 @@ function buildModel(kind: DocKind, c: CaseDetail, version: number): DocModel | s
   if (kind === "vakalatnama") return buildVakalatnama(captionInput);
   if (kind === "affidavit") return buildAffidavit(captionInput);
 
-  const claim = Number(c.claim_amount_paise ?? loan.outstanding_paise);
   const sent = (c.notices ?? []).flatMap((n) => (n.sent_at ? [n.sent_at] : [])).sort().pop();
   const med = (c.mediations ?? []).find(
     (m): m is { outcome: "failed" | "non_starter"; report_path: string; report_date: string } =>
@@ -266,17 +287,22 @@ export async function recordMediationOutcome(input: z.infer<typeof MediationOutc
   return { ok: true, message: "Mediation outcome recorded." };
 }
 
-const DocKindSchema = z.enum(["demand_notice", "plaint", "vakalatnama", "affidavit"]);
+const DocKindSchema = z.enum(["demand_notice", "plaint", "vakalatnama", "affidavit", "original_application"]);
 type DocKind = z.infer<typeof DocKindSchema>;
 const LABEL: Record<DocKind, string> = {
   demand_notice: "Demand notice",
   plaint: "Plaint",
   vakalatnama: "Vakalatnama",
   affidavit: "Affidavit",
+  original_application: "Original Application",
 };
 
 /** What a generated document advances the case to, if anything. */
-const ADVANCES_TO: Partial<Record<DocKind, CaseStatus>> = { demand_notice: "notice_generated", plaint: "drafting" };
+const ADVANCES_TO: Partial<Record<DocKind, CaseStatus>> = {
+  demand_notice: "notice_generated",
+  plaint: "drafting",
+  original_application: "drafting",
+};
 
 /** Builds a document from case data and stores it as a new draft version (DOCX). */
 export async function generateDraft(caseId: string, kindInput: string): Promise<ActionResult> {

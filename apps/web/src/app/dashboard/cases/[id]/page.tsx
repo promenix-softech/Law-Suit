@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { CASE_STATUSES, commercialCheck, formatINR, maharashtraCourtFee } from "@civil-suits/domain";
+import { CASE_STATUSES, commercialCheck, formatINR, maharashtraCourtFee, recoveryForum } from "@civil-suits/domain";
 import { TopBar } from "@/components/top-bar";
 import { createClient } from "@/lib/supabase/server";
 import { caseStatus, draftStatus, fmtDate, title } from "@/lib/ui";
@@ -209,6 +209,8 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
   const claim = c.claim_amount_paise == null ? null : Number(c.claim_amount_paise);
   const check =
     claim == null ? null : commercialCheck({ specifiedValuePaise: claim, lenderIsBank: true, urgentInterimRelief: c.urgent_interim_relief });
+  const forum = claim == null ? null : recoveryForum({ claimPaise: claim, lenderIsBank: true });
+  const isDrt = forum?.forum === "drt";
   const [statusLabel, statusTone] = caseStatus(c.status);
   const parties = [...(c.parties ?? [])].sort((a, b) => a.position - b.position);
 
@@ -243,9 +245,20 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
             <p className="label">Claim incl. interest</p>
             <p className="gradient-text mt-1 text-3xl font-semibold tracking-tight">{claim == null ? "—" : formatINR(claim)}</p>
             <dl className="mt-5 grid grid-cols-2 gap-4">
-              <Field label="Court fee">{courtFee(claim)}</Field>
-              <Field label="Sec 12A">{check?.needs12A ? "Required" : "Not required"}</Field>
-              <Field label="Suit type">{check?.isCommercial ? "Commercial" : c.suit_type === "summary_o37" ? "Summary (O.37)" : "Ordinary"}</Field>
+              {isDrt ? (
+                <>
+                  <Field label="DRT fee">{formatINR(forum!.feePaise!)}</Field>
+                  <Field label="Forum">DRT · Original Application</Field>
+                </>
+              ) : (
+                <>
+                  <Field label="Court fee">{courtFee(claim)}</Field>
+                  <Field label="Sec 12A">{check?.needs12A ? "Required" : "Not required"}</Field>
+                  <Field label="Suit type">
+                    {check?.isCommercial ? "Commercial" : c.suit_type === "summary_o37" ? "Summary (O.37)" : "Ordinary"}
+                  </Field>
+                </>
+              )}
               <Field label="Court">{(one(c.courts) as { name: string } | null)?.name ?? "—"}</Field>
             </dl>
             <p className="muted mt-4 text-xs">Computed in code from the loan data — never by AI.</p>
@@ -405,13 +418,19 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
           {canEdit && (
             <div className="flex flex-wrap gap-3">
               <GenerateDraft caseId={c.id} kind="demand_notice" label="Generate demand notice" />
-              <GenerateDraft caseId={c.id} kind="plaint" label="Generate plaint" />
-              <GenerateDraft caseId={c.id} kind="vakalatnama" label="Generate vakalatnama" />
-              <GenerateDraft
-                caseId={c.id}
-                kind="affidavit"
-                label={c.is_commercial ? "Generate statement of truth" : "Generate affidavit"}
-              />
+              {isDrt ? (
+                <GenerateDraft caseId={c.id} kind="original_application" label="Generate DRT Original Application" />
+              ) : (
+                <>
+                  <GenerateDraft caseId={c.id} kind="plaint" label="Generate plaint" />
+                  <GenerateDraft caseId={c.id} kind="vakalatnama" label="Generate vakalatnama" />
+                  <GenerateDraft
+                    caseId={c.id}
+                    kind="affidavit"
+                    label={c.is_commercial ? "Generate statement of truth" : "Generate affidavit"}
+                  />
+                </>
+              )}
             </div>
           )}
           <div className="mt-5 grid gap-4 md:grid-cols-2">

@@ -11,6 +11,8 @@
 | 7 | Marathi drafts: which courts accept or require them? | Language defaults | Open |
 | 8 | What is the current time per suit, per stage? | ROI presentation | Open |
 | 9 | ICICI empanelment timeline? | Bank template order | Open |
+| 10 | DRT: which bench for which district (current notification), and the OA form you use (parts, verification)? | DRT Original Application template, bench selection | Open |
+| 11 | DRT: e-DRT filing format and who files there? | DRT bundle / e-filing | Open |
 
 ## Resolved
 _None yet._
