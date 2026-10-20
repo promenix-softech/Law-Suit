@@ -1,0 +1,40 @@
+/**
+ * Format-neutral document model. Templates produce this; renderers (DOCX now, PDF/A in the
+ * worker later) turn it into files. Keeping legal text here, not in renderers, means one
+ * versioned source per document.
+ */
+export type Block =
+  | { kind: "heading"; text: string }
+  | { kind: "para"; text: string; legalReview?: boolean }
+  | { kind: "fields"; rows: [label: string, value: string][] }
+  | { kind: "list"; items: string[] }
+  | { kind: "signature"; lines: string[] };
+
+export interface DocModel {
+  templateId: string;
+  version: number;
+  effectiveFrom: string;
+  legalBasis: string;
+  title: string;
+  /** Right-aligned header lines (ref no., date). */
+  meta: string[];
+  /** Addressee block. */
+  to: string[];
+  blocks: Block[];
+}
+
+export const LEGAL_REVIEW = "[[LEGAL_REVIEW]]";
+
+/** Plain-text rendering, used for golden tests and quick previews. */
+export function toPlainText(doc: DocModel): string {
+  const out: string[] = [doc.title, "", ...doc.meta, "", "To,", ...doc.to, ""];
+  for (const b of doc.blocks) {
+    if (b.kind === "heading") out.push(b.text.toUpperCase());
+    else if (b.kind === "para") out.push(b.legalReview ? `${LEGAL_REVIEW} ${b.text}` : b.text);
+    else if (b.kind === "fields") out.push(...b.rows.map(([k, v]) => `${k}: ${v}`));
+    else if (b.kind === "list") out.push(...b.items.map((t, i) => `${i + 1}. ${t}`));
+    else out.push(...b.lines);
+    out.push("");
+  }
+  return out.join("\n").trimEnd() + "\n";
+}

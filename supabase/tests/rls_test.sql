@@ -154,6 +154,45 @@ begin
   end;
 end $$;
 
+-- storage: case files follow case visibility
+insert into storage.objects (bucket_id, name) values
+  ('case-files', '11111111-1111-1111-1111-111111111111/c0000000-0000-0000-0000-000000000001/scans/a.pdf'),
+  ('case-files', '11111111-1111-1111-1111-111111111111/c0000000-0000-0000-0000-000000000002/scans/b.pdf');
+
+-- drafter2 holds only the drafter role (drafter1 was given approver above)
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000d2');
+select pg_temp.expect((select count(*) from storage.objects) = 1, 'drafter sees only files of assigned case');
+insert into storage.objects (bucket_id, name)
+values ('case-files', '11111111-1111-1111-1111-111111111111/c0000000-0000-0000-0000-000000000002/scans/c.pdf');
+select pg_temp.expect(true, 'drafter can upload to assigned case');
+rollback;
+
+do $$
+begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000d2', true);
+  set local role authenticated;
+  begin
+    insert into storage.objects (bucket_id, name)
+    values ('case-files', '11111111-1111-1111-1111-111111111111/c0000000-0000-0000-0000-000000000001/scans/x.pdf');
+    raise exception 'FAIL: drafter uploaded to another drafter''s case';
+  exception when insufficient_privilege then
+    raise notice 'ok - drafter cannot upload to unassigned case';
+  end;
+  begin
+    insert into storage.objects (bucket_id, name) values ('case-files', 'not-a-uuid/whatever/x.pdf');
+    raise exception 'FAIL: malformed path accepted';
+  exception when insufficient_privilege then
+    raise notice 'ok - malformed storage path rejected';
+  end;
+  reset role;
+end $$;
+
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000b9');
+select pg_temp.expect((select count(*) from storage.objects) = 0, 'other org sees no case files');
+rollback;
+
 select pg_temp.expect(
   not exists (select 1 from pg_tables where schemaname = 'public' and not rowsecurity),
   'RLS enabled on every public table');

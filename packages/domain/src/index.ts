@@ -5,3 +5,4 @@ export * from "./drtFee";
 export * from "./interest";
 export * from "./efiling";
 export * from "./lifecycle";
+export * from "./words";
