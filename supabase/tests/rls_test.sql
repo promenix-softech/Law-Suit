@@ -967,6 +967,92 @@ begin
   reset role;
 end $$;
 
+-- field tasks hardening
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000f1');
+update public.tasks set status = 'done', note = 'Done' where assignee_id = '00000000-0000-0000-0000-0000000000f1';
+do $$
+begin
+  -- done_at belongs to the trigger: an attempt to change it is ignored
+  update public.tasks set done_at = '2020-01-01' where assignee_id = '00000000-0000-0000-0000-0000000000f1';
+  if (select done_at < '2026-01-01' from public.tasks where assignee_id = '00000000-0000-0000-0000-0000000000f1') then
+    raise exception 'FAIL: done_at rewritten';
+  end if;
+  begin
+    update public.tasks set created_at = '2019-01-01' where assignee_id = '00000000-0000-0000-0000-0000000000f1';
+    raise exception 'FAIL: created_at rewritten';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    update public.tasks set note = 'edited after close' where assignee_id = '00000000-0000-0000-0000-0000000000f1';
+    raise exception 'FAIL: note changed on a closed task';
+  exception when insufficient_privilege then null;
+  end;
+  raise notice 'ok - a closed task''s record cannot be rewritten';
+end $$;
+select pg_temp.expect((select count(*) from public.cases) = 0, 'field staff lose sight of a case once its task is done');
+do $$
+begin
+  insert into storage.objects (bucket_id, name) values
+    ('case-files', '11111111-1111-1111-1111-111111111111/c0000000-0000-0000-0000-000000000002/field/late.jpg');
+  raise exception 'FAIL: upload after the task closed';
+exception when insufficient_privilege then
+  raise notice 'ok - no field upload after the task is closed';
+end $$;
+rollback;
+
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000f1');
+do $$
+begin
+  update public.tasks set status = 'cancelled' where assignee_id = '00000000-0000-0000-0000-0000000000f1';
+  raise exception 'FAIL: assignee cancelled';
+exception when insufficient_privilege then
+  raise notice 'ok - the assignee cannot cancel a task';
+end $$;
+do $$
+begin
+  insert into storage.objects (bucket_id, name) values
+    ('case-files', '11111111-1111-1111-1111-111111111111/c0000000-0000-0000-0000-000000000002/field/sub/x.jpg');
+  raise exception 'FAIL: nested field upload';
+exception when insufficient_privilege then
+  raise notice 'ok - field uploads only directly in field/';
+end $$;
+rollback;
+
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000d2');
+do $$
+begin
+  insert into public.tasks (org_id, case_id, assignee_id, role, kind, proof_path, done_at) values
+    ('11111111-1111-1111-1111-111111111111', 'c0000000-0000-0000-0000-000000000002',
+     '00000000-0000-0000-0000-0000000000f1', 'field', 'notary',
+     '22222222-2222-2222-2222-222222222222/x/../y.pdf', '2000-01-01');
+  raise exception 'FAIL: task inserted with progress';
+exception when raise_exception then
+  if sqlerrm like 'FAIL%' then raise; end if;
+  raise notice 'ok - a new task cannot carry proof or completion';
+end $$;
+rollback;
+
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+do $$
+begin
+  update public.tasks set case_id = 'c2000000-0000-0000-0000-000000000001'
+   where assignee_id = '00000000-0000-0000-0000-0000000000f1';
+  raise exception 'FAIL: admin linked a task to another office';
+exception when raise_exception then
+  if sqlerrm like 'FAIL%' then raise; end if;
+  raise notice 'ok - even an admin cannot link a task to another office';
+end $$;
+rollback;
+
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000b9');
+select pg_temp.expect((select count(*) from public.tasks) = 0, 'another office sees none of our tasks');
+rollback;
+
 -- AI spend guard
 begin;
 insert into public.ocr_jobs (org_id, document_id, provider_job_id, language, created_by)

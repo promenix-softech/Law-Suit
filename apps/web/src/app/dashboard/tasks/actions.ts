@@ -6,18 +6,32 @@ import { createClient } from "@/lib/supabase/server";
 
 export type ActionResult = { ok: true; message: string } | { ok: false; error: string };
 
+/**
+ * Task text is stored in clear and shown on phones, so it must not carry identifiers:
+ * no PAN-shaped tokens and no runs of 9+ digits (account, Aadhaar, phone numbers).
+ */
+const NO_IDS = "Remove account numbers, PAN, Aadhaar or phone numbers from the text.";
+const freeText =(max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .refine((s) => !/\b[A-Z]{5}[0-9]{4}[A-Z]\b/i.test(s) && !/\d{9,}/.test(s.replace(/[\s-]/g, "")), NO_IDS);
+
+const idMessage = (e: z.ZodError) => (e.issues.some((i) => i.message === NO_IDS) ? NO_IDS : null);
+
 const NewTask = z.object({
   caseId: z.uuid(),
   assigneeId: z.uuid(),
   kind: z.enum(["collect_docs", "notary", "efile", "dispatch_notice"]),
   dueOn: z.iso.date().optional(),
-  instructions: z.string().trim().max(500).optional(),
+  instructions: freeText(500).optional(),
 });
 
 /** Case editor (drafter/admin) assigns a field task; the DB checks the assignee is field staff. */
 export async function createTask(input: z.infer<typeof NewTask>): Promise<ActionResult> {
   const parsed = NewTask.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Check the task details." };
+  if (!parsed.success) return { ok: false, error: idMessage(parsed.error) ?? "Check the task details." };
   const v = parsed.data;
   const supabase = await createClient();
   if (!supabase) return { ok: false, error: "Database is not configured." };
@@ -41,14 +55,14 @@ export async function createTask(input: z.infer<typeof NewTask>): Promise<Action
 const Progress = z.object({
   taskId: z.uuid(),
   status: z.enum(["in_progress", "done"]),
-  note: z.string().trim().max(500).optional(),
+  note: freeText(500).optional(),
   proofPath: z.string().max(300).optional(),
 });
 
 /** Assignee reports progress. Only status, note and proof can change (DB-enforced). */
 export async function updateTask(input: z.infer<typeof Progress>): Promise<ActionResult> {
   const parsed = Progress.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Invalid update." };
+  if (!parsed.success) return { ok: false, error: idMessage(parsed.error) ?? "Invalid update." };
   const v = parsed.data;
   const supabase = await createClient();
   if (!supabase) return { ok: false, error: "Database is not configured." };
