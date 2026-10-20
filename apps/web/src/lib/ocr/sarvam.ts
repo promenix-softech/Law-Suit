@@ -31,6 +31,27 @@ export async function startDigitise(file: { data: Blob; filename: string; conten
   return { jobId: res.job_id, status: normaliseStatus(res.status) };
 }
 
+/** Extract pipeline: Sarvam reads the document and fills `schema`, with per-field confidence. */
+export async function startExtract(file: { data: Blob; filename: string; contentType: string }, schema: string) {
+  const res = await client().docAi.extract({
+    file: [{ data: file.data, filename: file.filename, contentType: file.contentType }],
+    schema,
+    output_format: "json",
+  });
+  return { jobId: res.job_id, status: normaliseStatus(res.status) };
+}
+
+export async function jobExtraction(jobId: string): Promise<{ result: Record<string, unknown>; annotations: Record<string, unknown> }> {
+  const res = (await client().docAi.getResults(jobId, { format: "json" })) as unknown as {
+    result?: Record<string, unknown>;
+    annotations?: Record<string, unknown>;
+  };
+  return { result: res.result ?? {}, annotations: res.annotations ?? {} };
+}
+
+/** Planning figure from docs/plan.md (₹1/page for extraction). */
+export const EXTRACT_COST_PAISE_PER_PAGE = 100;
+
 export async function jobStatus(jobId: string) {
   const res = await client().docAi.getStatus(jobId);
   return {

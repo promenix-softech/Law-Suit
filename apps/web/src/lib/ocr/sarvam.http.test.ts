@@ -1,7 +1,8 @@
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { jobPages, jobStatus, startDigitise } from "./sarvam";
+import { confidenceOf, extractionSchema } from "../extract/fields";
+import { jobExtraction, jobPages, jobStatus, startDigitise, startExtract } from "./sarvam";
 
 /** A local stand-in for api.sarvam.ai that records what the SDK sends. */
 type Seen = { method: string; url: string; headers: IncomingMessage["headers"]; body: string };
@@ -16,6 +17,19 @@ beforeAll(async () => {
       seen.push({ method: req.method!, url: req.url!, headers: req.headers, body });
       res.setHeader("content-type", "application/json");
       if (req.url === "/doc-ai/v1/job/digitise") return res.end(JSON.stringify({ job_id: "job-123", status: "Accepted", run_id: "r1" }));
+      if (req.url === "/doc-ai/v1/job/extract") return res.end(JSON.stringify({ job_id: "job-ex", status: "Running", run_id: "r2" }));
+      if (req.url?.startsWith("/doc-ai/v1/job/job-ex/results"))
+        return res.end(
+          JSON.stringify({
+            job_id: "job-ex",
+            type: "extract",
+            status: "completed",
+            usage: {},
+            result: { borrower_name: "Vijay Sample Jadhav", sanction_amount: "₹2,60,000.00" },
+            annotations: { borrower_name: { confidence: 0.97, sources: [] }, sanction_amount: { confidence: 0.81, sources: [] } },
+            version: 1,
+          }),
+        );
       if (req.url === "/doc-ai/v1/job/job-123/status")
         return res.end(
           JSON.stringify({
@@ -74,5 +88,21 @@ describe("Sarvam client wiring (mock server)", () => {
       { pageNo: 2, text: "Amount ₹2,60,000" },
     ]);
     expect(seen.some((s) => s.url === "/doc-ai/v1/job/job-123/results?format=md")).toBe(true);
+  });
+
+  it("starts an extract job with the schema and reads result + annotations", async () => {
+    const job = await startExtract(
+      { data: new Blob(["%PDF-1.4 fake"], { type: "application/pdf" }), filename: "scan.pdf", contentType: "application/pdf" },
+      extractionSchema(),
+    );
+    expect(job).toEqual({ jobId: "job-ex", status: "running" });
+    const req = seen.find((s) => s.url === "/doc-ai/v1/job/extract")!;
+    expect(req.body).toContain('name="schema"');
+    expect(req.body).toContain("sanction_amount");
+    expect(req.body).toContain('name="output_format"');
+
+    const out = await jobExtraction("job-ex");
+    expect(out.result.borrower_name).toBe("Vijay Sample Jadhav");
+    expect(confidenceOf(out.annotations, "sanction_amount")).toBe(0.81);
   });
 });

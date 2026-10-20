@@ -33,8 +33,14 @@
 - [x] Web unit tests (vitest): encryption round-trip/tamper, result mapping, and SDK wiring against a local mock server
 - Not verified live: api.sarvam.ai is unreachable from the build sandbox — first real run happens on the deployed site
 
+## Done (Phase 1, slice 6 — field extraction)
+- [x] Sarvam `extract` with a 14-field loan-file schema (`lib/extract/fields.ts`); values validated and normalised in code (dates day-first → ISO, amounts → paise, rate → bps, IFSC, account) — 34 tests
+- [x] Extracted values stored encrypted (raw + normalised) with confidence and source document; re-extraction never overwrites human-verified values
+- [x] Review UI on the case page: as-read text, confidence (amber < 85%, red if invalid), editable value, Verify; "Apply verified values to case" updates loan, borrower, guarantor and claim — commercial / 12A recomputed in code
+- [x] Verified on the live DB (rolled back): the assigned drafter can verify and apply; another drafter can neither write nor see the fields
+- Not verified live: the real Sarvam extract call (api.sarvam.ai unreachable from the sandbox)
+
 ## Next (Phase 1)
-- [ ] Field extraction from OCR text (Sarvam `extract` with a JSON schema, or Claude) + drafter review UI with confidence and source page
 - [ ] Demand notice in Marathi (needs † glossary terms confirmed)
 - [ ] BBE 2026 certificate (needs gazette text)
 - [ ] Worker (Docker on VPS): DOCX→PDF/A, OCRmyPDF; needs a VPS

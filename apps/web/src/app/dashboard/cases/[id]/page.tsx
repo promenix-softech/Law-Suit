@@ -5,6 +5,9 @@ import { TopBar } from "@/components/top-bar";
 import { createClient } from "@/lib/supabase/server";
 import { caseStatus, draftStatus, fmtDate, title } from "@/lib/ui";
 import { DecideDraft, GenerateDraft, MediationOutcome, MediationStart, NoticeForm, SubmitDraft, UploadScan } from "./case-actions";
+import { display, editable, FIELDS } from "@/lib/extract/fields";
+import { decodeField } from "@/lib/extract/stored";
+import { ExtractionReview, type ReviewRow } from "./extraction-review";
 import { OcrControls } from "./ocr-controls";
 
 export const metadata = { title: "Case — Civil Suits" };
@@ -119,12 +122,40 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
   const { data: ocrJobs } = docIds.length
     ? await supabase
         .from("ocr_jobs")
-        .select("id, document_id, status, pages_succeeded, error, created_at")
+        .select("id, document_id, pipeline, status, pages_succeeded, error, created_at")
         .in("document_id", docIds)
         .order("created_at", { ascending: false })
     : { data: [] };
+  // Latest job per document and pipeline ("digitise" = OCR text, "extract" = fields).
   const latestJob = new Map<string, NonNullable<typeof ocrJobs>[number]>();
-  (ocrJobs ?? []).forEach((j) => latestJob.has(j.document_id) || latestJob.set(j.document_id, j));
+  (ocrJobs ?? []).forEach((j) => {
+    const k = `${j.pipeline}:${j.document_id}`;
+    if (!latestJob.has(k)) latestJob.set(k, j);
+  });
+
+  const { data: extracted } = await supabase
+    .from("extracted_fields")
+    .select("field_key, value_enc, confidence, verified_at, document_id")
+    .eq("case_id", id);
+  const byKey = new Map((extracted ?? []).map((e) => [e.field_key, e]));
+  const reviewRows: ReviewRow[] = FIELDS.flatMap((f) => {
+    const e = byKey.get(f.key);
+    const p = e ? decodeField(e.value_enc) : null;
+    if (!e || !p) return [];
+    return [
+      {
+        key: f.key,
+        label: f.label,
+        raw: p.raw,
+        initial: p.stored ? editable(f.kind, p.stored) : p.raw,
+        display: p.stored ? display(f.kind, p.stored) : null,
+        reason: p.reason,
+        confidence: e.confidence == null ? null : Number(e.confidence),
+        verified: !!e.verified_at,
+        documentId: e.document_id,
+      },
+    ];
+  });
 
   const roleNames = (roles ?? []).map((r) => r.role as string);
   const isApprover = roleNames.includes("approver");
@@ -301,12 +332,28 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
                   📄 {d.storage_path.split("/").pop()?.replace(/^\d+-/, "")}{" "}
                   <span className="muted">· {fmtDate(d.created_at)}</span>
                 </a>
-                <OcrControls documentId={d.id} caseId={c.id} job={latestJob.get(d.id) ?? null} canEdit={canEdit} />
+                <OcrControls
+                  documentId={d.id}
+                  caseId={c.id}
+                  job={latestJob.get(`digitise:${d.id}`) ?? null}
+                  extractJob={latestJob.get(`extract:${d.id}`) ?? null}
+                  canEdit={canEdit}
+                />
               </li>
             ))}
             {!docs?.length && <p className="muted text-sm">No scans uploaded yet.</p>}
           </ul>
         </Section>
+
+        {reviewRows.length > 0 && (
+          <Section
+            title="Extracted data — review"
+            subtitle="Read from the scans by Sarvam. Check each value against the source, then verify. Only verified values reach the case."
+            delay={320}
+          >
+            <ExtractionReview rows={reviewRows} caseId={c.id} canEdit={canEdit} />
+          </Section>
+        )}
 
         <Section title="Drafts" subtitle="Generated from verified case data · approval enforced by the database" delay={340}>
           {canEdit && (
