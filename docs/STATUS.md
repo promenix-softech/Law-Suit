@@ -12,6 +12,11 @@
 - [x] Claude Code setup: CLAUDE.md, 8 agents, 9 skills, hooks (destructive-command guard, env/migration guard, PII scan, stop-on-red-tests, session-start status)
 - [x] CI workflow (lint, typecheck, unit, DB/RLS tests, build)
 
+## Done (demo platform)
+- [x] Supabase Auth login (`/login`), session refresh in `src/proxy.ts`, role dashboard (`/dashboard`) filtered by RLS
+- [x] `pnpm --filter web seed:demo` — synthetic org, 5 role users, 10 fake cases (amounts via domain functions)
+- [ ] Owner: pause empty Tokyo Supabase project → Claude creates `civil-suits-dev` + applies migration → owner sets Vercel env vars → seed. See `docs/DEMO_SETUP.md`.
+
 ## Next (Phase 0 → 1)
 - [ ] NDA signed with client; receive 1 redacted sample file + format preferences
 - [ ] Create a separate Supabase project `civil-suits-dev` (Mumbai, ap-south-1) in org "promenix-softech's Org" and apply the migration. **Blocked:** the free plan allows 2 active projects and both slots are taken (`niwaraa`, `promenix-softech's Project`). One must be paused/deleted, or the org upgraded to Pro.

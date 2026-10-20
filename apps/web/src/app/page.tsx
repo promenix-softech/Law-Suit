@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { CourtFeeCalculator } from "./court-fee-calculator";
 
 export default function Home() {
@@ -5,8 +6,14 @@ export default function Home() {
     <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-12">
       <h1 className="text-3xl font-semibold">Civil Suits</h1>
       <p className="mt-2 text-zinc-600 dark:text-zinc-400">
-        Bank-recovery suit automation — Phase 0 setup. Demo uses synthetic data only.
+        Bank-recovery suit automation — demo uses synthetic data only.
       </p>
+      <Link
+        href="/login"
+        className="mt-6 inline-block rounded-md bg-zinc-900 px-4 py-2 text-white dark:bg-zinc-100 dark:text-zinc-900"
+      >
+        Sign in
+      </Link>
 
       <section className="mt-10 rounded-lg border border-zinc-200 p-6 dark:border-zinc-800">
         <h2 className="text-xl font-medium">Court fee &amp; suit-type check</h2>
