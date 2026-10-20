@@ -20,12 +20,12 @@ export async function renderDocx(doc: DocModel): Promise<Buffer> {
   const children: Paragraph[] = [
     para([run(doc.title, { bold: true })], AlignmentType.CENTER),
     ...doc.meta.map((m) => para([run(m)], AlignmentType.RIGHT)),
-    para([run("To,")]),
-    ...doc.to.map((t) => para([run(t)])),
+    ...(doc.to.length ? [para([run("To,")]), ...doc.to.map((t) => para([run(t)]))] : []),
   ];
 
   for (const b of doc.blocks) {
     if (b.kind === "heading") children.push(para([run(b.text, { bold: true })]));
+    else if (b.kind === "center") b.lines.forEach((l) => children.push(para([run(l, { bold: b.bold })], AlignmentType.CENTER)));
     else if (b.kind === "para")
       children.push(
         para(

@@ -2,7 +2,14 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { commercialCheck, formatINR, maharashtraCourtFee } from "@civil-suits/domain";
 import { createClient } from "@/lib/supabase/server";
-import { GenerateNotice, UploadScan } from "./case-actions";
+import { DecideDraft, GenerateDraft, SubmitDraft, UploadScan } from "./case-actions";
+
+const DRAFT_STATUS: Record<string, { label: string; cls: string }> = {
+  draft: { label: "Draft", cls: "bg-zinc-100 dark:bg-zinc-800" },
+  in_approval: { label: "Awaiting approval", cls: "bg-amber-100 text-amber-900 dark:bg-amber-900 dark:text-amber-100" },
+  returned: { label: "Returned", cls: "bg-red-100 text-red-900 dark:bg-red-900 dark:text-red-100" },
+  approved: { label: "Approved", cls: "bg-green-100 text-green-900 dark:bg-green-900 dark:text-green-100" },
+};
 
 export const metadata = { title: "Case — Civil Suits" };
 
@@ -44,17 +51,18 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
     supabase.from("documents").select("id, storage_path, created_at").eq("case_id", id).order("created_at", { ascending: false }),
     supabase
       .from("drafts")
-      .select("id, doc_kind, language, status, draft_versions(version, docx_path, created_at)")
-      .eq("case_id", id),
+      .select(
+        "id, doc_kind, language, status, created_by, current_version, draft_versions(version, docx_path, created_at), approvals(decision, comments, created_at)",
+      )
+      .eq("case_id", id)
+      .order("doc_kind"),
   ]);
 
   const isAdmin = roles?.some((r) => r.role === "admin") ?? false;
+  const isApprover = roles?.some((r) => r.role === "approver") ?? false;
   const canEdit = isAdmin || c.assigned_drafter === auth.user.id;
 
-  const versions = (drafts ?? []).flatMap((d) =>
-    (d.draft_versions ?? []).map((v) => ({ ...v, doc_kind: d.doc_kind, language: d.language })),
-  );
-  versions.sort((a, b) => b.version - a.version);
+  const versions = (drafts ?? []).flatMap((d) => d.draft_versions ?? []);
 
   const paths = [...(docs ?? []).map((d) => d.storage_path), ...versions.map((v) => v.docx_path).filter(Boolean)] as string[];
   const signed = new Map<string, string>();
@@ -171,21 +179,51 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
       <section className="mt-8">
         <h2 className="text-lg font-medium">Drafts</h2>
         {canEdit && (
-          <div className="mt-3">
-            <GenerateNotice caseId={c.id} />
+          <div className="mt-3 flex flex-wrap gap-4">
+            <GenerateDraft caseId={c.id} kind="demand_notice" label="Generate demand notice" />
+            <GenerateDraft caseId={c.id} kind="plaint" label="Generate plaint" />
           </div>
         )}
-        <ul className="mt-3 space-y-1 text-sm">
-          {versions.map((v) => (
-            <li key={`${v.doc_kind}-${v.language}-${v.version}`}>
-              <a className="underline" href={v.docx_path ? signed.get(v.docx_path) : undefined}>
-                {v.doc_kind.replaceAll("_", " ")} ({v.language}) v{v.version}
-              </a>{" "}
-              <span className="text-zinc-500">· {fmtDate(v.created_at)}</span>
-            </li>
-          ))}
-          {!versions.length && <li className="text-zinc-500">No drafts yet.</li>}
-        </ul>
+        <div className="mt-4 space-y-3">
+          {drafts?.map((d) => {
+            const vs = [...(d.draft_versions ?? [])].sort((a, b) => b.version - a.version);
+            const last = [...(d.approvals ?? [])].sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+            const st = DRAFT_STATUS[d.status] ?? DRAFT_STATUS.draft!;
+            return (
+              <div key={d.id} className="rounded-lg border border-zinc-200 p-4 text-sm dark:border-zinc-800">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-medium capitalize">
+                    {d.doc_kind.replaceAll("_", " ")} ({d.language})
+                  </span>
+                  <span className={`rounded-full px-2 py-0.5 text-xs ${st.cls}`}>{st.label}</span>
+                </div>
+                <ul className="mt-2 space-y-0.5">
+                  {vs.map((v) => (
+                    <li key={v.version}>
+                      <a className="underline" href={v.docx_path ? signed.get(v.docx_path) : undefined}>
+                        v{v.version} (DOCX)
+                      </a>{" "}
+                      <span className="text-zinc-500">· {fmtDate(v.created_at)}</span>
+                    </li>
+                  ))}
+                </ul>
+                {last && (
+                  <p className="mt-2 text-zinc-600 dark:text-zinc-400">
+                    Last decision: <span className="font-medium">{last.decision}</span>
+                    {last.comments && <> — “{last.comments}”</>} · {fmtDate(last.created_at)}
+                  </p>
+                )}
+                {canEdit && (d.status === "draft" || d.status === "returned") && (
+                  <div className="mt-2">
+                    <SubmitDraft draftId={d.id} />
+                  </div>
+                )}
+                {isApprover && d.status === "in_approval" && d.created_by !== auth.user.id && <DecideDraft draftId={d.id} />}
+              </div>
+            );
+          })}
+          {!drafts?.length && <p className="text-sm text-zinc-500">No drafts yet.</p>}
+        </div>
         <p className="mt-3 text-xs text-zinc-500">
           Paragraphs marked [[LEGAL_REVIEW]] (highlighted in the DOCX) must be checked by the advocate before use.
         </p>

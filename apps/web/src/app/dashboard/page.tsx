@@ -28,7 +28,7 @@ export default async function DashboardPage() {
 
   // RLS decides which rows come back: admin/approver see all, drafter only assigned,
   // field only cases with their own tasks.
-  const [{ data: profile }, { data: roles }, { data: cases }, { data: tasks }] = await Promise.all([
+  const [{ data: profile }, { data: roles }, { data: cases }, { data: tasks }, { data: pending }] = await Promise.all([
     supabase.from("profiles").select("full_name, organizations(name)").eq("id", auth.user.id).single(),
     supabase.from("user_roles").select("role").eq("user_id", auth.user.id),
     supabase
@@ -36,10 +36,18 @@ export default async function DashboardPage() {
       .select("id, case_no_internal, status, suit_type, claim_amount_paise, is_commercial, needs_12a")
       .order("case_no_internal"),
     supabase.from("tasks").select("id, kind, status, due_at, cases(case_no_internal)").eq("assignee_id", auth.user.id),
+    supabase
+      .from("drafts")
+      .select("id, doc_kind, created_by, updated_at, case_id, cases(case_no_internal)")
+      .eq("status", "in_approval")
+      .order("updated_at"),
   ]);
 
   const org = profile?.organizations as { name: string } | { name: string }[] | null | undefined;
   const orgName = Array.isArray(org) ? org[0]?.name : org?.name;
+  const isApprover = roles?.some((r) => r.role === "approver") ?? false;
+  // Maker-checker: an approver's queue never shows their own drafts.
+  const queue = (pending ?? []).filter((d) => d.created_by !== auth.user.id);
 
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-10">
@@ -56,6 +64,27 @@ export default async function DashboardPage() {
           </button>
         </form>
       </header>
+
+      {isApprover && (
+        <section className="mt-8">
+          <h2 className="text-lg font-medium">Awaiting my approval ({queue.length})</h2>
+          <ul className="mt-3 space-y-2 text-sm">
+            {queue.map((d) => {
+              const c = d.cases as { case_no_internal: string } | { case_no_internal: string }[] | null;
+              const caseNo = Array.isArray(c) ? c[0]?.case_no_internal : c?.case_no_internal;
+              return (
+                <li key={d.id} className="rounded-md border border-amber-300 px-3 py-2 dark:border-amber-800">
+                  <Link href={`/dashboard/cases/${d.case_id}`} className="font-medium underline">
+                    {caseNo}
+                  </Link>{" "}
+                  · {d.doc_kind.replaceAll("_", " ")}
+                </li>
+              );
+            })}
+            {!queue.length && <li className="text-zinc-500">Nothing waiting for approval.</li>}
+          </ul>
+        </section>
+      )}
 
       <section className="mt-8">
         <h2 className="text-lg font-medium">Cases ({cases?.length ?? 0})</h2>

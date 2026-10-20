@@ -9,9 +9,15 @@
 - [x] Storage bucket `case-files` (private, 25 MB, PDF/JPG/PNG/DOCX) with RLS mirroring case visibility; tests added; applied to demo DB
 - [x] Case page `/dashboard/cases/[id]`: parties, loan, claim + court fee + 12A (computed in code), scan upload, demand-notice generation (draft versions), signed links (5 min)
 
+## Done (Phase 1, slice 2)
+- [x] Approval flow enforced in DB (migration `approval_flow`): drafts become approved/returned only via an `approvals` row; decisions only on `in_approval` drafts; approved plaint → case `approved`, returned → `drafting`. RLS tests added; verified on the live demo DB (rolled back).
+- [x] UI: submit for approval (drafter), approve / return with comments (approver), status badges, last decision shown; approver queue on the dashboard; new version resets a draft to `draft`
+- [x] Plaint template v1 (ordinary / Order XXXVII / commercial) with court fee from code, 12A paragraph (or a filing-block flag when the report is missing), statement of truth vs verification; golden test; sample in `docs/samples/`
+
 ## Next (Phase 1)
 - [ ] Demand notice in Marathi (needs † glossary terms confirmed)
-- [ ] Plaint, vakalatnama, affidavit/SOT templates; BBE 2026 certificate (needs gazette text)
+- [ ] Vakalatnama, affidavit/SOT templates; BBE 2026 certificate (needs gazette text)
+- [ ] Notice dispatch + 12A mediation stages in the UI (feed notice date and mediation report into the plaint)
 - [ ] Worker (Docker on VPS): DOCX→PDF/A, OCRmyPDF; needs a VPS
 - [ ] OCR + extraction (needs SARVAM_API_KEY, ANTHROPIC_API_KEY) and review UI
 - [ ] Approval flow UI (approver approves/returns drafts)

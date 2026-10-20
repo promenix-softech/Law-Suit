@@ -5,6 +5,7 @@
  */
 export type Block =
   | { kind: "heading"; text: string }
+  | { kind: "center"; lines: string[]; bold?: boolean }
   | { kind: "para"; text: string; legalReview?: boolean }
   | { kind: "fields"; rows: [label: string, value: string][] }
   | { kind: "list"; items: string[] }
@@ -18,7 +19,7 @@ export interface DocModel {
   title: string;
   /** Right-aligned header lines (ref no., date). */
   meta: string[];
-  /** Addressee block. */
+  /** Addressee block (letters); empty for pleadings. */
   to: string[];
   blocks: Block[];
 }
@@ -27,9 +28,12 @@ export const LEGAL_REVIEW = "[[LEGAL_REVIEW]]";
 
 /** Plain-text rendering, used for golden tests and quick previews. */
 export function toPlainText(doc: DocModel): string {
-  const out: string[] = [doc.title, "", ...doc.meta, "", "To,", ...doc.to, ""];
+  const out: string[] = [doc.title, ""];
+  if (doc.meta.length) out.push(...doc.meta, "");
+  if (doc.to.length) out.push("To,", ...doc.to, "");
   for (const b of doc.blocks) {
     if (b.kind === "heading") out.push(b.text.toUpperCase());
+    else if (b.kind === "center") out.push(...b.lines);
     else if (b.kind === "para") out.push(b.legalReview ? `${LEGAL_REVIEW} ${b.text}` : b.text);
     else if (b.kind === "fields") out.push(...b.rows.map(([k, v]) => `${k}: ${v}`));
     else if (b.kind === "list") out.push(...b.items.map((t, i) => `${i + 1}. ${t}`));

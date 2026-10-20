@@ -40,9 +40,10 @@ insert into public.tasks (org_id, case_id, assignee_id, role, kind) values
   ('11111111-1111-1111-1111-111111111111', 'c0000000-0000-0000-0000-000000000002',
    '00000000-0000-0000-0000-0000000000f1', 'field', 'notary');
 
-insert into public.drafts (id, org_id, case_id, doc_kind, language, created_by) values
+insert into public.drafts (id, org_id, case_id, doc_kind, language, created_by, status) values
   ('d0000000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111',
-   'c0000000-0000-0000-0000-000000000001', 'plaint', 'en', '00000000-0000-0000-0000-0000000000d1');
+   'c0000000-0000-0000-0000-000000000001', 'plaint', 'en', '00000000-0000-0000-0000-0000000000d1', 'in_approval');
+update public.cases set status = 'in_approval' where id = 'c0000000-0000-0000-0000-000000000001';
 
 create or replace function pg_temp.act_as(u text) returns void language plpgsql as $$
 begin
@@ -100,13 +101,6 @@ begin
   reset role;
 end $$;
 
-begin;
-select pg_temp.act_as('00000000-0000-0000-0000-0000000000a1');
-insert into public.approvals (org_id, draft_id, decision)
-values ('11111111-1111-1111-1111-111111111111', 'd0000000-0000-0000-0000-000000000001', 'approved');
-select pg_temp.expect(true, 'independent approver can approve');
-commit;
-
 do $$
 begin
   perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000d2', true);
@@ -121,8 +115,52 @@ begin
   reset role;
 end $$;
 
+-- the author cannot mark their own draft approved by a direct update
+do $$
+begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000d1', true);
+  set local role authenticated;
+  begin
+    update public.drafts set status = 'approved' where id = 'd0000000-0000-0000-0000-000000000001';
+    raise exception 'FAIL: draft approved by direct update';
+  exception when insufficient_privilege then
+    raise notice 'ok - draft cannot be approved by direct update';
+  end;
+  reset role;
+end $$;
+
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000a1');
+insert into public.approvals (org_id, draft_id, decision)
+values ('11111111-1111-1111-1111-111111111111', 'd0000000-0000-0000-0000-000000000001', 'approved');
+select pg_temp.expect(true, 'independent approver can approve');
+commit;
+
+select pg_temp.expect(
+  (select status from public.drafts where id = 'd0000000-0000-0000-0000-000000000001') = 'approved',
+  'approval marks the draft approved');
+select pg_temp.expect(
+  (select status from public.cases where id = 'c0000000-0000-0000-0000-000000000001') = 'approved',
+  'approved plaint moves the case to approved');
+
+do $$
+begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000a1', true);
+  set local role authenticated;
+  begin
+    insert into public.approvals (org_id, draft_id, decision)
+    values ('11111111-1111-1111-1111-111111111111', 'd0000000-0000-0000-0000-000000000001', 'returned');
+    raise exception 'FAIL: decision accepted on a draft not awaiting approval';
+  exception when check_violation then
+    raise notice 'ok - no decision on a draft not awaiting approval';
+  end;
+  reset role;
+end $$;
+
 -- audit log: populated, chained, append-only
-select pg_temp.expect((select count(*) from public.audit_log where entity = 'cases') = 2, 'case inserts audited');
+select pg_temp.expect((select count(*) from public.audit_log where entity = 'cases' and action = 'insert') = 2, 'case inserts audited');
+select pg_temp.expect(
+  (select count(*) from public.audit_log where entity = 'approvals') = 1, 'approval decision audited');
 select pg_temp.expect(
   (select bool_and(a.prev_hash = coalesce(b.row_hash, ''))
      from public.audit_log a
