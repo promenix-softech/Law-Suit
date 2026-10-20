@@ -15,7 +15,8 @@
 ## Done (demo platform)
 - [x] Supabase Auth login (`/login`), session refresh in `src/proxy.ts`, role dashboard (`/dashboard`) filtered by RLS
 - [x] `pnpm --filter web seed:demo` — synthetic org, 5 role users, 10 fake cases (amounts via domain functions)
-- [ ] Owner: pause empty Tokyo Supabase project → Claude creates `civil-suits-dev` + applies migration → owner sets Vercel env vars → seed. See `docs/DEMO_SETUP.md`.
+- [x] Supabase demo project `Lawsuit` (Singapore) created; both migrations applied; security advisors addressed
+- [ ] Owner: set Vercel env vars → redeploy → run seed → disable public sign-ups. See `docs/DEMO_SETUP.md`.
 
 ## Next (Phase 0 → 1)
 - [ ] NDA signed with client; receive 1 redacted sample file + format preferences

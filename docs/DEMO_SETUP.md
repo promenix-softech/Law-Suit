@@ -3,12 +3,16 @@
 | Piece | Where | State |
 |---|---|---|
 | Web app | Vercel project `civil-suits` (team "Manoj"), root `apps/web`, functions bom1 | Created, deploys on every push |
-| Database | Supabase project `civil-suits-dev`, org "promenix-softech's Org", region ap-south-1 (Mumbai) | **Waiting:** free plan allows 2 active projects |
+| Database | Supabase project `Lawsuit` (ref `ohdtudvmcahdnqnhfqzp`), org "promenix-softech's Org", region ap-southeast-1 (Singapore) | Both migrations applied; 23 tables, RLS on all |
+
+Region note: Singapore is fine for the demo (synthetic data only). For the pilot with real bank data, create the Pro project in Mumbai (ap-south-1) — region cannot be changed later.
+
+Accepted advisor warnings: `current_org_id`, `has_role`, `can_see_case`, `can_edit_case` stay executable by signed-in users because RLS policies call them as the invoking user; they reveal only the caller's own org/roles/visibility. `rls_auto_enable` is Supabase-provided.
 
 ## Steps
 
-1. **Free a Supabase slot (owner, one click).** Supabase dashboard → project *promenix-softech's Project* (Tokyo, empty: 0 tables, 0 users, 0 files) → Project Settings → General → **Pause project**. Pausing is reversible. Do not touch `niwaraa`.
-2. **Create `civil-suits-dev`** in Mumbai (Claude can do this once the slot is free) and apply `supabase/migrations/*.sql`.
+1. ~~Free a Supabase slot~~ — done (Tokyo project paused).
+2. ~~Create project and apply `supabase/migrations/*.sql`~~ — done.
 3. **Vercel env vars** (owner): `civil-suits` → Settings → Environment Variables
    - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (Supabase → Project Settings → API)
    - Server-only, never `NEXT_PUBLIC_`: `SUPABASE_SECRET_KEY`, later `ANTHROPIC_API_KEY`, `SARVAM_API_KEY`, `FIELD_ENCRYPTION_KEY`
