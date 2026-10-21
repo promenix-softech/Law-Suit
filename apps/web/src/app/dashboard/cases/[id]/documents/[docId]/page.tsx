@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { TopBar } from "@/components/top-bar";
+import { scanForInjection, stripInvisible } from "@civil-suits/domain";
 import { decryptText } from "@/lib/crypto";
 import { createClient } from "@/lib/supabase/server";
 import { fmtDate } from "@/lib/ui";
@@ -64,9 +65,16 @@ export default async function DocumentTextPage({ params }: PageProps<"/dashboard
           } catch {
             text = "⚠ This page could not be decrypted.";
           }
+          // Prompt-injection tripwire: the page may carry text aimed at an AI (skill prompt-injection-defense).
+          const scan = scanForInjection(text);
+          const hidden = stripInvisible(text) !== text;
           return (
             <section key={p.page_no} className="glass-card fade-up p-6" style={{ animationDelay: `${Math.min(i, 8) * 50}ms` }}>
-              <p className="label">Page {p.page_no}</p>
+              <p className="label">
+                Page {p.page_no}
+                {scan.suspicious && <span className="pill pill-red ml-2">⚠ text addressed to an AI — check the scan</span>}
+                {hidden && <span className="pill pill-amber ml-2">hidden characters</span>}
+              </p>
               <pre className="mt-3 whitespace-pre-wrap break-words font-sans text-sm leading-relaxed">{text || "(no text found)"}</pre>
             </section>
           );

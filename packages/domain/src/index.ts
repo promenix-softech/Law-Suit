@@ -9,3 +9,4 @@ export * from "./words";
 export * from "./forum";
 export * from "./drtBenches";
 export * from "./billing";
+export * from "./promptGuard";

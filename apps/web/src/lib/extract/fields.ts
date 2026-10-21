@@ -1,4 +1,4 @@
-import { formatINR, rupees } from "@civil-suits/domain";
+import { checkModelOutput, formatINR, rupees, stripInvisible } from "@civil-suits/domain";
 
 /**
  * Loan-file fields we ask the extractor for, and how each value is validated and normalised
@@ -95,8 +95,12 @@ export function parseRateBps(raw: string): number | null {
 }
 
 export function normalise(kind: FieldKind, raw: string): Normalised {
-  const s = raw.trim();
+  // Values come from a model reading an untrusted scan: hidden characters are dropped, and
+  // anything that reads like instructions or carries links is never accepted automatically.
+  const s = stripInvisible(raw).trim();
   if (!s) return { ok: false, reason: "Empty" };
+  const guard = checkModelOutput(s);
+  if (!guard.ok) return { ok: false, reason: "Suspicious text — check the scan" };
   switch (kind) {
     case "text":
       return s.length <= 300 ? { ok: true, stored: s.replace(/\s+/g, " ") } : { ok: false, reason: "Too long" };

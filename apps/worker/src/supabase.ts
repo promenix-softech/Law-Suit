@@ -151,6 +151,7 @@ export function supabaseIntakeDb(sb: SupabaseClient): IntakeDb {
           class_confidence: p.confidence,
           account_last4: p.accountLast4,
           borrower_hint: p.borrower,
+          flags: p.flags,
           group_no: p.group,
         })),
       );

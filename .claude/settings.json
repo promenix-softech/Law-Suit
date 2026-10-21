@@ -30,6 +30,12 @@
         ]
       }
     ],
+    "PostToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [{ "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/injection-scan.sh\"", "timeout": 10 }]
+      }
+    ],
     "SessionStart": [
       {
         "hooks": [{ "type": "command", "command": "cat \"$CLAUDE_PROJECT_DIR/docs/STATUS.md\"" }]

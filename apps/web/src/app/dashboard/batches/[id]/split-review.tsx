@@ -11,6 +11,7 @@ export type ReviewPage = {
   last4: string | null;
   borrower: string | null;
   group: number;
+  flags: string[];
 };
 
 const CLASS_LABEL: Record<string, string> = {
@@ -148,7 +149,14 @@ export function SplitReview({
                     </td>
                     <td className="py-1.5">
                       {CLASS_LABEL[p.cls] ?? p.cls}
-                      {p.confidence != null && p.confidence < 0.6 && <span className="pill pill-amber ml-2">check</span>}
+                      {p.flags.includes("injection") ? (
+                        <span className="pill pill-red ml-2" title="This page contains text addressed to an AI system. Check the scan; nothing from it is applied automatically.">
+                          ⚠ instructions in page
+                        </span>
+                      ) : (
+                        p.confidence != null && p.confidence < 0.6 && <span className="pill pill-amber ml-2">check</span>
+                      )}
+                      {p.flags.includes("hidden_text") && <span className="pill pill-amber ml-2">hidden text</span>}
                     </td>
                     <td className="py-1.5">{p.last4 ? `…${p.last4}` : "—"}</td>
                     <td className="py-1.5">

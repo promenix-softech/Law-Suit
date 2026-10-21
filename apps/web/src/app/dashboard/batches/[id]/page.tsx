@@ -28,7 +28,7 @@ export default async function BatchReviewPage({ params }: PageProps<"/dashboard/
   const { data: batch } = await supabase.from("batches").select("id, storage_path, status, page_count, plan").eq("id", id).maybeSingle();
   if (!batch) notFound();
   const [{ data: pages }, { data: cases }, signed] = await Promise.all([
-    supabase.from("batch_pages").select("page_no, class, class_confidence, account_last4, borrower_hint, group_no").eq("batch_id", id).order("page_no"),
+    supabase.from("batch_pages").select("page_no, class, class_confidence, account_last4, borrower_hint, group_no, flags").eq("batch_id", id).order("page_no"),
     supabase.from("cases").select("id, case_no_internal").order("case_no_internal").limit(500),
     supabase.storage.from("case-batches").createSignedUrl(batch.storage_path, 300),
   ]);
@@ -40,6 +40,7 @@ export default async function BatchReviewPage({ params }: PageProps<"/dashboard/
     last4: p.account_last4,
     borrower: p.borrower_hint,
     group: p.group_no,
+    flags: (p.flags as string[] | null) ?? [],
   }));
 
   return (

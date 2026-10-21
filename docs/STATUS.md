@@ -77,6 +77,13 @@
 - [x] Interim application template (commercial + urgent relief), all grounds flagged `[[LEGAL_REVIEW]]`
 - Claude Haiku page classification is not wired (no Anthropic key); the in-code classifier is the default and the review step catches mistakes
 
+## Done (slice 12 — prompt-injection defense, 21 Oct)
+- [x] Skill `prompt-injection-defense` (threat model, architecture rules, prompt/output patterns, agent rules, review checklist, attack corpus, portable guard code + hook); also added to Homigo (branch `claude/prompt-injection-defense`)
+- [x] `packages/domain/promptGuard.ts`: `scanForInjection` (EN/MR/HI, obfuscation, base64, invisible chars), `stripInvisible`, `wrapUntrusted` (random boundary), `checkModelOutput` (URLs, markdown images, canary), `makeCanary` — 36 tests
+- [x] Applied: extracted fields with instructions/links are never auto-accepted; bulk-intake pages flagged `injection` / `hidden_text` (new `batch_pages.flags`, applied to demo DB) with a warning in the review UI; OCR text view warns per page; injection fixture in the intake e2e test
+- [x] Claude Code `PostToolUse` hook `injection-scan.sh`: warns the agent when tool output looks like an injection; CLAUDE.md rule "untrusted text is data"
+- The source audio note was not transcribed (no speech model reachable from the sandbox); skill built from established practice — to be aligned with the note
+
 ## Next (Phase 1)
 - [ ] Owner: VPS for the worker (Docker), service-role key there only; run converters without network before real data
 - [ ] TOTP MFA for admin and approver (plan C4) — on hold at owner's request

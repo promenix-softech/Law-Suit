@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { scanForInjection, stripInvisible } from "@civil-suits/domain";
 import { caseKey, classifyPage, groupPages, type PageClass } from "./classify";
 import { JobError, type Store } from "./jobs";
 import { extractPages, ocrScan, pageCount, pageText, withTempDir } from "./tools";
@@ -31,7 +32,10 @@ export interface ProposedPage {
   accountLast4: string | null;
   borrower: string | null;
   group: number;
+  flags: PageFlag[];
 }
+
+export type PageFlag = "injection" | "hidden_text";
 
 export interface IntakeDb {
   savePages(batch: Batch, pages: ProposedPage[]): Promise<void>;
@@ -76,19 +80,28 @@ export async function splitBatch(batch: Batch, store: Store, db: IntakeDb): Prom
     const n = await pageCount(ocr);
     const keyed = [];
     for (let i = 1; i <= n; i++) {
-      const text = await pageText(ocr, i);
-      keyed.push({ pageNo: i, text, ...caseKey(text) });
+      const raw = await pageText(ocr, i);
+      // Scanned pages are untrusted: hidden characters go, and text that reads like
+      // instructions to an AI is flagged for the admin (prompt-injection tripwire).
+      const text = stripInvisible(raw);
+      const flags: PageFlag[] = [];
+      if (text !== raw) flags.push("hidden_text");
+      if (scanForInjection(text).suspicious) flags.push("injection");
+      keyed.push({ pageNo: i, text, flags, ...caseKey(text) });
     }
     const groups = groupPages(keyed);
     const pages: ProposedPage[] = keyed.map((p, i) => {
       const c = classifyPage(p.text);
+      const flagged = p.flags.includes("injection");
       return {
         pageNo: p.pageNo,
         class: c.class,
-        confidence: c.confidence,
+        // A flagged page is never trusted on its own reading.
+        confidence: flagged ? 0 : c.confidence,
         accountLast4: p.account ? p.account.slice(-4) : null,
-        borrower: p.borrower,
+        borrower: flagged ? null : p.borrower,
         group: groups[i]!,
+        flags: p.flags,
       };
     });
     await db.savePages(batch, pages);
