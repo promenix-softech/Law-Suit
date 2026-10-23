@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import { pdfaDefinition, pdfmarks, type BundleCheck, type PlannedPart } from "./bundle";
 
 const exec = promisify(execFile);
+const MAX_STDOUT = 32 * 1024 * 1024;
 
 /** sRGB profile shipped with Ghostscript (Debian/Ubuntu path; override in the image if needed). */
 const ICC = process.env.SRGB_ICC_PATH ?? "/usr/share/color/icc/ghostscript/srgb.icc";
@@ -29,14 +30,45 @@ export class ToolError extends Error {
   }
 }
 
+/**
+ * Runs a converter in its own process group. On timeout the whole group is killed: soffice.bin,
+ * gs and tesseract children otherwise outlive their parent and keep reading the temp dir.
+ */
 async function run(cmd: string, args: string[], timeoutMs = 120_000): Promise<string> {
-  try {
-    const { stdout } = await exec(cmd, args, { timeout: timeoutMs, maxBuffer: 32 * 1024 * 1024, env: childEnv() });
-    return stdout;
-  } catch (e) {
-    const err = e as { stderr?: string; message: string };
-    throw new ToolError(cmd.split("/").pop()!, (err.stderr || err.message).slice(0, 400));
-  }
+  const tool = cmd.split("/").pop()!;
+  return new Promise((resolve, reject) => {
+    const child = spawn(cmd, args, { detached: true, env: childEnv(), stdio: ["ignore", "pipe", "pipe"] });
+    const out: Buffer[] = [];
+    let outBytes = 0;
+    let stderr = "";
+    let failure: string | null = null;
+    const killGroup = (why: string) => {
+      failure ??= why;
+      try {
+        if (child.pid) process.kill(-child.pid, "SIGKILL");
+      } catch {
+        child.kill("SIGKILL");
+      }
+    };
+    const timer = setTimeout(() => killGroup(`timed out after ${timeoutMs} ms`), timeoutMs);
+    child.stdout.on("data", (b: Buffer) => {
+      outBytes += b.length;
+      if (outBytes > MAX_STDOUT) killGroup("output too large");
+      else out.push(b);
+    });
+    child.stderr.on("data", (b: Buffer) => {
+      if (stderr.length < 4000) stderr += b.toString();
+    });
+    child.on("error", (e) => {
+      clearTimeout(timer);
+      reject(new ToolError(tool, e.message.slice(0, 400)));
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      if (!failure && code === 0) return resolve(Buffer.concat(out).toString("utf8"));
+      reject(new ToolError(tool, (failure ?? (stderr || `exit ${code}`)).slice(0, 400)));
+    });
+  });
 }
 
 /** Runs fn in a private temp directory that is always removed (scans and drafts hold PII). */
@@ -73,7 +105,8 @@ export async function ocrScan(
   langs = process.env.OCR_LANGS ?? "eng",
   isImage = false,
 ): Promise<string> {
-  const args = ["--output-type", "pdfa-2", "--skip-text", "--rotate-pages", "-l", langs];
+  // Decompression-bomb guard: refuse images above 150 megapixels (A4 at 600 dpi is ~35 MP).
+  const args = ["--output-type", "pdfa-2", "--skip-text", "--rotate-pages", "--max-image-mpixels", "150", "-l", langs];
   if (isImage) args.push("--image-dpi", "300");
   await run(process.env.OCRMYPDF_BIN ?? "ocrmypdf", [...args, input, output], 600_000);
   return output;
@@ -116,6 +149,7 @@ export async function mergePdfA(inputs: string[], parts: PlannedPart[], title: s
   await run(
     "gs",
     [
+      "-dSAFER", // default since 9.50; explicit because inputs are user-supplied
       "-dPDFA=2",
       "-dBATCH",
       "-dNOPAUSE",

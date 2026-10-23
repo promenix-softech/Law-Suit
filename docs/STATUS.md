@@ -84,6 +84,18 @@
 - [x] Claude Code `PostToolUse` hook `injection-scan.sh`: warns the agent when tool output looks like an injection; CLAUDE.md rule "untrusted text is data"
 - The source audio note was not transcribed (no speech model reachable from the sandbox); skill built from established practice — to be aligned with the note
 
+## Done (slice 13 — security audit, 23 Oct) — applied to demo DB
+- [x] No PHP anywhere (PHP2Shell CVE-2026-109618/109619 does not apply); prod deps `pnpm audit --prod` clean; React 19.3.1, docx 9.14.0
+- [x] RLS + FORCE RLS on all 29 public tables (live check); service/secret keys absent from `apps/web/src` and Vercel; no secrets in git history
+- [x] Security headers (CSP, HSTS, XFO, nosniff, Referrer/Permissions-Policy, COOP); explicit 1 MB caps for server actions and proxy bodies; proxy rejects Cookie > 16 KB with 431; proxy now covers all non-static routes
+- [x] DB integrity (`20261023020000_approval_integrity`): re-pointing an approved draft resets it to draft; only the worker writes `pdf_path`; case status follows the lifecycle, `approved` only via an approval; mediation report must be an uploaded file in the case folder — 6 new RLS tests (108 ok)
+- [x] `rls_auto_enable()` no longer executable by anon/authenticated; default privileges revoke function EXECUTE from anon
+- [x] Worker: converters run in their own process group (whole group killed on timeout), `-dSAFER` explicit, ocrmypdf `--max-image-mpixels 150`
+- [x] CI: `permissions: contents: read`; Dependabot (npm, actions, docker); `security.yml` (pnpm audit, gitleaks, no-PHP, client-secret grep, CodeQL on public repos)
+- [ ] Owner: Supabase → Auth → enable leaked-password protection; confirm public sign-ups are off
+- [ ] Worker sandbox before real data: run soffice/gs/ocrmypdf as a separate uid in bwrap/nsjail with no network and RLIMITs; per-bundle page budget (plan: 1,000) and per-job wall clock
+- [ ] Upload names: store as `<ts>-<uuid>.<ext>` (original names can carry borrower names); atomic OCR start (partial unique index)
+
 ## Next (Phase 1)
 - [ ] Owner: VPS for the worker (Docker), service-role key there only; run converters without network before real data
 - [ ] TOTP MFA for admin and approver (plan C4) — on hold at owner's request

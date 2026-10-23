@@ -1064,6 +1064,78 @@ select pg_temp.expect(public.ai_quota_ok(5, 100) and not public.ai_quota_ok(3, 1
   'AI quota counts per user per hour and per org per day');
 rollback;
 
+-- approval integrity: an approved draft cannot be re-pointed at unapproved content
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000d1');
+insert into public.draft_versions (org_id, draft_id, version, docx_path) values
+  ('11111111-1111-1111-1111-111111111111', 'd0000000-0000-0000-0000-000000000001', 9,
+   '11111111-1111-1111-1111-111111111111/c0000000-0000-0000-0000-000000000001/drafts/v9.docx');
+update public.drafts set current_version = 9 where id = 'd0000000-0000-0000-0000-000000000001';
+select pg_temp.expect(
+  (select status from public.drafts where id = 'd0000000-0000-0000-0000-000000000001') = 'draft',
+  'switching an approved draft to a new version sends it back to draft');
+rollback;
+
+do $$
+begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000d1', true);
+  set local role authenticated;
+  begin
+    insert into public.draft_versions (org_id, draft_id, version, docx_path, pdf_path) values
+      ('11111111-1111-1111-1111-111111111111', 'd0000000-0000-0000-0000-000000000001', 10,
+       '11111111-1111-1111-1111-111111111111/c0000000-0000-0000-0000-000000000001/drafts/v10.docx',
+       '11111111-1111-1111-1111-111111111111/c0000000-0000-0000-0000-000000000001/drafts/forged.pdf');
+    raise exception 'FAIL: drafter supplied a PDF for a draft version';
+  exception when insufficient_privilege then
+    raise notice 'ok - only the worker writes draft PDFs';
+  end;
+  reset role;
+end $$;
+
+-- case status follows the lifecycle; approved only through an approval
+do $$
+begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000d2', true);
+  set local role authenticated;
+  begin
+    update public.cases set status = 'approved' where id = 'c0000000-0000-0000-0000-000000000002';
+    raise exception 'FAIL: drafter set case approved directly';
+  exception when insufficient_privilege then
+    raise notice 'ok - case approved only through an approval';
+  end;
+  begin
+    update public.cases set status = 'filed' where id = 'c0000000-0000-0000-0000-000000000002';
+    raise exception 'FAIL: drafter skipped lifecycle stages';
+  exception when check_violation then
+    raise notice 'ok - drafter cannot skip lifecycle stages';
+  end;
+  reset role;
+end $$;
+
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000d1');
+update public.cases set status = 'notary_stamp' where id = 'c0000000-0000-0000-0000-000000000001';
+select pg_temp.expect(
+  (select status from public.cases where id = 'c0000000-0000-0000-0000-000000000001') = 'notary_stamp',
+  'drafter can take the next lifecycle step');
+rollback;
+
+-- mediation report must be an uploaded file in the case mediation folder
+do $$
+begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000d1', true);
+  set local role authenticated;
+  begin
+    insert into public.mediations (org_id, case_id, authority, report_path) values
+      ('11111111-1111-1111-1111-111111111111', 'c0000000-0000-0000-0000-000000000001', 'DLSA',
+       '11111111-1111-1111-1111-111111111111/c0000000-0000-0000-0000-000000000001/mediation/never-uploaded.pdf');
+    raise exception 'FAIL: mediation report path without an uploaded file';
+  exception when check_violation then
+    raise notice 'ok - mediation report must exist in the mediation folder';
+  end;
+  reset role;
+end $$;
+
 select pg_temp.expect(
   not exists (select 1 from pg_tables where schemaname = 'public' and not rowsecurity),
   'RLS enabled on every public table');
