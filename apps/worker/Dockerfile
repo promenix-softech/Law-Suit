@@ -1,6 +1,6 @@
 # Civil Suits document worker: DOCX → PDF/A, scan OCR, e-filing bundles.
 # Build from the repo root:  docker build -f apps/worker/Dockerfile -t civil-suits-worker .
-FROM node:20-bookworm-slim
+FROM node:25-bookworm-slim
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
