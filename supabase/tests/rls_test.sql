@@ -1136,6 +1136,26 @@ begin
   reset role;
 end $$;
 
+-- field task text never carries identifiers (the field app writes through the API)
+do $$
+begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000f1', true);
+  set local role authenticated;
+  begin
+    update public.tasks set note = 'Paid, receipt 98765 43210 1' where assignee_id = '00000000-0000-0000-0000-0000000000f1';
+    raise exception 'FAIL: task note with a 10+ digit number accepted';
+  exception when check_violation then
+    raise notice 'ok - task notes cannot carry account or phone numbers';
+  end;
+  begin
+    update public.tasks set note = 'PAN abcde1234f seen' where assignee_id = '00000000-0000-0000-0000-0000000000f1';
+    raise exception 'FAIL: task note with a PAN accepted';
+  exception when check_violation then
+    raise notice 'ok - task notes cannot carry a PAN';
+  end;
+  reset role;
+end $$;
+
 -- intern task board
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-0000000001a1', 'intern1@example.test'),

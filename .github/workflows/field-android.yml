@@ -1,0 +1,60 @@
+name: Civil Suits Field APK
+
+on:
+  push:
+    # Only these branches build and publish a signed APK.
+    branches: [main, ccr-9485de6a-xyehf1]
+    paths:
+      - "apps/field-android/**"
+      - ".github/workflows/field-android.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
+      - name: Release signing key (optional)
+        env:
+          FIELD_KEYSTORE_B64: ${{ secrets.FIELD_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$FIELD_KEYSTORE_B64" ]; then
+            echo "$FIELD_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/field.jks"
+            echo "FIELD_KEYSTORE_PATH=$RUNNER_TEMP/field.jks" >> "$GITHUB_ENV"
+          else
+            echo "::warning::FIELD_KEYSTORE_B64 not set; the APK is signed with a throwaway debug key"
+          fi
+      - name: Build release APK (R8 minified)
+        env:
+          FIELD_KEYSTORE_PASSWORD: ${{ secrets.FIELD_KEYSTORE_PASSWORD }}
+          FIELD_KEY_ALIAS: ${{ secrets.FIELD_KEY_ALIAS }}
+          FIELD_KEY_PASSWORD: ${{ secrets.FIELD_KEY_PASSWORD }}
+        run: gradle -p apps/field-android assembleRelease --no-daemon --stacktrace
+      - name: Remove signing key from the runner
+        if: always()
+        run: rm -f "$RUNNER_TEMP/field.jks"
+      - name: Rename APK
+        run: cp apps/field-android/app/build/outputs/apk/release/app-release.apk CivilSuitsField.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CivilSuitsField-apk
+          path: CivilSuitsField.apk
+      - name: Publish as GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: field-android-${{ github.run_number }}
+          name: Civil Suits Field (build ${{ github.run_number }})
+          prerelease: true
+          target_commitish: ${{ github.sha }}
+          body: Civil Suits field-staff app. Release build (R8), device-lock gated, screenshots blocked. Synthetic demo data only.
+          files: CivilSuitsField.apk
