@@ -102,6 +102,12 @@
 - [x] Demo accounts: owner@tasks.promenix.test (admin), intern@tasks.promenix.test (intern), synthetic tasks
 - [ ] Owner: add `TASKS_KEYSTORE_*` secrets for a stable signing key; real owner accounts; move intern tables to their own Supabase project before Civil Suits holds real data
 
+## Done (slice 15 — Civil Suits Field Android app, 24 Oct)
+- [x] `apps/field-android`: field role only; own tasks (type, case no., court, branch, due, instructions); start / mark done with note + proof photo (shrunk, EXIF/GPS stripped, uploaded to `{org}/{case}/field/`); same security and animated UI as the intern app; APK from `field-android.yml`
+- [x] Task note / instructions: no PAN or 9+ digit numbers, now a DB constraint (`20261024020000_task_text_no_ids`) — 2 RLS tests (133 ok)
+- [x] Demo field tasks: four kinds with due dates and instructions (synthetic); login `field@demo.civilsuits.test`
+- [ ] Owner: `FIELD_KEYSTORE_*` secrets for a stable signing key
+
 ## Next (Phase 1)
 - [ ] Owner: VPS for the worker (Docker), service-role key there only; run converters without network before real data
 - [ ] TOTP MFA for admin and approver (plan C4) — on hold at owner's request
