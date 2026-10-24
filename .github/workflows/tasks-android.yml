@@ -2,6 +2,8 @@ name: Promenix Tasks APK
 
 on:
   push:
+    # Only these branches build and publish a signed APK.
+    branches: [main, ccr-9485de6a-xyehf1]
     paths:
       - "apps/tasks-android/**"
       - ".github/workflows/tasks-android.yml"
@@ -38,6 +40,9 @@ jobs:
           TASKS_KEY_ALIAS: ${{ secrets.TASKS_KEY_ALIAS }}
           TASKS_KEY_PASSWORD: ${{ secrets.TASKS_KEY_PASSWORD }}
         run: gradle -p apps/tasks-android assembleRelease --no-daemon --stacktrace
+      - name: Remove signing key from the runner
+        if: always()
+        run: rm -f "$RUNNER_TEMP/tasks.jks"
       - name: Rename APK
         run: cp apps/tasks-android/app/build/outputs/apk/release/app-release.apk PromenixTasks.apk
       - uses: actions/upload-artifact@v4

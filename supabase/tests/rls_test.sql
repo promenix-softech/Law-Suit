@@ -1190,7 +1190,101 @@ end $$;
 begin;
 select pg_temp.act_as('00000000-0000-0000-0000-0000000001a2');
 select pg_temp.expect((select count(*) from public.intern_tasks) = 0, 'another intern sees none of these tasks');
+update public.intern_tasks set status = 'in_progress' where id = '7a000000-0000-0000-0000-000000000001';
+reset role;
+select pg_temp.expect((select status from public.intern_tasks where id = '7a000000-0000-0000-0000-000000000001') = 'todo',
+  'another intern cannot change the task');
 rollback;
+
+do $$
+begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000001a1', true);
+  set local role authenticated;
+  begin
+    update public.intern_tasks set created_at = now() - interval '1 year' where id = '7a000000-0000-0000-0000-000000000001';
+    raise exception 'FAIL: intern rewrote created_at';
+  exception when insufficient_privilege then
+    raise notice 'ok - interns cannot rewrite any other column';
+  end;
+  begin
+    update public.intern_tasks set assignee_id = '00000000-0000-0000-0000-0000000001a2' where id = '7a000000-0000-0000-0000-000000000001';
+    raise exception 'FAIL: intern reassigned the task';
+  exception when insufficient_privilege then
+    raise notice 'ok - interns cannot reassign tasks';
+  end;
+  begin
+    insert into public.intern_task_events (task_id, to_status) values ('7a000000-0000-0000-0000-000000000001', 'done');
+    raise exception 'FAIL: intern wrote the task history';
+  exception when insufficient_privilege then
+    raise notice 'ok - task history is written only by the trigger';
+  end;
+  begin
+    perform public.verify_audit_chain();
+    raise exception 'FAIL: intern verified the Civil Suits audit chain';
+  exception when insufficient_privilege then
+    raise notice 'ok - interns cannot call Civil Suits admin functions';
+  end;
+  reset role;
+end $$;
+
+begin;
+update public.intern_tasks set status = 'in_review' where id = '7a000000-0000-0000-0000-000000000001';
+do $$
+begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000001a1', true);
+  set local role authenticated;
+  begin
+    update public.intern_tasks set status = 'todo' where id = '7a000000-0000-0000-0000-000000000001';
+    raise exception 'FAIL: intern moved a reviewed task back to todo';
+  exception when check_violation then
+    raise notice 'ok - in-review tasks only go back to in progress';
+  end;
+  reset role;
+end $$;
+rollback;
+
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000001a1');
+insert into public.intern_daily_updates (done, plan) values ('Indexes', 'Tests');
+reset role;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000001a2');
+select pg_temp.expect((select count(*) from public.intern_daily_updates) = 0, 'interns do not see each other''s updates');
+select pg_temp.expect(public.billable_suit_packs('11111111-1111-1111-1111-111111111111', '2000-01-01', '2100-01-01') = 0,
+  'interns get nothing from Civil Suits billing');
+reset role;
+update public.intern_members set active = false where user_id = '00000000-0000-0000-0000-0000000001a1';
+select pg_temp.act_as('00000000-0000-0000-0000-0000000001a1');
+select pg_temp.expect((select count(*) from public.intern_tasks) = 0, 'a deactivated intern sees no tasks');
+update public.intern_daily_updates set done = 'changed after leaving';
+reset role;
+select pg_temp.expect((select done from public.intern_daily_updates) = 'Indexes', 'a deactivated intern cannot edit updates');
+rollback;
+
+-- an intern sees no row of any Civil Suits table or storage object
+do $$
+declare
+  t text;
+  n bigint;
+begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000001a1', true);
+  set local role authenticated;
+  for t in select tablename from pg_tables where schemaname = 'public' and tablename not like 'intern\_%' loop
+    begin
+      execute format('select count(*) from public.%I', t) into n;
+    exception when insufficient_privilege then
+      n := 0;
+    end;
+    if n <> 0 then
+      raise exception 'FAIL: intern sees % rows in %', n, t;
+    end if;
+  end loop;
+  select count(*) into n from storage.objects;
+  if n <> 0 then
+    raise exception 'FAIL: intern sees % storage objects', n;
+  end if;
+  raise notice 'ok - interns see nothing in Civil Suits tables or storage';
+  reset role;
+end $$;
 
 begin;
 select pg_temp.act_as('00000000-0000-0000-0000-0000000000d1');

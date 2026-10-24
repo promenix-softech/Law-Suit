@@ -40,3 +40,11 @@ and delete or ban the user in Authentication. The app signs them out on next use
 - No cloud backup or device transfer of app data.
 - Refuses to run on rooted phones or with a debugger attached; R8-minified release build.
 - Only the public publishable key ships in the app; every read and write is checked by RLS.
+
+Known limit: the unlock prompt is an app-level gate; the Keystore key is not yet bound to user
+authentication (a `CryptoObject`), so a fully hooked, rooted phone could skip the prompt. Root
+detection covers common cases only. Planned: bind the vault key to biometric/device-credential
+auth on Android 11+.
+
+Design note: the `intern_*` tables have no `org_id` and no `audit_log` triggers, unlike tenant
+tables. They are Promenix-internal (not client data); status history lives in `intern_task_events`.
