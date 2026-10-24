@@ -1136,6 +1136,78 @@ begin
   reset role;
 end $$;
 
+-- intern task board
+insert into auth.users (id, email) values
+  ('00000000-0000-0000-0000-0000000001a1', 'intern1@example.test'),
+  ('00000000-0000-0000-0000-0000000001a2', 'intern2@example.test'),
+  ('00000000-0000-0000-0000-0000000001ad', 'owner@example.test');
+insert into public.intern_members (user_id, full_name, role) values
+  ('00000000-0000-0000-0000-0000000001a1', 'Intern One', 'intern'),
+  ('00000000-0000-0000-0000-0000000001a2', 'Intern Two', 'intern'),
+  ('00000000-0000-0000-0000-0000000001ad', 'Owner', 'admin');
+insert into public.intern_tasks (id, title, product, assignee_id, created_by) values
+  ('7a000000-0000-0000-0000-000000000001', 'Add index on rooms', 'homigo',
+   '00000000-0000-0000-0000-0000000001a1', '00000000-0000-0000-0000-0000000001ad');
+
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000001a1');
+select pg_temp.expect((select count(*) from public.intern_tasks) = 1, 'intern sees own task');
+select pg_temp.expect((select count(*) from public.cases) = 0, 'intern sees no Civil Suits cases');
+select pg_temp.expect((select count(*) from public.intern_members) = 1, 'intern sees only own membership');
+update public.intern_tasks set status = 'in_progress' where id = '7a000000-0000-0000-0000-000000000001';
+select pg_temp.expect((select status from public.intern_tasks) = 'in_progress', 'intern starts own task');
+select pg_temp.expect((select count(*) from public.intern_task_events) = 2, 'status changes are logged');
+insert into public.intern_daily_updates (done, plan) values ('Read the docs', 'Write the index migration');
+select pg_temp.expect((select count(*) from public.intern_daily_updates) = 1, 'intern posts a daily update');
+rollback;
+
+do $$
+begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000001a1', true);
+  set local role authenticated;
+  begin
+    update public.intern_tasks set status = 'done' where id = '7a000000-0000-0000-0000-000000000001';
+    raise exception 'FAIL: intern marked own task done';
+  exception when check_violation then
+    raise notice 'ok - only the owner marks a task done';
+  end;
+  begin
+    update public.intern_tasks set title = 'Something else' where id = '7a000000-0000-0000-0000-000000000001';
+    raise exception 'FAIL: intern edited the task';
+  exception when insufficient_privilege then
+    raise notice 'ok - interns change only the status';
+  end;
+  begin
+    insert into public.intern_tasks (title, product, assignee_id)
+    values ('Self-assigned', 'homigo', '00000000-0000-0000-0000-0000000001a1');
+    raise exception 'FAIL: intern created a task';
+  exception when insufficient_privilege then
+    raise notice 'ok - interns cannot create tasks';
+  end;
+  reset role;
+end $$;
+
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000001a2');
+select pg_temp.expect((select count(*) from public.intern_tasks) = 0, 'another intern sees none of these tasks');
+rollback;
+
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000d1');
+select pg_temp.expect((select count(*) from public.intern_tasks) = 0 and public.intern_role() is null,
+  'Civil Suits users are not on the intern board');
+rollback;
+
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000001ad');
+insert into public.intern_tasks (title, product, assignee_id)
+values ('Review RLS tests', 'civil_suits', '00000000-0000-0000-0000-0000000001a2');
+update public.intern_tasks set status = 'done' where id = '7a000000-0000-0000-0000-000000000001';
+select pg_temp.expect((select count(*) from public.intern_tasks) = 2
+  and (select status from public.intern_tasks where id = '7a000000-0000-0000-0000-000000000001') = 'done',
+  'owner assigns tasks and marks them done');
+rollback;
+
 select pg_temp.expect(
   not exists (select 1 from pg_tables where schemaname = 'public' and not rowsecurity),
   'RLS enabled on every public table');
