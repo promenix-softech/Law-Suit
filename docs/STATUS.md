@@ -96,15 +96,13 @@
 - [ ] Worker sandbox before real data: run soffice/gs/ocrmypdf as a separate uid in bwrap/nsjail with no network and RLIMITs; per-bundle page budget (plan: 1,000) and per-job wall clock
 - [ ] Upload names: store as `<ts>-<uuid>.<ext>` (original names can carry borrower names); atomic OCR start (partial unique index)
 
-## Done (slice 14 — Promenix Tasks intern app, 24 Oct) — DB applied to demo project
-- [x] `intern_*` tables with forced RLS; interns see only own tasks, move them todo → in_progress → in_review; owners create, approve, reopen; status history by trigger; daily updates — 12 RLS tests (120 ok)
-- [x] `apps/tasks-android`: native Compose app, animated UI; biometric/device-lock gate, auto-lock, FLAG_SECURE, Keystore-sealed session, HTTPS + system CAs only, no backups, root/debugger refusal, R8; APK from `tasks-android.yml`
-- [x] Demo accounts: owner@tasks.promenix.test (admin), intern@tasks.promenix.test (intern), synthetic tasks
-- [ ] Owner: add `TASKS_KEYSTORE_*` secrets for a stable signing key; real owner accounts; move intern tables to their own Supabase project before Civil Suits holds real data
+## Removed (slice 14 — Promenix Tasks intern app, 24 Oct)
+- Built by mistake (the owner wanted a Civil Suits field app); app and workflow deleted, tables dropped by `20261024030000_drop_intern_tasks`
+- [ ] Apply the drop migration and delete the two `@tasks.promenix.test` demo users on the demo DB (needs owner confirmation in the Supabase connector); delete GitHub releases `tasks-android-1..3`
 
 ## Done (slice 15 — Civil Suits Field Android app, 24 Oct)
-- [x] `apps/field-android`: field role only; own tasks (type, case no., court, branch, due, instructions); start / mark done with note + proof photo (shrunk, EXIF/GPS stripped, uploaded to `{org}/{case}/field/`); same security and animated UI as the intern app; APK from `field-android.yml`
-- [x] Task note / instructions: no PAN or 9+ digit numbers, now a DB constraint (`20261024020000_task_text_no_ids`) — 2 RLS tests (133 ok)
+- [x] `apps/field-android`: field role only; own tasks (type, case no., court, branch, due, instructions); start / mark done with note + proof photo (shrunk, EXIF/GPS stripped, uploaded to `{org}/{case}/field/`); device-lock gate, auto-lock, FLAG_SECURE, Keystore-sealed session, HTTPS + system CAs only, no backups, root/debugger refusal, R8; animated UI; APK from `field-android.yml`
+- [x] Task note / instructions: no PAN or 9+ digit numbers, now a DB constraint (`20261024020000_task_text_no_ids`) — 2 RLS tests (110 ok after the intern board was removed)
 - [x] Demo field tasks: four kinds with due dates and instructions (synthetic); login `field@demo.civilsuits.test`
 - [ ] Owner: `FIELD_KEYSTORE_*` secrets for a stable signing key
 
