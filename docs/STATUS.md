@@ -96,6 +96,12 @@
 - [ ] Worker sandbox before real data: run soffice/gs/ocrmypdf as a separate uid in bwrap/nsjail with no network and RLIMITs; per-bundle page budget (plan: 1,000) and per-job wall clock
 - [ ] Upload names: store as `<ts>-<uuid>.<ext>` (original names can carry borrower names); atomic OCR start (partial unique index)
 
+## Done (slice 14 — Promenix Tasks intern app, 24 Oct) — DB applied to demo project
+- [x] `intern_*` tables with forced RLS; interns see only own tasks, move them todo → in_progress → in_review; owners create, approve, reopen; status history by trigger; daily updates — 12 RLS tests (120 ok)
+- [x] `apps/tasks-android`: native Compose app, animated UI; biometric/device-lock gate, auto-lock, FLAG_SECURE, Keystore-sealed session, HTTPS + system CAs only, no backups, root/debugger refusal, R8; APK from `tasks-android.yml`
+- [x] Demo accounts: owner@tasks.promenix.test (admin), intern@tasks.promenix.test (intern), synthetic tasks
+- [ ] Owner: add `TASKS_KEYSTORE_*` secrets for a stable signing key; real owner accounts; move intern tables to their own Supabase project before Civil Suits holds real data
+
 ## Next (Phase 1)
 - [ ] Owner: VPS for the worker (Docker), service-role key there only; run converters without network before real data
 - [ ] TOTP MFA for admin and approver (plan C4) — on hold at owner's request
