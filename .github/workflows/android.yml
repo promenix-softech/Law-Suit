@@ -37,5 +37,5 @@ jobs:
           name: Civil Suits Android (demo build ${{ github.run_number }})
           prerelease: true
           target_commitish: ${{ github.sha }}
-          body: Demo APK (debug-signed). Opens https://civil-suits-manoj-76ab.vercel.app — synthetic data only.
+          body: Demo APK (debug-signed). Opens https://civilsuits.promenix.in — synthetic data only.
           files: CivilSuits-demo.apk

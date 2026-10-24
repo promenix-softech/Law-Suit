@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Civil Suits</string>
-    <string name="host" translatable="false">civil-suits-manoj-76ab.vercel.app</string>
-    <string name="launch_url" translatable="false">https://civil-suits-manoj-76ab.vercel.app/dashboard</string>
+    <string name="host" translatable="false">civilsuits.promenix.in</string>
+    <string name="launch_url" translatable="false">https://civilsuits.promenix.in/dashboard</string>
     <color name="brand">#18181B</color>
 </resources>

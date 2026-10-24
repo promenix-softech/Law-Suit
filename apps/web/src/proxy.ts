@@ -4,11 +4,19 @@ import { supabaseEnv } from "@/lib/supabase/env";
 
 const MAX_COOKIE_BYTES = 16 * 1024;
 
+/** Production lives on one address; old *.vercel.app links are sent there (e.g. civilsuits.promenix.in). */
+const CANONICAL_HOST = process.env.CANONICAL_HOST;
+
 /**
  * Refreshes the Supabase session cookie and redirects signed-out users away from /dashboard.
  * This is an optimistic check only — authorization is enforced by RLS in the database.
  */
 export async function proxy(request: NextRequest) {
+  const host = request.headers.get("host");
+  if (CANONICAL_HOST && process.env.VERCEL_ENV === "production" && host && host !== CANONICAL_HOST) {
+    const target = new URL(request.nextUrl.pathname + request.nextUrl.search, `https://${CANONICAL_HOST}`);
+    return NextResponse.redirect(target, 308);
+  }
   // Supabase auth cookies are chunked at ~3 KB each; anything far above that is abuse.
   if ((request.headers.get("cookie")?.length ?? 0) > MAX_COOKIE_BYTES) {
     return new NextResponse("Request header fields too large", { status: 431 });
