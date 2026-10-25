@@ -119,13 +119,14 @@
 - [ ] Follow-ups from review: narrow `draft_versions_path_check` to `{org}/{case}/drafts/…docx` (new migration); nonce-based `script-src` without `'unsafe-inline'`; palette search is capped at 1,000 cases
 - Not verified live: no Supabase env in the sandbox, so palette / dashboard were checked by typecheck, lint and build only; preview checked in Chromium against the sample plaint
 
-## Done (slice 17 — multi-office isolation, 25 Oct) — local, tests green, NOT yet applied to the demo DB
+## Done (slice 17 — multi-office isolation, 25 Oct) — applied to the demo DB
 - [x] Audit: all 29 tables carry `org_id` under RLS; security-definer functions, storage buckets and the worker's paths are office-scoped; one user = one office (`profiles.id`)
 - [x] Gap closed: migration `20261025000000_tenant_same_org` — `same_org` triggers on 21 tables refuse any link (case → court/branch/user, child → case/document/draft, task → assignee, role → user …) to another office, including service-role writes
 - [x] RLS tests: cross-office court / user / case links refused (also bypassing RLS), roles and tasks for another office's users refused, users cannot be pulled across, sweep over every org table shows no other-office rows; same-office links still work
 - [x] `pnpm --filter web office` (service role, Promenix only): create office + invite admin, add users (refuses an email from another office), courts, bank branches; runbook `docs/runbooks/onboard-office.md`
 - [x] Security review fixes (`20261025010000_tenant_org_fixed`): `org_id` can never change on any table (a case or user cannot be moved to another office, even by the service role); trigger fails closed on an unknown column; `documents.batch_id` checked; script never rewrites a profile's office, aborts on lookup errors and removes a half-created office. Tests added
-- [ ] Owner: apply both migrations to the demo DB (check inserts still work under hosted `postgres`); keep Supabase public sign-ups off
+- [x] Applied to the demo DB on 25 Oct (owner approved): 21 `same_org` + 28 `org_id_fixed` triggers live. `tenant_org_fixed` was applied with `create or replace trigger` instead of `drop trigger` + `create trigger` (same result; the Supabase connector's destructive-statement prompt timed out). Verified live in a rolled-back block: a case cannot change office, a same-office insert still works under hosted `postgres`
+- [ ] Owner: keep Supabase public sign-ups off (users only by invitation)
 
 ## Next (Phase 1)
 - [ ] Owner: VPS for the worker (Docker), service-role key there only; run converters without network before real data
