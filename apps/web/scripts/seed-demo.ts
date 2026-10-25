@@ -18,7 +18,7 @@ if (!url || !secret || !password || password.length < 12) {
 }
 
 const db = createClient(url, secret, { auth: { persistSession: false } });
-const ORG_NAME = "Demo Advocates (Synthetic)";
+const ORG_NAME = "Nirmal Nyay Associates (Demo)";
 const DOMAIN = "demo.civilsuits.test";
 
 const USERS = [
@@ -88,7 +88,7 @@ async function main() {
   if (!court) {
     court = await must(
       db.from("courts")
-        .insert({ org_id: orgId, name: "Civil Judge Senior Division, Pune (Demo)", district: "Pune", court_type: "civil" })
+        .insert({ org_id: orgId, name: "Civil Judge Senior Division, Pune (Demo)", district: "Pune", court_type: "civil", state: "MH" })
         .select("id").single(),
       "court",
     );
@@ -98,7 +98,7 @@ async function main() {
   if (!drt) {
     drt = await must(
       db.from("courts")
-        .insert({ org_id: orgId, name: "Debts Recovery Tribunal, Pune (Demo)", district: "Pune", court_type: "drt" })
+        .insert({ org_id: orgId, name: "Debts Recovery Tribunal, Pune (Demo)", district: "Pune", court_type: "drt", state: "MH" })
         .select("id").single(),
       "DRT",
     );

@@ -18,7 +18,7 @@ pnpm --filter web office create --name "Patil & Associates" \
   --admin-email admin@patil-associates.in --admin-name "A. Patil"
 # prints the new office id; the admin gets an invitation email
 
-pnpm --filter web office add-court --office <id> --name "Civil Judge Senior Division, Pune" --district Pune --type civil
+pnpm --filter web office add-court --office <id> --name "Civil Judge Senior Division, Pune" --district Pune --type civil --state MH
 pnpm --filter web office add-bank  --office <id> --bank "State Bank of India" --code SBI \
   --branch "Shivajinagar, Pune" --ifsc SBIN0001234
 pnpm --filter web office add-user  --office <id> --email drafter@patil-associates.in --name "D. Kale" --role drafter

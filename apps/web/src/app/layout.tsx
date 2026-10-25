@@ -5,7 +5,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Civil Suits — Promenix Softech",
-  description: "Bank-recovery suit automation for Maharashtra advocate offices",
+  description: "Bank-recovery suit automation for advocate offices across India",
 };
 
 export const viewport: Viewport = {

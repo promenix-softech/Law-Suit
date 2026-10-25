@@ -1161,8 +1161,8 @@ end $$;
 -- ---------------------------------------------------------------- tenant isolation (multi-office)
 -- Links must stay inside one office, even for writes that bypass RLS (service role / worker).
 begin;
-insert into public.courts (id, org_id, name, district, court_type) values
-  ('c1000000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', 'Demo Court', 'Pune', 'civil');
+insert into public.courts (id, org_id, name, district, court_type, state) values
+  ('c1000000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', 'Demo Court', 'Pune', 'civil', 'MH');
 do $$
 begin
   begin

@@ -8,7 +8,7 @@
  *   list
  *   create   --name "Patil & Associates" --admin-email admin@firm.in --admin-name "A. Patil" [--gstin ...]
  *   add-user --office <org id> --email ... --name ... --role admin|drafter|approver|field
- *   add-court --office <org id> --name "Civil Judge Senior Division, Pune" --district Pune --type civil|commercial|drt
+ *   add-court --office <org id> --name "Civil Judge Senior Division, Pune" --district Pune --type civil|commercial|drt --state MH
  *   add-bank  --office <org id> --bank "State Bank of India" --code SBI --branch "Shivajinagar, Pune" --ifsc SBIN0001234
  *
  * New users get an invitation email from Supabase Auth to set their own password.
@@ -16,6 +16,7 @@
 import { parseArgs } from "node:util";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
+import { isStateCode } from "@civil-suits/domain";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const secret = process.env.SUPABASE_SECRET_KEY;
@@ -84,7 +85,7 @@ async function main() {
   const { values: v } = parseArgs({
     args: rest,
     options: Object.fromEntries(
-      ["name", "admin-email", "admin-name", "gstin", "office", "email", "role", "district", "type", "bank", "code", "branch", "ifsc"].map(
+      ["name", "admin-email", "admin-name", "gstin", "office", "email", "role", "district", "type", "state", "bank", "code", "branch", "ifsc"].map(
         (k) => [k, { type: "string" as const }],
       ),
     ),
@@ -129,8 +130,11 @@ async function main() {
     console.log(`Added ${v.email} as ${role} to "${org.name}".`);
   } else if (command === "add-court") {
     const type = z.enum(["civil", "commercial", "drt"]).parse(v.type);
+    const state = z.string().refine(isStateCode, "state must be an ISO code such as MH or MP").parse(v.state);
     await must(
-      db.from("courts").insert({ org_id: orgId, name: Name.parse(v.name), district: Name.parse(v.district), court_type: type }).select("id").single(),
+      db.from("courts")
+        .insert({ org_id: orgId, name: Name.parse(v.name), district: Name.parse(v.district), court_type: type, state })
+        .select("id").single(),
       "court",
     );
     console.log(`Added court "${v.name}" to "${org.name}".`);

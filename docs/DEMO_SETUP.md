@@ -24,7 +24,7 @@ Done on 2026-10-20: Vercel public env vars set; demo data seeded via SQL (5 user
    cd apps/web
    NEXT_PUBLIC_SUPABASE_URL=... SUPABASE_SECRET_KEY=... DEMO_PASSWORD='choose-12+-chars' pnpm seed:demo
    ```
-   Creates "Demo Advocates (Synthetic)", 10 fake SBI cases and users
+   Creates "Nirmal Nyay Associates (Demo)", 10 fake SBI cases and users
    `admin@ / drafter1@ / drafter2@ / approver@ / field@demo.civilsuits.test` (all with DEMO_PASSWORD).
 5. **Supabase Auth settings:** disable public sign-ups (Authentication → Sign In / Providers → turn off "Allow new users to sign up"). Users are created by the admin only.
 

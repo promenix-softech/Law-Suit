@@ -128,6 +128,13 @@
 - [x] Applied to the demo DB on 25 Oct (owner approved): 21 `same_org` + 28 `org_id_fixed` triggers live. `tenant_org_fixed` was applied with `create or replace trigger` instead of `drop trigger` + `create trigger` (same result; the Supabase connector's destructive-statement prompt timed out). Verified live in a rolled-back block: a case cannot change office, a same-office insert still works under hosted `postgres`
 - [ ] Owner: keep Supabase public sign-ups off (users only by invitation)
 
+## Done (slice 18 — India-wide start: state per court + second demo office, 25 Oct) — applied to the demo DB
+- [x] `courts.state` (ISO 3166-2:IN, migration `20261025020000_court_state`; existing courts = MH). `courtFeeFor(state, claim)` in domain: Maharashtra computed; any other state returns no fee + `[[LEGAL_REVIEW]]` note instead of a guess. Plaint names the state's court-fee act, or flags it when unconfigured; case page shows "Not configured for <State>"
+- [x] Second synthetic office **Satyam Vidhi Chambers (Demo)** (MP): 4 users (`admin|drafter|approver|field@demo-mp.civilsuits.test`), SBI Bhopal / PNB Indore, courts Civil Judge Bhopal, Commercial Court Bhopal, DRT Jabalpur (all `MP`), 6 cases (₹1.86L–₹21.5L; amounts, forum and 12A computed by `scripts/demo-office-mp-sql.ts` with the domain functions), notice + pending 12A for the deadline card. Verified live: MP admin under RLS sees 1 office, 6 cases, 4 users, nothing of the Pune office; password login works
+- Pending legal before real MP work: MP court-fee law and slabs, MP High Court e-filing format, Hindi templates, MP Advocates' Welfare Fund stamp, MP court naming (Civil Judge Class I/II), DRT Jabalpur jurisdiction
+- [x] Demo offices renamed to fictional firm names without city names: **Nirmal Nyay Associates (Demo)** (MH, was "Demo Advocates (Synthetic)") and **Satyam Vidhi Chambers (Demo)** (MP); simple shared demo passwords per office set on the demo DB (handed to the owner in a PDF, not in the repo)
+- [ ] Owner: disable or re-password all demo accounts before any real data goes in (the site is public and the demo passwords are simple)
+
 ## Next (Phase 1)
 - [ ] Owner: VPS for the worker (Docker), service-role key there only; run converters without network before real data
 - [ ] TOTP MFA for admin and approver (plan C4) — on hold at owner's request
