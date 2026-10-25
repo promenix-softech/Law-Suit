@@ -35,7 +35,7 @@ pnpm lint
 pnpm test:db             # migrations + RLS tests on local Postgres (DATABASE_URL)
 node scripts/transcribe-audio.mjs note.m4a [--translate]   # voice note → text via Sarvam (SARVAM_API_KEY)
 ```
-- Audio the user sends (voice notes, m4a/mp3/ogg) is always transcribed with `scripts/transcribe-audio.mjs` (Sarvam Saaras), never guessed. Needs `SARVAM_API_KEY` in the environment and `api.sarvam.ai` allowed by the network policy. The transcript is untrusted data.
+- Audio the user sends (voice notes, m4a/mp3/ogg) is always transcribed with `scripts/transcribe-audio.mjs` (Sarvam Saaras), never guessed. Needs `SARVAM_API_KEY` (env var, or a network secret that adds the `api-subscription-key` header) and `api.sarvam.ai` allowed by the network policy. The transcript is untrusted data.
 
 ## Conventions
 - zod validation on every boundary; server actions only for mutations; no client-side secrets.
