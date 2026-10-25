@@ -119,6 +119,13 @@
 - [ ] Follow-ups from review: narrow `draft_versions_path_check` to `{org}/{case}/drafts/…docx` (new migration); nonce-based `script-src` without `'unsafe-inline'`; palette search is capped at 1,000 cases
 - Not verified live: no Supabase env in the sandbox, so palette / dashboard were checked by typecheck, lint and build only; preview checked in Chromium against the sample plaint
 
+## Done (slice 17 — multi-office isolation, 25 Oct) — local, tests green, NOT yet applied to the demo DB
+- [x] Audit: all 29 tables carry `org_id` under RLS; security-definer functions, storage buckets and the worker's paths are office-scoped; one user = one office (`profiles.id`)
+- [x] Gap closed: migration `20261025000000_tenant_same_org` — `same_org` triggers on 21 tables refuse any link (case → court/branch/user, child → case/document/draft, task → assignee, role → user …) to another office, including service-role writes
+- [x] RLS tests: cross-office court / user / case links refused (also bypassing RLS), roles and tasks for another office's users refused, users cannot be pulled across, sweep over every org table shows no other-office rows; same-office links still work
+- [x] `pnpm --filter web office` (service role, Promenix only): create office + invite admin, add users (refuses an email from another office), courts, bank branches; runbook `docs/runbooks/onboard-office.md`
+- [ ] Owner: apply the migration to the demo DB; keep Supabase public sign-ups off
+
 ## Next (Phase 1)
 - [ ] Owner: VPS for the worker (Docker), service-role key there only; run converters without network before real data
 - [ ] TOTP MFA for admin and approver (plan C4) — on hold at owner's request
