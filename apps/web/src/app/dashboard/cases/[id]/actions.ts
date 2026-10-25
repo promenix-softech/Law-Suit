@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { canTransition, drtFee, maharashtraCourtFee, recoveryForum, type CaseStatus } from "@civil-suits/domain";
+import { canTransition, courtFeeFor, drtFee, isStateCode, recoveryForum, type CaseStatus } from "@civil-suits/domain";
 import {
   buildAffidavit,
   buildDemandNotice,
@@ -59,7 +59,7 @@ export async function recordUpload(input: z.infer<typeof UploadInput>): Promise<
 }
 
 const CASE_SELECT =
-  "id, org_id, case_no_internal, status, needs_12a, suit_type, is_commercial, urgent_interim_relief, claim_amount_paise, organizations(name), courts(name, district, court_type), bank_branches(branch_name, banks(name)), parties(name, role, address, position), loans(facility_type, account_last4, sanction_date, sanction_amount_paise, roi_bps, npa_date, outstanding_paise, interest_upto_date), notices(sent_at), mediations(outcome, report_path, report_date)";
+  "id, org_id, case_no_internal, status, needs_12a, suit_type, is_commercial, urgent_interim_relief, claim_amount_paise, organizations(name), courts(name, district, court_type, state), bank_branches(branch_name, banks(name)), parties(name, role, address, position), loans(facility_type, account_last4, sanction_date, sanction_amount_paise, roi_bps, npa_date, outstanding_paise, interest_upto_date), notices(sent_at), mediations(outcome, report_path, report_date)";
 
 type CaseRow = {
   id: string;
@@ -86,7 +86,7 @@ type CaseDetail = CaseRow & {
   urgent_interim_relief: boolean;
   claim_amount_paise: number | string | null;
   organizations: Rel<{ name: string }>;
-  courts: Rel<{ name: string; district: string; court_type: string }>;
+  courts: Rel<{ name: string; district: string; court_type: string; state: string }>;
   bank_branches: Rel<{ branch_name: string; banks: Rel<{ name: string }> }>;
   parties: PartyRow[] | null;
   loans: Rel<LoanRow>;
@@ -94,13 +94,6 @@ type CaseDetail = CaseRow & {
   mediations: { outcome: string | null; report_path: string | null; report_date: string | null }[] | null;
 };
 
-function courtFeeOrNull(paise: number): number | null {
-  try {
-    return maharashtraCourtFee(paise);
-  } catch {
-    return null; // slab below ₹1 lakh not verified yet; template flags it
-  }
-}
 
 /** Assembles the template for one document kind from case data. Amounts come from the DB / domain code. */
 function buildModel(kind: DocKind, c: CaseDetail, version: number): DocModel | string {
@@ -179,12 +172,16 @@ function buildModel(kind: DocKind, c: CaseDetail, version: number): DocModel | s
       (m.outcome === "failed" || m.outcome === "non_starter") && !!m.report_path && !!m.report_date,
   );
 
+  // Court-fee law follows the court's state; unconfigured states get no fee and a review flag.
+  const fee = isStateCode(court.state) ? courtFeeFor(court.state, claim) : { feePaise: null, act: null };
+
   return buildPlaint({
     ...captionInput,
     loan: loanBase,
     claimPaise: claim,
     claimAsOn: loan.interest_upto_date,
-    courtFeePaise: courtFeeOrNull(claim),
+    courtFeePaise: fee.feePaise,
+    courtFeeAct: fee.act,
     notice: sent ? { date: sent.slice(0, 10) } : null,
     mediation: med ? { reportDate: med.report_date, outcome: med.outcome } : null,
     urgentInterimRelief: c.urgent_interim_relief,

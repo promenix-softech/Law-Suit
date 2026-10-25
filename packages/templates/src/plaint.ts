@@ -15,8 +15,10 @@ export interface PlaintInput extends CaptionInput {
   /** Principal + interest up to claimAsOn — computed by the caller in code. */
   claimPaise: Paise;
   claimAsOn: string;
-  /** From maharashtraCourtFee(); null when the slab is not yet verified. */
+  /** From courtFeeFor(); null when the slab or the state's rules are not yet verified. */
   courtFeePaise: Paise | null;
+  /** Court-fee statute of the court's state; null when the state is not configured yet. */
+  courtFeeAct: string | null;
   notice?: { date: string } | null;
   /** Commercial suits: Sec 12A outcome, or urgent interim relief sought instead. */
   mediation?: { reportDate: string; outcome: "failed" | "non_starter" } | null;
@@ -76,9 +78,11 @@ export function buildPlaint(input: PlaintInput): DocModel {
     p(`Territorial and pecuniary jurisdiction of this Court at ${input.court.place}; the suit is within limitation.`, true),
     p(
       `The suit is valued at ${claim} for the purposes of jurisdiction and court fees. ` +
-        (input.courtFeePaise != null
-          ? `Court fee of ${formatINR(input.courtFeePaise)} is paid under the Maharashtra Court-fees Act.`
-          : "Court fee as applicable under the Maharashtra Court-fees Act is paid. [[LEGAL_REVIEW]] slab to be verified."),
+        (!input.courtFeeAct
+          ? "Court fee as applicable under the court-fees law in force in the State is paid. [[LEGAL_REVIEW]] court-fee rules for this State to be configured."
+          : input.courtFeePaise != null
+            ? `Court fee of ${formatINR(input.courtFeePaise)} is paid under the ${input.courtFeeAct}.`
+            : `Court fee as applicable under the ${input.courtFeeAct} is paid. [[LEGAL_REVIEW]] slab to be verified.`),
     ),
     p("Claim for interest pendente lite and future interest, and its rate.", true),
   );
@@ -134,7 +138,7 @@ export function buildPlaint(input: PlaintInput): DocModel {
     templateId: `plaint.${input.suitType}.en`,
     version: 1,
     effectiveFrom: "2026-10-20",
-    legalBasis: "CPC Order VII Rule 1; Order XXXVII (summary); Commercial Courts Act 2015 s.12A; Maharashtra Court-fees Act Sch. I Art. 1",
+    legalBasis: `CPC Order VII Rule 1; Order XXXVII (summary); Commercial Courts Act 2015 s.12A; ${input.courtFeeAct ? `${input.courtFeeAct} Sch. I Art. 1` : "State court-fees law [[LEGAL_REVIEW]]"}`,
     title: "PLAINT",
     meta: [],
     to: [],

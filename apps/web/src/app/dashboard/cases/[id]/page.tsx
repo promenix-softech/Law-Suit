@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { CASE_STATUSES, commercialCheck, formatINR, maharashtraCourtFee, recoveryForum } from "@civil-suits/domain";
+import { CASE_STATUSES, commercialCheck, courtFeeFor, formatINR, isStateCode, recoveryForum, stateName } from "@civil-suits/domain";
 import { DraftPreview } from "@/components/draft-preview";
 import { TopBar } from "@/components/top-bar";
 import type { T } from "@/lib/i18n";
@@ -37,13 +37,13 @@ const SIGNED_URL_SECONDS = 300; // ≤ 5 min, per security design
 type Rel<T> = T | T[] | null;
 const one = <T,>(v: Rel<T>): T | null => (Array.isArray(v) ? (v[0] ?? null) : v);
 
-function courtFee(paise: number | null): string {
+/** Court fee under the court's state law; unconfigured states say so instead of guessing. */
+function courtFee(paise: number | null, state: string | null | undefined): string {
   if (paise == null) return "—";
-  try {
-    return formatINR(maharashtraCourtFee(paise));
-  } catch {
-    return "Pending verification";
-  }
+  if (!isStateCode(state)) return "Assign a court first";
+  const r = courtFeeFor(state, paise);
+  if (r.feePaise != null) return formatINR(r.feePaise);
+  return r.act ? "Pending verification" : `Not configured for ${stateName(state)}`;
 }
 
 const STEPS = [
@@ -120,7 +120,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
   const { data: c } = await supabase
     .from("cases")
     .select(
-      "id, org_id, case_no_internal, status, suit_type, claim_amount_paise, is_commercial, needs_12a, urgent_interim_relief, assigned_drafter, assigned_approver, courts(name), bank_branches(branch_name, ifsc, banks(name)), parties(id, name, role, address, aadhaar_last4, position), loans(facility_type, account_last4, sanction_date, sanction_amount_paise, roi_bps, npa_date, outstanding_paise, interest_upto_date), notices(id, dispatch_mode, tracking_no, sent_at), mediations(id, authority, applied_at, outcome, report_date, report_path)",
+      "id, org_id, case_no_internal, status, suit_type, claim_amount_paise, is_commercial, needs_12a, urgent_interim_relief, assigned_drafter, assigned_approver, courts(name, state), bank_branches(branch_name, ifsc, banks(name)), parties(id, name, role, address, aadhaar_last4, position), loans(facility_type, account_last4, sanction_date, sanction_amount_paise, roi_bps, npa_date, outstanding_paise, interest_upto_date), notices(id, dispatch_mode, tracking_no, sent_at), mediations(id, authority, applied_at, outcome, report_date, report_path)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -275,7 +275,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
                 </>
               ) : (
                 <>
-                  <Field label="Court fee">{courtFee(claim)}</Field>
+                  <Field label="Court fee">{courtFee(claim, one(c.courts as Rel<{ state: string }>)?.state)}</Field>
                   <Field label="Sec 12A">{check?.needs12A ? "Required" : "Not required"}</Field>
                   <Field label="Suit type">
                     {check?.isCommercial ? "Commercial" : c.suit_type === "summary_o37" ? "Summary (O.37)" : "Ordinary"}

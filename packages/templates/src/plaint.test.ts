@@ -24,6 +24,7 @@ const plaintFixture: PlaintInput = {
   claimPaise: 30_550_652,
   claimAsOn: "2026-10-20",
   courtFeePaise: maharashtraCourtFee(30_550_652),
+  courtFeeAct: "Maharashtra Court-fees Act",
   notice: { date: "2026-10-20" },
   mediation: { reportDate: "2026-12-15", outcome: "non_starter" },
   filingDate: "2026-12-20",
@@ -62,6 +63,12 @@ describe("buildPlaint", () => {
 
   it("flags court fee when the slab is unverified", () => {
     expect(text({ courtFeePaise: null })).toContain("[[LEGAL_REVIEW]] slab to be verified");
+  });
+
+  it("never names Maharashtra law for a court in a state that is not configured", () => {
+    const t = text({ courtFeePaise: null, courtFeeAct: null });
+    expect(t).not.toContain("Maharashtra");
+    expect(t).toContain("[[LEGAL_REVIEW]] court-fee rules for this State to be configured");
   });
 
   it("numbers paragraphs consecutively", () => {

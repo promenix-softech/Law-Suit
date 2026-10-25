@@ -16,7 +16,8 @@ export default function Home() {
           Bank recovery suits, <span className="gradient-text">drafted in minutes</span>
         </h1>
         <p className="muted mx-auto mt-5 max-w-2xl text-lg">
-          From loan file to e-filing bundle for Maharashtra courts — with every amount computed, every approval enforced, and
+          From loan file to e-filing bundle for Indian courts (Maharashtra rules built in, more states being added) — with
+          every amount computed, every approval enforced, and
           every step on the record.
         </p>
         <div className="mt-8 flex justify-center gap-3">
