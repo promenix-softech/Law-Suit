@@ -28,8 +28,8 @@ export interface DocModel {
   /** Addressee block (letters); empty for pleadings. */
   to: string[];
   blocks: Block[];
-  /** Page format profile; default "efiling" (civil/commercial courts). */
-  layout?: "efiling" | "drt";
+  /** Page format profile; default "efiling" (civil/commercial courts). "letter" = not filed in court. */
+  layout?: "efiling" | "drt" | "letter";
 }
 
 export const LEGAL_REVIEW = "[[LEGAL_REVIEW]]";

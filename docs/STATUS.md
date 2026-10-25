@@ -109,6 +109,16 @@
 - [x] Demo field tasks: four kinds with due dates and instructions (synthetic); login `field@demo.civilsuits.test`
 - [ ] Owner: `FIELD_KEYSTORE_*` secrets for a stable signing key
 
+## Done (slice 16 — easier UI + letter margins, 25 Oct)
+- [x] Letters not filed in court (demand notice, tax invoice) use a new `letter` layout: A4, 1" margins all round, TNR 12, 1.15 spacing. Court pleadings keep the e-filing margins (1.75" left / 1" right, owner confirmed); DRT keeps 5 / 2.5 cm
+- [x] Command palette (Ctrl/⌘ K or "/"): jump to any visible case by case no. or borrower, plus main actions; cases read with the browser client so RLS decides what appears
+- [x] Draft preview: "Preview" next to every DOCX version renders it as an A4 page in the browser (docx-preview 0.4.1) from the 5-minute signed URL; no download needed
+- [x] "Needs attention" card on the dashboard: `caseDeadlines()` in `packages/domain` (10 tests) — limitation watch (3 yrs from NPA − 90 days, `[[LEGAL_REVIEW]]`: advocate confirms start date and s.18 extensions), 12A three-month period, notice period over, approval waiting > 2 days; plus own tasks overdue / due today
+- [x] English ⇄ मराठी UI toggle (cookie `lang`): top bar, dashboard, status pills, stepper, case-page headings, palette, tasks heading; terms per `marathi-legal-glossary` (†-terms left in English). Forms and help text inside the case page are still English
+- Security review: blocking finding fixed — a crafted DOCX could carry `javascript:` links into the preview (CSP allows inline script). Preview now renders off-document and strips handlers, non-`#` links, non-data/blob sources and active tags before attaching (checked in Chromium). `lang` cookie httpOnly; dashboard survives a bad date
+- [ ] Follow-ups from review: narrow `draft_versions_path_check` to `{org}/{case}/drafts/…docx` (new migration); nonce-based `script-src` without `'unsafe-inline'`; palette search is capped at 1,000 cases
+- Not verified live: no Supabase env in the sandbox, so palette / dashboard were checked by typecheck, lint and build only; preview checked in Chromium against the sample plaint
+
 ## Next (Phase 1)
 - [ ] Owner: VPS for the worker (Docker), service-role key there only; run converters without network before real data
 - [ ] TOTP MFA for admin and approver (plan C4) — on hold at owner's request

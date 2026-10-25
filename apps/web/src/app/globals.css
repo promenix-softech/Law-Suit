@@ -292,6 +292,17 @@ body {
   to { opacity: 1; transform: none; }
 }
 
+/* ---------------------------------------------------------- draft preview */
+.draft-preview .docx-wrapper {
+  background: transparent;
+  padding: 8px 0 32px;
+}
+.draft-preview .docx-wrapper > section.docx {
+  color: #000; /* pages stay paper-white in both themes */
+  box-shadow: 0 12px 40px -12px rgba(0, 0, 0, 0.6);
+  margin-bottom: 24px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .backdrop .blob,
   .fade-up { animation: none; }

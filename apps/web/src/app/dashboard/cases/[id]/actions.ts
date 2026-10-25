@@ -18,6 +18,7 @@ import {
 } from "@civil-suits/templates";
 import { renderDocx } from "@/lib/docx";
 import { createClient } from "@/lib/supabase/server";
+import { todayIST } from "@/lib/ui";
 
 export type ActionResult = { ok: true; message: string } | { ok: false; error: string };
 
@@ -27,7 +28,6 @@ const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingm
 type Supabase = NonNullable<Awaited<ReturnType<typeof createClient>>>;
 type Rel<T> = T | T[] | null;
 const one = <T,>(v: Rel<T>): T | null => (Array.isArray(v) ? (v[0] ?? null) : v);
-const todayIST = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }); // YYYY-MM-DD
 
 const UploadInput = z.object({
   caseId: z.uuid(),
