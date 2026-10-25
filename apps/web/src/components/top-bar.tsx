@@ -1,7 +1,11 @@
 import Link from "next/link";
 import { signOut } from "@/app/login/actions";
+import { getT } from "@/lib/lang";
+import { CommandPalette } from "./command-palette";
+import { LangToggle } from "./lang-toggle";
 
-export function TopBar({ org, name, roles }: { org?: string | null; name?: string | null; roles: string[] }) {
+export async function TopBar({ org, name, roles }: { org?: string | null; name?: string | null; roles: string[] }) {
+  const { lang, t } = await getT();
   const initials = (name ?? "?")
     .split(/\s+/)
     .map((w) => w[0])
@@ -18,31 +22,33 @@ export function TopBar({ org, name, roles }: { org?: string | null; name?: strin
           <span className="hidden font-semibold sm:inline">{org ?? "Civil Suits"}</span>
         </Link>
         <div className="flex items-center gap-3">
+          <CommandPalette lang={lang} roles={roles} />
           {roles.includes("admin") && (
             <div className="flex items-center gap-1.5">
               <Link href="/dashboard/cases/new" className="btn btn-primary px-3 py-1.5 text-xs">
-                + New case
+                {t("+ New case")}
               </Link>
-              <Link href="/dashboard/audit" className="btn hidden px-3 py-1.5 text-xs sm:inline-flex">
-                Audit log
+              <Link href="/dashboard/audit" className="btn hidden px-3 py-1.5 text-xs lg:inline-flex">
+                {t("Audit log")}
               </Link>
-              <Link href="/dashboard/batches" className="btn hidden px-3 py-1.5 text-xs sm:inline-flex">
-                Bulk upload
+              <Link href="/dashboard/batches" className="btn hidden px-3 py-1.5 text-xs lg:inline-flex">
+                {t("Bulk upload")}
               </Link>
-              <Link href="/dashboard/billing" className="btn hidden px-3 py-1.5 text-xs sm:inline-flex">
-                Billing
+              <Link href="/dashboard/billing" className="btn hidden px-3 py-1.5 text-xs lg:inline-flex">
+                {t("Billing")}
               </Link>
             </div>
           )}
+          <LangToggle lang={lang} />
           <div className="hidden text-right sm:block">
             <p className="text-sm font-medium leading-tight">{name}</p>
-            <p className="muted text-xs capitalize leading-tight">{roles.join(" · ") || "no role"}</p>
+            <p className="muted text-xs capitalize leading-tight">{roles.join(" · ") || t("no role")}</p>
           </div>
           <span className="grid h-9 w-9 place-items-center rounded-full bg-white/40 text-xs font-semibold ring-1 ring-white/50 dark:bg-white/10 dark:ring-white/10">
             {initials}
           </span>
           <form action={signOut}>
-            <button className="btn px-3 py-1.5 text-xs">Sign out</button>
+            <button className="btn px-3 py-1.5 text-xs">{t("Sign out")}</button>
           </form>
         </div>
       </nav>

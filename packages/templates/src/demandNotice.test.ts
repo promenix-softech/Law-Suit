@@ -44,6 +44,10 @@ describe("buildDemandNotice", () => {
     expect(toPlainText(buildDemandNotice(base))).toContain("[[LEGAL_REVIEW]]");
   });
 
+  it("is laid out as a letter (1-inch margins), not a court pleading", () => {
+    expect(buildDemandNotice(base).layout).toBe("letter");
+  });
+
   it("requires a borrower", () => {
     expect(() => buildDemandNotice({ ...base, borrowers: [] })).toThrow();
   });

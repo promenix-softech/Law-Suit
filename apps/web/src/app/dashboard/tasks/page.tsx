@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { TopBar } from "@/components/top-bar";
+import { getT } from "@/lib/lang";
 import { createClient } from "@/lib/supabase/server";
 import { fmtDate, title } from "@/lib/ui";
 import { TaskProgress } from "./task-controls";
@@ -24,6 +25,7 @@ export default async function TasksPage() {
   if (!supabase) redirect("/login");
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) redirect("/login");
+  const { t: tr } = await getT();
   const [{ data: profile }, { data: roles }, { data: tasks }] = await Promise.all([
     supabase.from("profiles").select("org_id, full_name, organizations(name)").eq("id", auth.user.id).single(),
     supabase.from("user_roles").select("role").eq("user_id", auth.user.id),
@@ -45,9 +47,9 @@ export default async function TasksPage() {
       <main className="mx-auto w-full max-w-xl flex-1 space-y-4 px-4 pb-16 pt-6">
         <div className="fade-up">
           <Link href="/dashboard" className="muted text-sm hover:underline">
-            ← Dashboard
+            ← {tr("Dashboard")}
           </Link>
-          <h1 className="mt-2 text-2xl font-semibold tracking-tight">My tasks</h1>
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight">{tr("My tasks")}</h1>
           <p className="muted text-sm">{open.length} open</p>
         </div>
 

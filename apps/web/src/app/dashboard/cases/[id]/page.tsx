@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { CASE_STATUSES, commercialCheck, formatINR, maharashtraCourtFee, recoveryForum } from "@civil-suits/domain";
+import { DraftPreview } from "@/components/draft-preview";
 import { TopBar } from "@/components/top-bar";
+import type { T } from "@/lib/i18n";
+import { getT } from "@/lib/lang";
 import { createClient } from "@/lib/supabase/server";
 import { caseStatus, draftStatus, fmtDate, title } from "@/lib/ui";
 import { DecideDraft, GenerateDraft, MediationOutcome, MediationStart, NoticeForm, SubmitDraft, UploadScan } from "./case-actions";
@@ -57,7 +60,7 @@ const STEPS = [
   "filed",
 ] as const;
 
-function Stepper({ status, needs12A }: { status: string; needs12A: boolean }) {
+function Stepper({ status, needs12A, t }: { status: string; needs12A: boolean; t: T }) {
   const steps = STEPS.filter((s) => s !== "mediation_12a" || needs12A);
   const at = CASE_STATUSES.indexOf(status as (typeof CASE_STATUSES)[number]);
   return (
@@ -77,7 +80,7 @@ function Stepper({ status, needs12A }: { status: string; needs12A: boolean }) {
                     : "muted bg-white/20 dark:bg-white/5"
               }`}
             >
-              {done ? "✓" : i + 1} {caseStatus(s)[0]}
+              {done ? "✓" : i + 1} {caseStatus(s, t)[0]}
             </span>
             {i < steps.length - 1 && <span className={`h-px w-4 ${done ? "bg-emerald-500/50" : "bg-current opacity-15"}`} />}
           </li>
@@ -112,6 +115,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
   if (!supabase) redirect("/login");
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) redirect("/login");
+  const { lang, t } = await getT();
 
   const { data: c } = await supabase
     .from("cases")
@@ -230,7 +234,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
     claim == null ? null : commercialCheck({ specifiedValuePaise: claim, lenderIsBank: true, urgentInterimRelief: c.urgent_interim_relief });
   const forum = claim == null ? null : recoveryForum({ claimPaise: claim, lenderIsBank: true });
   const isDrt = forum?.forum === "drt";
-  const [statusLabel, statusTone] = caseStatus(c.status);
+  const [statusLabel, statusTone] = caseStatus(c.status, t);
   const parties = [...(c.parties ?? [])].sort((a, b) => a.position - b.position);
 
   return (
@@ -256,7 +260,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
         </div>
 
         <div className="glass-card fade-up overflow-x-auto p-4" style={{ animationDelay: "60ms" }}>
-          <Stepper status={c.status} needs12A={c.needs_12a} />
+          <Stepper status={c.status} needs12A={c.needs_12a} t={t} />
         </div>
 
         <div className="grid gap-5 md:grid-cols-3">
@@ -327,7 +331,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
         </div>
 
         {(canEdit || (caseTasks?.length ?? 0) > 0) && (
-          <Section title="Field tasks" subtitle="Documents, notary, e-filing, dispatch — field staff update from their phone" delay={190}>
+          <Section title={t("Field tasks")} subtitle="Documents, notary, e-filing, dispatch — field staff update from their phone" delay={190}>
             {caseTasks?.length ? (
               <ul className="mb-4 space-y-2 text-sm">
                 {caseTasks.map((t) => (
@@ -354,7 +358,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
           </Section>
         )}
 
-        <Section title="Team" subtitle="Maker–checker: the approver can never be the drafter" delay={200}>
+        <Section title={t("Team")} subtitle="Maker–checker: the approver can never be the drafter" delay={200}>
           {roleNames.includes("admin") ? (
             <AssignForm
               caseId={c.id}
@@ -390,7 +394,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
         </Section>
 
         <div className="grid gap-5 lg:grid-cols-2">
-          <Section title="Demand notice dispatch" subtitle="Record how and when the notice was sent" delay={220}>
+          <Section title={t("Demand notice dispatch")} subtitle="Record how and when the notice was sent" delay={220}>
             <ul className="space-y-2">
               {notices.map((n) => (
                 <li key={n.id} className="flex items-center justify-between rounded-xl bg-white/20 px-3 py-2 text-sm dark:bg-white/5">
@@ -410,7 +414,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
           </Section>
 
           {c.needs_12a ? (
-            <Section title="Sec 12A pre-institution mediation" subtitle="Mandatory before filing a commercial suit" delay={260}>
+            <Section title={t("Sec 12A pre-institution mediation")} subtitle="Mandatory before filing a commercial suit" delay={260}>
               {mediations.map((m) => (
                 <div key={m.id} className="mb-3 rounded-xl bg-white/20 px-3 py-2 text-sm dark:bg-white/5">
                   <div className="flex items-center justify-between">
@@ -441,13 +445,13 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
               {!mediations.length && (canEdit ? <MediationStart caseId={c.id} /> : <p className="muted text-sm">Not started.</p>)}
             </Section>
           ) : (
-            <Section title="Sec 12A pre-institution mediation" delay={260}>
+            <Section title={t("Sec 12A pre-institution mediation")} delay={260}>
               <p className="muted text-sm">Not required for this case.</p>
             </Section>
           )}
         </div>
 
-        <Section title={`Documents (${docs?.length ?? 0})`} subtitle="Scans are stored privately; links expire in 5 minutes" delay={300}>
+        <Section title={`${t("Documents")} (${docs?.length ?? 0})`} subtitle="Scans are stored privately; links expire in 5 minutes" delay={300}>
           {canEdit && <UploadScan orgId={c.org_id} caseId={c.id} />}
           <ul className="mt-4 space-y-2">
             {docs?.map((d) => (
@@ -471,7 +475,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
 
         {reviewRows.length > 0 && (
           <Section
-            title="Extracted data — review"
+            title={t("Extracted data — review")}
             subtitle="Read from the scans by Sarvam. Check each value against the source, then verify. Only verified values reach the case."
             delay={320}
           >
@@ -479,7 +483,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
           </Section>
         )}
 
-        <Section title="Drafts" subtitle="Generated from verified case data · approval enforced by the database" delay={340}>
+        <Section title={t("Drafts")} subtitle="Generated from verified case data · approval enforced by the database" delay={340}>
           {canEdit && (
             <div className="flex flex-wrap gap-3">
               <GenerateDraft caseId={c.id} kind="demand_notice" label="Generate demand notice" />
@@ -505,7 +509,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
             {drafts?.map((d) => {
               const vs = [...(d.draft_versions ?? [])].sort((a, b) => b.version - a.version);
               const last = [...(d.approvals ?? [])].sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
-              const [label, tone] = draftStatus(d.status);
+              const [label, tone] = draftStatus(d.status, t);
               return (
                 <div key={d.id} className="glass-card p-5">
                   <div className="flex items-center justify-between gap-2">
@@ -522,6 +526,13 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
                           <a className="btn px-3 py-1 text-xs" href={v.docx_path ? signed.get(v.docx_path) : undefined}>
                             ⬇ v{v.version} DOCX · {fmtDate(v.created_at)}
                           </a>
+                          {v.docx_path && signed.get(v.docx_path) && (
+                            <DraftPreview
+                              url={signed.get(v.docx_path)!}
+                              heading={`${c.case_no_internal} · ${title(d.doc_kind)} v${v.version}`}
+                              lang={lang}
+                            />
+                          )}
                           {v.pdf_path ? (
                             <a className="btn px-3 py-1 text-xs" href={signed.get(v.pdf_path)}>
                               ⬇ PDF/A
@@ -559,7 +570,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
         </Section>
 
         <Section
-          title="E-filing bundle"
+          title={t("E-filing bundle")}
           subtitle="Index → plaint → annexures → vakalatnama → affidavit / SOT · one PDF/A-2b, A4, bookmarked, ≤ 25 MB"
           delay={380}
         >

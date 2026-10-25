@@ -97,6 +97,7 @@ export function buildDemandNotice(input: DemandNoticeInput): DocModel {
 
   return {
     templateId: "demand_notice.en",
+    layout: "letter",
     version: 1,
     effectiveFrom: "2026-10-20",
     legalBasis: "No statutory form; elements per docs/plan.md B2 (civil recovery, not SARFAESI 13(2))",

@@ -46,6 +46,18 @@ const PROFILES: Record<NonNullable<DocModel["layout"]>, Profile> = {
       right: convertMillimetersToTwip(25),
     },
   },
+  // Letters and office papers not filed in court (demand notice, tax invoice):
+  // TNR 12, 1.15 spacing, 1" all round so the text uses the page.
+  letter: {
+    size: 24,
+    line: 276,
+    margin: {
+      top: convertInchesToTwip(1.0),
+      bottom: convertInchesToTwip(1.0),
+      left: convertInchesToTwip(1.0),
+      right: convertInchesToTwip(1.0),
+    },
+  },
 };
 
 const FONT = "Times New Roman";

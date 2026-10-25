@@ -26,6 +26,7 @@ export function buildTaxInvoice(i: TaxInvoiceInput): DocModel {
   const intra = i.igstPaise === 0;
   return {
     templateId: "tax_invoice.en",
+    layout: "letter",
     version: 1,
     effectiveFrom: "2026-10-21",
     legalBasis: "CGST Act 2017 s.31; CGST Rules 2017 r.46",
