@@ -513,7 +513,7 @@ begin
       ('11111111-1111-1111-1111-111111111111', 'c0000000-0000-0000-0000-000000000002', 'draft_pdf',
        '{"draft_version_id":"f0000000-0000-0000-0000-000000000002"}');
     raise exception 'FAIL: other org queued a job';
-  exception when insufficient_privilege then
+  exception when insufficient_privilege or check_violation then
     raise notice 'ok - another org cannot queue jobs on this case';
   end;
   reset role;
@@ -1042,7 +1042,9 @@ begin
   update public.tasks set case_id = 'c2000000-0000-0000-0000-000000000001'
    where assignee_id = '00000000-0000-0000-0000-0000000000f1';
   raise exception 'FAIL: admin linked a task to another office';
-exception when raise_exception then
+exception when check_violation then
+  raise notice 'ok - even an admin cannot link a task to another office';
+when raise_exception then
   if sqlerrm like 'FAIL%' then raise; end if;
   raise notice 'ok - even an admin cannot link a task to another office';
 end $$;
@@ -1155,6 +1157,102 @@ begin
   end;
   reset role;
 end $$;
+
+-- ---------------------------------------------------------------- tenant isolation (multi-office)
+-- Links must stay inside one office, even for writes that bypass RLS (service role / worker).
+begin;
+insert into public.courts (id, org_id, name, district, court_type) values
+  ('c1000000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', 'Demo Court', 'Pune', 'civil');
+do $$
+begin
+  begin
+    insert into public.cases (org_id, case_no_internal, court_id) values
+      ('22222222-2222-2222-2222-222222222222', 'OTHER-1', 'c1000000-0000-0000-0000-000000000001');
+    raise exception 'FAIL: case linked to another office''s court';
+  exception when check_violation then
+    raise notice 'ok - a case cannot use another office''s court (even bypassing RLS)';
+  end;
+  begin
+    insert into public.cases (org_id, case_no_internal, assigned_drafter) values
+      ('22222222-2222-2222-2222-222222222222', 'OTHER-2', '00000000-0000-0000-0000-0000000000d1');
+    raise exception 'FAIL: case assigned to another office''s drafter';
+  exception when check_violation then
+    raise notice 'ok - a case cannot be assigned to another office''s user';
+  end;
+  begin
+    update public.cases set org_id = '22222222-2222-2222-2222-222222222222'
+     where id = 'c0000000-0000-0000-0000-000000000001';
+    raise exception 'FAIL: a case moved to another office';
+  exception when check_violation then
+    raise notice 'ok - a case never moves to another office (even bypassing RLS)';
+  end;
+  begin
+    update public.profiles set org_id = '22222222-2222-2222-2222-222222222222'
+     where id = '00000000-0000-0000-0000-0000000000d1';
+    raise exception 'FAIL: a user moved to another office';
+  exception when check_violation then
+    raise notice 'ok - a user never moves to another office (even bypassing RLS)';
+  end;
+  begin
+    insert into public.parties (org_id, case_id, name, role, position) values
+      ('22222222-2222-2222-2222-222222222222', 'c0000000-0000-0000-0000-000000000001', 'X', 'borrower', 1);
+    raise exception 'FAIL: party attached to another office''s case';
+  exception when check_violation then
+    raise notice 'ok - child rows cannot hang off another office''s case';
+  end;
+end $$;
+rollback;
+
+begin;
+-- c2000000-…-0001 is the other office's own case (fixture above).
+do $$
+begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000b9', true);
+  set local role authenticated;
+  begin
+    insert into public.tasks (org_id, case_id, assignee_id, role, kind) values
+      ('22222222-2222-2222-2222-222222222222', 'c2000000-0000-0000-0000-000000000001',
+       '00000000-0000-0000-0000-0000000000f1', 'field', 'notary');
+    raise exception 'FAIL: other office assigned a task to our field user';
+  exception when check_violation then
+    raise notice 'ok - an office cannot give tasks to another office''s users';
+  end;
+  begin
+    insert into public.user_roles (user_id, org_id, role) values
+      ('00000000-0000-0000-0000-0000000000d1', '22222222-2222-2222-2222-222222222222', 'admin');
+    raise exception 'FAIL: other office granted a role to our user';
+  exception when check_violation then
+    raise notice 'ok - an office cannot grant roles to another office''s users';
+  end;
+  begin
+    update public.profiles set org_id = '22222222-2222-2222-2222-222222222222'
+     where id = '00000000-0000-0000-0000-0000000000d1';
+    if found then raise exception 'FAIL: other office pulled our user across'; end if;
+    raise notice 'ok - an office cannot pull another office''s user across';
+  end;
+  -- Sweep: nothing of the first office is visible in any org-scoped table.
+  declare
+    t text;
+    n bigint;
+  begin
+    for t in select table_name from information_schema.columns
+              where table_schema = 'public' and column_name = 'org_id' loop
+      execute format('select count(*) from public.%I where org_id is distinct from %L', t, '22222222-2222-2222-2222-222222222222') into n;
+      if n > 0 then raise exception 'FAIL: % rows of another office visible in %', n, t; end if;
+    end loop;
+    if exists (select 1 from public.organizations where id <> '22222222-2222-2222-2222-222222222222') then
+      raise exception 'FAIL: another office is listed';
+    end if;
+    raise notice 'ok - no table shows another office''s rows';
+  end;
+  -- The same office keeps working normally.
+  insert into public.tasks (org_id, case_id, assignee_id, role, kind) values
+    ('22222222-2222-2222-2222-222222222222', 'c2000000-0000-0000-0000-000000000001',
+     '00000000-0000-0000-0000-0000000000b9', 'admin', 'notary');
+  raise notice 'ok - same-office links still work';
+  reset role;
+end $$;
+rollback;
 
 select pg_temp.expect(
   not exists (select 1 from pg_tables where schemaname = 'public' and not rowsecurity),
