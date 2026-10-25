@@ -15,7 +15,7 @@ if (!hash || !/^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/.test(hash)) {
   process.exit(1);
 }
 
-const ORG = "Demo Law Chambers, Bhopal (Synthetic)";
+const ORG = "Satyam Vidhi Chambers (Demo)";
 const DOMAIN = "demo-mp.civilsuits.test";
 const USERS = [
   { key: "admin", name: "Arun Demo Admin", role: "admin" },

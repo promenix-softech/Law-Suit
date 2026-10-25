@@ -18,7 +18,7 @@ if (!url || !secret || !password || password.length < 12) {
 }
 
 const db = createClient(url, secret, { auth: { persistSession: false } });
-const ORG_NAME = "Demo Advocates (Synthetic)";
+const ORG_NAME = "Nirmal Nyay Associates (Demo)";
 const DOMAIN = "demo.civilsuits.test";
 
 const USERS = [
