@@ -3,6 +3,8 @@
 Bank-recovery civil-suit automation for a Maharashtra panel-advocate office (multi-tenant ready).
 Built by Promenix Softech LLP. Full plan: `docs/plan.md`. Current phase and open tasks: `docs/STATUS.md`.
 
+Always reply to the owner (Manoj) in Marathi; code, commits and docs stay in English.
+
 ## Non-negotiables
 - **No real client data** in the repo, tests, seeds, screenshots or prompts. Synthetic data only.
 - **RLS on every table**, deny by default. Never disable RLS "temporarily". Never use the secret/service key in the browser.
