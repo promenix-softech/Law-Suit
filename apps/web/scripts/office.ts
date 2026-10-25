@@ -55,17 +55,26 @@ async function office(orgId: string) {
 async function addUser(orgId: string, email: string, fullName: string, role: (typeof ROLES)[number]) {
   const existing = await findUser(email);
   let userId = existing?.id;
+  let hasProfile = false;
   if (userId) {
-    const { data: profile } = await db.from("profiles").select("org_id").eq("id", userId).maybeSingle();
+    const { data: profile, error } = await db.from("profiles").select("org_id").eq("id", userId).maybeSingle();
+    if (error) throw new Error(`profile lookup: ${error.message}`);
     if (profile && profile.org_id !== orgId) {
       throw new Error(`${email} already belongs to another office. Use a different email for this office.`);
     }
+    hasProfile = !!profile;
   } else {
     const { data, error } = await db.auth.admin.inviteUserByEmail(email);
     if (error || !data.user) throw new Error(`invite ${email}: ${error?.message}`);
     userId = data.user.id;
   }
-  await must(db.from("profiles").upsert({ id: userId, org_id: orgId, full_name: fullName }).select("id").single(), "profile");
+  // Never write org_id on an existing profile (the DB also refuses a change of office).
+  await must(
+    hasProfile
+      ? db.from("profiles").update({ full_name: fullName }).eq("id", userId).eq("org_id", orgId).select("id").single()
+      : db.from("profiles").insert({ id: userId, org_id: orgId, full_name: fullName }).select("id").single(),
+    "profile",
+  );
   await must(db.from("user_roles").upsert({ user_id: userId, org_id: orgId, role }).select("user_id").single(), "role");
   return userId;
 }
@@ -95,11 +104,17 @@ async function main() {
     const email = Email.parse(v["admin-email"]);
     const adminName = Name.parse(v["admin-name"]);
     const gstin = v.gstin ? z.string().regex(/^[0-9A-Z]{15}$/).parse(v.gstin) : null;
-    const dup = await must(db.from("organizations").select("id").ilike("name", name), "name check");
-    if (dup.length) throw new Error(`An office named "${name}" already exists (${dup[0].id}).`);
+    const all = await must(db.from("organizations").select("id, name"), "name check");
+    const dup = all.find((o) => o.name.trim().toLowerCase() === name.toLowerCase());
+    if (dup) throw new Error(`An office named "${name}" already exists (${dup.id}).`);
     if (await findUser(email)) throw new Error(`${email} is already a user. Each office's admin needs its own email.`);
     const org = await must(db.from("organizations").insert({ name, gstin }).select("id").single(), "office insert");
-    await addUser(org.id, email, adminName, "admin");
+    try {
+      await addUser(org.id, email, adminName, "admin");
+    } catch (e) {
+      await db.from("organizations").delete().eq("id", org.id); // no half-created office
+      throw e;
+    }
     console.log(`Created office "${name}" (${org.id}); invitation sent to ${email}.`);
     console.log("Next: add its courts and banks (add-court, add-bank); its admin adds cases from the web app.");
     return;

@@ -1180,6 +1180,20 @@ begin
     raise notice 'ok - a case cannot be assigned to another office''s user';
   end;
   begin
+    update public.cases set org_id = '22222222-2222-2222-2222-222222222222'
+     where id = 'c0000000-0000-0000-0000-000000000001';
+    raise exception 'FAIL: a case moved to another office';
+  exception when check_violation then
+    raise notice 'ok - a case never moves to another office (even bypassing RLS)';
+  end;
+  begin
+    update public.profiles set org_id = '22222222-2222-2222-2222-222222222222'
+     where id = '00000000-0000-0000-0000-0000000000d1';
+    raise exception 'FAIL: a user moved to another office';
+  exception when check_violation then
+    raise notice 'ok - a user never moves to another office (even bypassing RLS)';
+  end;
+  begin
     insert into public.parties (org_id, case_id, name, role, position) values
       ('22222222-2222-2222-2222-222222222222', 'c0000000-0000-0000-0000-000000000001', 'X', 'borrower', 1);
     raise exception 'FAIL: party attached to another office''s case';
@@ -1223,9 +1237,12 @@ begin
   begin
     for t in select table_name from information_schema.columns
               where table_schema = 'public' and column_name = 'org_id' loop
-      execute format('select count(*) from public.%I where org_id <> %L', t, '22222222-2222-2222-2222-222222222222') into n;
+      execute format('select count(*) from public.%I where org_id is distinct from %L', t, '22222222-2222-2222-2222-222222222222') into n;
       if n > 0 then raise exception 'FAIL: % rows of another office visible in %', n, t; end if;
     end loop;
+    if exists (select 1 from public.organizations where id <> '22222222-2222-2222-2222-222222222222') then
+      raise exception 'FAIL: another office is listed';
+    end if;
     raise notice 'ok - no table shows another office''s rows';
   end;
   -- The same office keeps working normally.
