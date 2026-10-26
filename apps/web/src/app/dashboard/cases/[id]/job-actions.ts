@@ -52,8 +52,9 @@ const Annexures = z
   .max(60)
   .refine((a) => new Set(a.map((x) => x.document_id)).size === a.length, "Each document once");
 
-export async function queueBundle(caseId: string, annexures: unknown): Promise<ActionResult> {
+/** The list of documents is the bundle's index (required); the system's own index page is optional. */
+export async function queueBundle(caseId: string, annexures: unknown, includeIndex: unknown = false): Promise<ActionResult> {
   const parsed = Annexures.safeParse(annexures);
   if (!z.uuid().safeParse(caseId).success || !parsed.success) return { ok: false, error: "Give every annexure a title." };
-  return queue(caseId, "efiling_bundle", { annexures: parsed.data });
+  return queue(caseId, "efiling_bundle", { annexures: parsed.data, include_index: z.boolean().catch(false).parse(includeIndex) });
 }

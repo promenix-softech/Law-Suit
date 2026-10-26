@@ -34,6 +34,22 @@ export function numberToWordsIndian(n: number): string {
   return parts.join(" ");
 }
 
+/** Words with "and" before the last group, as pleadings write it: 1234 → "One Thousand Two Hundred and Thirty-Four". */
+function wordsWithAnd(n: number): string {
+  if (n < 100) return numberToWordsIndian(n);
+  const tail = n % 100;
+  const head = n - tail;
+  return tail ? `${numberToWordsIndian(head)} and ${below100(tail)}` : numberToWordsIndian(head);
+}
+
+/** Pleading style: 144531000 paise → "Fourteen Lakh Forty-Five Thousand Three Hundred and Ten Rupees Only". */
+export function rupeesInWords(paise: Paise): string {
+  assertPaise(paise);
+  const r = Math.floor(paise / 100);
+  const p = paise % 100;
+  return `${wordsWithAnd(r)} Rupees${p ? ` and ${below100(p)} Paise` : ""} Only`;
+}
+
 /** e.g. 9987713 paise → "Rupees Ninety-Nine Thousand Eight Hundred Seventy-Seven and Paise Thirteen Only". */
 export function amountInWordsINR(paise: Paise): string {
   assertPaise(paise);

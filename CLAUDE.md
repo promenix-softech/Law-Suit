@@ -45,7 +45,7 @@ node scripts/transcribe-audio.mjs note.m4a [--translate]   # voice note → text
 - Keep `packages/domain/src/lifecycle.ts` and the `case_status` enum in sync.
 
 ## Legal-format rules
-See skills: `indian-civil-plaint`, `maharashtra-efiling-format`, `court-fee-maharashtra`, `marathi-legal-glossary`.
+See skills: `bank-suit-house-style` (the office format — follow it for every suit paper), `indian-civil-plaint`, `maharashtra-efiling-format`, `court-fee-maharashtra`, `marathi-legal-glossary`.
 Pending legal verification (do not hard-code until confirmed): BBE Act 2026 Second Schedule wording, court-fee slabs below ₹1 lakh, welfare-stamp amount.
 
 ## Definition of Done

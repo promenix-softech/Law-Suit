@@ -1,0 +1,41 @@
+E-FILING DATA SHEET
+
+For entering the case on the e-filing portal. Not to be filed. Check every field against the plaint before submitting.
+
+CASE
+
+Establishment: IN THE COURT OF CIVIL JUDGE SENIOR DIVISION NASHIK, AT NASHIK
+Case number line: SPECIAL SUMMARY SUIT NO. __________/2026
+Case type / Relief sought: Summary Suit
+Act: CODE OF CIVIL PROCEDURE
+Section: Order 37
+Date of cause of action: 31-01-2026
+Valuation: 11,77,480
+Amount: 11,77,480
+Court fee: Rs. 27,630/-
+Plaint in local language: No
+
+PLAINTIFF
+
+Name: UNION BANK OF INDIA, MODEL COLONY BRANCH (DEMO), NASHIK
+Organisation type: Nationalised Banks
+Address: SHOP 0, DEMO ARCADE, MODEL COLONY, NASHIK 422000
+
+DEFENDANTS
+
+No. | Name | Address
+1 | M/S DEMO AGRO TRADERS Through its Partner KIRAN TEST PAWAR | GALA 0, TEST MARKET YARD, NASHIK 422000
+2 | KIRAN TEST PAWAR | GALA 0, TEST MARKET YARD, NASHIK 422000
+3 | RAHUL FAKE PAWAR | FLAT 0, SAMPLE HEIGHTS, DEMO ROAD, NASHIK 422000
+
+CAUSE OF ACTION (ENGLISH)
+
+The cause of action for the present suit arose at Nashik, within the jurisdiction of this Hon'ble Court, firstly on 31.01.2026 when the Defendants stopped repaying the Term Loan and Cash Credit and the loan accounts were classified as NPA, and thereafter on the Defendants failing to pay in terms of the demand notice dated 20.07.2026. The cause of action is continuing every day till the filing of this suit, as the amount borrowed by the Defendants remains to be repaid to the Plaintiff Bank.
+
+RELIEF CLAIMED
+
+The amount of Rs. 11,77,480/- with interest and costs may kindly be recovered from the Defendants.
+
+केलेली मागणी (MARATHI)
+
+प्रतिवादीकडून रक्कम रु. 11,77,480/- व्याज व खर्चासह वसूल होऊन मिळावी, ही विनंती.

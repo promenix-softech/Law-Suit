@@ -12,6 +12,7 @@ import {
   startMediation,
   submitForApproval,
   type ActionResult,
+  type DocKind,
 } from "./actions";
 
 const MAX_BYTES = 25 * 1024 * 1024;
@@ -100,7 +101,7 @@ export function GenerateDraft({
   label,
 }: {
   caseId: string;
-  kind: "demand_notice" | "plaint" | "vakalatnama" | "affidavit" | "original_application" | "interim_application";
+  kind: DocKind;
   label: string;
 }) {
   const [pending, start] = useTransition();

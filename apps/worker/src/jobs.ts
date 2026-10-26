@@ -160,11 +160,17 @@ function isPdf(buf: Buffer) {
   return buf.subarray(0, 5).toString("latin1") === "%PDF-";
 }
 
-/** Index → plaint → annexures → vakalatnama → affidavit / SOT, one PDF/A-2b with bookmarks. */
+/**
+ * [Index] → plaint → vakalatnama → list of documents → annexures → address memo → affidavit / SOT,
+ * one PDF/A-2b with bookmarks and stamped page numbers. The list of documents is required (it is
+ * the office's index); the system's own index page is optional (payload.include_index).
+ */
 async function efilingBundle(job: Job, store: Store, db: Db): Promise<Result> {
   const c = await db.caseForBundle(job.case_id);
   if (!c.caption.court) throw new JobError("Assign a court to the case first");
   if (!c.drafts.some((d) => d.kind === "plaint")) throw new JobError("The bundle needs the approved plaint");
+  if (!c.drafts.some((d) => d.kind === "list_of_documents")) throw new JobError("The bundle needs the approved list of documents");
+  const includeIndex = job.payload.include_index === true;
   const caption: CaptionInput = {
     ...c.caption,
     court: { name: courtTitle(c.caption.court.name, c.caption.court.district), place: c.caption.court.district },
@@ -203,10 +209,10 @@ async function efilingBundle(job: Job, store: Store, db: Db): Promise<Result> {
     const parts = orderParts(drafts, annexParts);
 
     // The index lists page numbers that depend on its own length; settle in at most 3 passes.
-    let indexPages = 1;
+    let indexPages = includeIndex ? 1 : 0;
     let indexPdf = "";
     let planned = planPages(parts, indexPages);
-    for (let pass = 0; pass < 3; pass++) {
+    for (let pass = 0; includeIndex && pass < 3; pass++) {
       const model = buildBundleIndex({ ...caption, entries: planned });
       indexPdf = await docxToPdfA(await renderDocx(model), dir, `index-${pass}`);
       const n = await pageCount(indexPdf);
@@ -217,7 +223,8 @@ async function efilingBundle(job: Job, store: Store, db: Db): Promise<Result> {
 
     const fileName = bundleFileName(c.caseNo);
     const out = join(dir, fileName);
-    await mergePdfA([indexPdf, ...parts.map((p) => files.get(p.key)!)], planned, `${c.caseNo} — e-filing bundle`, dir, out);
+    const inputs = [...(includeIndex ? [indexPdf] : []), ...parts.map((p) => files.get(p.key)!)];
+    await mergePdfA(inputs, planned, `${c.caseNo} — e-filing bundle`, dir, out);
 
     const check = await inspect(out);
     const problems = bundleProblems(check);
@@ -232,7 +239,10 @@ async function efilingBundle(job: Job, store: Store, db: Db): Promise<Result> {
         fileName,
         pages: check.pageCount,
         bytes: check.bytes,
-        entries: [{ title: "Index", from: 1, to: indexPages }, ...planned.map(({ title, from, to, mark }) => ({ title, from, to, mark }))],
+        entries: [
+          ...(includeIndex ? [{ title: "Index", from: 1, to: indexPages }] : []),
+          ...planned.map(({ title, from, to, mark }) => ({ title, from, to, mark })),
+        ],
       },
     };
   });

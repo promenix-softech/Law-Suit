@@ -19,8 +19,8 @@ export function buildInterimApplication(input: InterimApplicationInput): DocMode
   const p = (text: string, legalReview = false): Block => ({ kind: "para", text: `${++n}. ${text}`, legalReview });
 
   const blocks: Block[] = [
-    { kind: "center", bold: true, lines: [`INTERIM APPLICATION NO. ________ OF ${input.year}`, "IN"] },
-    ...caption(input, { addresses: false }),
+    { kind: "center", bold: true, lines: [`INTERIM APPLICATION NO. __________/${input.year}`, "IN"] },
+    ...caption(input, { full: false }),
     { kind: "para", legalReview: true, text: "Provision under which the application is made (e.g. Order XXXVIII Rule 5 or Order XXXIX Rules 1 and 2, CPC) and the relief it seeks." },
     { kind: "center", bold: true, lines: ["APPLICATION FOR URGENT INTERIM RELIEF"] },
     { kind: "para", text: "The Applicant / Plaintiff above named states as under:" },

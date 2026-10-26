@@ -37,6 +37,9 @@ export async function TopBar({ org, name, roles }: { org?: string | null; name?:
               <Link href="/dashboard/billing" className="btn hidden px-3 py-1.5 text-xs lg:inline-flex">
                 {t("Billing")}
               </Link>
+              <Link href="/dashboard/settings" className="btn hidden px-3 py-1.5 text-xs lg:inline-flex">
+                {t("Office settings")}
+              </Link>
             </div>
           )}
           <LangToggle lang={lang} />

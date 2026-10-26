@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { pdfaDefinition, pdfmarks, type BundleCheck, type PlannedPart } from "./bundle";
+import { pageStampProgram, pdfaDefinition, pdfmarks, type BundleCheck, type PlannedPart } from "./bundle";
 
 const exec = promisify(execFile);
 const MAX_STDOUT = 32 * 1024 * 1024;
@@ -140,12 +140,14 @@ export async function isEncrypted(pdf: string): Promise<boolean> {
   }
 }
 
-/** Merges parts in order with bookmarks and writes PDF/A-2b. */
+/** Merges parts in order with bookmarks, stamps page numbers and annexure marks, and writes PDF/A-2b. */
 export async function mergePdfA(inputs: string[], parts: PlannedPart[], title: string, dir: string, out: string) {
   const def = join(dir, "pdfa_def.ps");
   const marks = join(dir, "marks.ps");
+  const stamps = join(dir, "stamps.ps");
   await writeFile(def, pdfaDefinition(ICC));
   await writeFile(marks, pdfmarks(title, parts));
+  await writeFile(stamps, pageStampProgram(parts, Math.max(...parts.map((p) => p.to))));
   await run(
     "gs",
     [
@@ -164,6 +166,7 @@ export async function mergePdfA(inputs: string[], parts: PlannedPart[], title: s
       "-dPDFFitPage",
       `-sOutputFile=${out}`,
       def,
+      stamps,
       ...inputs,
       marks,
     ],

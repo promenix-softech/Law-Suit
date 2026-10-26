@@ -103,6 +103,21 @@ describe("caseStore", () => {
   });
 });
 
+describe("e-filing bundle preconditions", () => {
+  it("refuses a bundle without the approved list of documents", async () => {
+    const db = {
+      caseForBundle: async () => ({
+        caseNo: "CS/2026/0001",
+        caption: { ...caption, court: { name: "Civil Judge Senior Division", district: "Pune" } },
+        drafts: [{ kind: "plaint", docxPath: `${ORG}/${CASE}/drafts/plaint.docx`, pdfPath: null }],
+        documents: {},
+      }),
+    } as unknown as Db;
+    const job: Job = { id: "j3", org_id: ORG, case_id: CASE, kind: "efiling_bundle", payload: { annexures: [] } };
+    await expect(runJob(job, memoryStore({}), db)).rejects.toThrow(/list of documents/);
+  });
+});
+
 describe("case export", () => {
   const job: Job = { id: "j9", org_id: ORG, case_id: CASE, kind: "case_export", payload: {} };
   const exportDb = (files: string[]) =>
@@ -149,6 +164,7 @@ describe.skipIf(!toolsPresent)("worker jobs (real converters)", () => {
     const files: Record<string, Buffer> = {
       [`${ORG}/${CASE}/drafts/plaint.docx`]: await renderDocx(buildVakalatnama(docCaption)),
       [`${ORG}/${CASE}/drafts/sot.docx`]: await renderDocx(buildAffidavit(docCaption)),
+      [`${ORG}/${CASE}/drafts/list.docx`]: await renderDocx(buildAffidavit(docCaption)),
       [`${ORG}/${CASE}/scans/scan.png`]: syntheticScanPng(),
     };
     const store = memoryStore(files);
@@ -161,6 +177,7 @@ describe.skipIf(!toolsPresent)("worker jobs (real converters)", () => {
         drafts: [
           { kind: "statement_of_truth", docxPath: `${ORG}/${CASE}/drafts/sot.docx`, pdfPath: null },
           { kind: "plaint", docxPath: `${ORG}/${CASE}/drafts/plaint.docx`, pdfPath: null },
+          { kind: "list_of_documents", docxPath: `${ORG}/${CASE}/drafts/list.docx`, pdfPath: null },
         ],
         documents: { doc1: { storagePath: `${ORG}/${CASE}/scans/scan.png` } },
       }),
@@ -174,14 +191,14 @@ describe.skipIf(!toolsPresent)("worker jobs (real converters)", () => {
       org_id: ORG,
       case_id: CASE,
       kind: "efiling_bundle",
-      payload: { annexures: [{ document_id: "doc1", title: "Loan agreement" }] },
+      payload: { annexures: [{ document_id: "doc1", title: "Loan agreement" }], include_index: true },
     };
 
     const res = await runJob(job, store, db);
     expect(res.path).toBe(`${ORG}/${CASE}/filing/j2/CS_2026_0001_BUNDLE_01.pdf`);
     const entries = res.meta.entries as { title: string; from: number; to: number; mark?: string }[];
-    expect(entries.map((e) => e.title)).toEqual(["Index", "Plaint", "Loan agreement", "Statement of truth"]);
-    expect(entries[2]!.mark).toBe("A");
+    expect(entries.map((e) => e.title)).toEqual(["Index", "Plaint", "List of documents", "Loan agreement", "Statement of truth"]);
+    expect(entries[3]!.mark).toBe("A");
     expect(usage).toEqual([1]);
     if (process.env.BUNDLE_SAMPLE_OUT) writeFileSync(process.env.BUNDLE_SAMPLE_OUT, store.files[res.path]!);
 

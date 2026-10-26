@@ -1,5 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { amountInWordsINR, numberToWordsIndian } from "./words";
+import { amountInWordsINR, numberToWordsIndian, rupeesInWords } from "./words";
+
+describe("rupeesInWords (pleading style)", () => {
+  it.each([
+    [14_45_310_00, "Fourteen Lakh Forty-Five Thousand Three Hundred and Ten Rupees Only"],
+    [14_25_310_00, "Fourteen Lakh Twenty-Five Thousand Three Hundred and Ten Rupees Only"],
+    [31_230_00, "Thirty-One Thousand Two Hundred and Thirty Rupees Only"],
+    [1_234_00, "One Thousand Two Hundred and Thirty-Four Rupees Only"],
+    [25_000_00, "Twenty-Five Thousand Rupees Only"],
+    [7_00, "Seven Rupees Only"],
+    [1_234_50, "One Thousand Two Hundred and Thirty-Four Rupees and Fifty Paise Only"],
+  ])("%i paise → %s", (paise, words) => {
+    expect(rupeesInWords(paise)).toBe(words);
+  });
+});
 
 describe("numberToWordsIndian", () => {
   it.each([

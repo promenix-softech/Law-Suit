@@ -1,28 +1,25 @@
-import { amountInWordsINR, formatINR, type Paise } from "@civil-suits/domain";
+import { formatRs, rupeesInWords, type Paise } from "@civil-suits/domain";
+import { bankConstitution, partyList, type Defendant } from "./caption";
+import { BLANK, formatDateDot, joinAnd, pctBps, type OfficeProfile } from "./format";
 import type { Block, DocModel } from "./model";
+import type { Facility } from "./plaint";
 
 export interface DemandNoticeInput {
   noticeDate: string; // ISO date
-  refNo: string;
-  advocate: { officeName: string; address: string };
-  bank: { name: string; branch: string };
-  borrowers: { name: string; role: "borrower" | "co_borrower" | "guarantor"; address?: string | null }[];
-  loan: {
-    facilityType: string;
-    accountLast4: string | null;
-    sanctionDate: string | null;
-    sanctionAmountPaise: Paise | null;
-    rateBps: number | null;
-    npaDate: string | null;
-    outstandingPaise: Paise;
-    interestUptoDate: string;
-  };
-  /** Days given to pay; 15 is common practice, not statutory. */
+  /** Printed only when the office numbers its notices. */
+  refNo?: string | null;
+  office: OfficeProfile | null;
+  bank: { name: string; branch: string; address?: string | null };
+  defendants: Defendant[];
+  facilities: Facility[];
+  npaDate: string | null;
+  /** Total dues demanded (A + B + C, from particularsOfClaim) and the date they are worked out to. */
+  claimPaise: Paise;
+  claimAsOn: string;
+  /** Days given to pay; the office gives 7 (not statutory). */
   paymentDays: number;
   isCommercial: boolean;
 }
-
-const ROLE_LABEL = { borrower: "Borrower", co_borrower: "Co-Borrower", guarantor: "Guarantor" } as const;
 
 /** DD-MM-YYYY, the format used in Maharashtra court papers. */
 export function formatDateIN(iso: string): string {
@@ -31,82 +28,116 @@ export function formatDateIN(iso: string): string {
   return `${d}-${m}-${y}`;
 }
 
-const pct = (bps: number) => `${(bps / 100).toFixed(2)}% p.a.`;
+const nums = (defendants: Defendant[], role: Defendant["role"]) =>
+  defendants.flatMap((d, i) => (d.role === role ? [String(i + 1)] : []));
+
+/** "the Addressee No. 1 is the Borrower and the Addressees No. 2 and 3 are the Guarantors". */
+function rolesSentence(defendants: Defendant[]): string {
+  const part = (role: Defendant["role"], one: string, many: string) => {
+    const n = nums(defendants, role);
+    if (!n.length) return null;
+    return n.length === 1 ? `the Addressee No. ${n[0]} is the ${one}` : `the Addressees No. ${joinAnd(n)} are the ${many}`;
+  };
+  return joinAnd(
+    [part("borrower", "Borrower", "Borrowers"), part("co_borrower", "Co-Borrower", "Co-Borrowers"), part("guarantor", "Guarantor", "Guarantors")].filter(
+      (s): s is string => !!s,
+    ),
+  );
+}
 
 /**
- * Demand notice for recovery of a bank loan (civil suit route — distinct from a SARFAESI
- * 13(2) notice). There is no statutory form; content follows docs/plan.md B2. Paragraphs on
- * legal consequences are flagged for the advocate's review before use.
+ * Demand (loan recall) notice in the office's format, on its letterhead: addressees as in the
+ * caption, the bank and its constitution, the facilities table, execution of documents,
+ * default and NPA, the demand within the period, consequences, and the notice fee. Civil-suit
+ * route — distinct from a SARFAESI 13(2) notice. All amounts arrive computed in code.
  */
 export function buildDemandNotice(input: DemandNoticeInput): DocModel {
-  const { loan, bank } = input;
-  if (input.borrowers.length === 0) throw new Error("At least one borrower is required");
+  const { bank, office, facilities: fs } = input;
+  if (input.defendants.length === 0) throw new Error("At least one borrower is required");
+  if (!fs.length) throw new Error("At least one loan facility is required");
   if (!Number.isInteger(input.paymentDays) || input.paymentDays < 1) throw new RangeError("paymentDays must be ≥ 1");
 
-  const facilityRows: [string, string][] = [
-    ["Facility", loan.facilityType],
-    ["Loan account", loan.accountLast4 ? `XXXXXX${loan.accountLast4}` : "—"],
-  ];
-  if (loan.sanctionDate) facilityRows.push(["Date of sanction", formatDateIN(loan.sanctionDate)]);
-  if (loan.sanctionAmountPaise != null) facilityRows.push(["Amount sanctioned", formatINR(loan.sanctionAmountPaise)]);
-  if (loan.rateBps != null) facilityRows.push(["Rate of interest", pct(loan.rateBps)]);
-  if (loan.npaDate) facilityRows.push(["Classified as NPA on", formatDateIN(loan.npaDate)]);
-  facilityRows.push([
-    `Amount due as on ${formatDateIN(loan.interestUptoDate)}`,
-    `${formatINR(loan.outstandingPaise)} (${amountInWordsINR(loan.outstandingPaise)})`,
-  ]);
+  const constitution = bankConstitution(bank.name);
+  const many = fs.length > 1;
+  let n = 0;
+  const p = (text: string, legalReview = false): Block => ({ kind: "para", text: `${++n}. ${text}`, legalReview });
+  const fee = office?.noticeFeeRupees;
 
   const blocks: Block[] = [
-    { kind: "heading", text: "Subject: Demand for repayment of outstanding loan dues" },
+    { kind: "lines", align: "right", bold: true, lines: [...(input.refNo ? [`Ref.: ${input.refNo}`] : []), `Date: ${formatDateDot(input.noticeDate)}`] },
+    { kind: "lines", align: "center", bold: true, lines: ["DEMAND NOTICE"] },
+    { kind: "lines", lines: ["To,"] },
+    ...partyList(input.defendants, { addresses: true }),
+    { kind: "para", text: "Sir/Madam," },
     {
       kind: "para",
-      text: `Under instructions from and on behalf of our client, ${bank.name}, ${bank.branch} (hereinafter "the Bank"), we address you as follows:`,
+      text:
+        `We are concerned for our client ${bank.name.toUpperCase()}, ` +
+        (constitution ? `${constitution[0]!.toLowerCase()}${constitution.slice(1)}, ` : "") +
+        `having its branch at ${bank.branch}${bank.address?.trim() ? `, ${bank.address.trim()}` : ""}, and on its instructions and the documents and information supplied to us, we have to serve upon you a legal notice as under:`,
     },
+    p(`Our client states that ${rolesSentence(input.defendants)} for the credit ${many ? "facilities" : "facility"} sanctioned by our client Bank.`),
+    p(`Our client further states that you approached our client Bank and requested the credit ${many ? "facilities" : "facility"} set out below, which our client Bank duly considered and sanctioned. The details of the sanction are as under:`),
     {
-      kind: "para",
-      text: "At your request, the Bank sanctioned and disbursed the credit facility described below. You agreed to repay the same with interest as per the terms of sanction and the loan documents executed by you.",
+      kind: "table",
+      head: ["Facility", "Amount", "Rate of Interest", "Tenure", "A/c No."],
+      widths: [30, 18, 14, 14, 24],
+      rows: fs.map((f) => [
+        `${f.facilityType}${f.purpose ? ` (${f.purpose})` : ""}`,
+        f.sanctionAmountPaise != null ? formatRs(f.sanctionAmountPaise) : BLANK,
+        f.rateBps != null ? pctBps(f.rateBps) : BLANK,
+        f.tenureMonths ? `${f.tenureMonths} Months` : "N.A.",
+        f.accountNo ?? BLANK,
+      ]),
     },
-    { kind: "fields", rows: facilityRows },
-    {
-      kind: "para",
-      text: "You have failed to repay the dues as agreed, and the account has been classified as a Non-Performing Asset in accordance with the applicable norms.",
-    },
-    {
-      kind: "para",
-      text: `We therefore call upon you, jointly and severally, to pay the Bank ${formatINR(loan.outstandingPaise)} (${amountInWordsINR(loan.outstandingPaise)}) together with further interest at the contractual rate from ${formatDateIN(loan.interestUptoDate)} until the date of payment, within ${input.paymentDays} days of receipt of this notice.`,
-    },
-    {
-      kind: "para",
-      legalReview: true,
-      text: "Take notice that if you fail to pay within the said period, our client shall be constrained to initiate appropriate legal proceedings for recovery, including a civil suit, at your risk as to costs and consequences.",
-    },
+    p(
+      `Our client states that you signed and executed the requisite loan and security documents in favour of our client to secure the repayment of the said ${many ? "facilities" : "facility"}, and by signing them you acknowledged and admitted your liability in favour of our client.`,
+    ),
+    p(
+      `Our client states that the said loan ${many ? "accounts have" : "account has"} not been conducted as per the terms of sanction and the loan documents executed by you. The requests and reminders given by the officials of our client to clear the overdue amounts have not been responded to by you. In view of the defaults committed by you in payment of the dues, your loan ${many ? "accounts were" : "account was"} classified as NPA on ${input.npaDate ? formatDateDot(input.npaDate) : BLANK} as per the RBI guidelines.`,
+    ),
+    p(
+      `You, the Addressees, are hereby called upon to pay to our client the total outstanding dues of ${formatRs(input.claimPaise)} (${rupeesInWords(input.claimPaise)})${input.defendants.length > 1 ? ", jointly and severally," : ""} as on ${formatDateDot(input.claimAsOn)}, with further interest at the contractual rate and other applicable charges till its actual realisation, within ${input.paymentDays} days from the date of receipt of this notice.`,
+    ),
+    p(
+      "If you fail to repay the aforesaid amount within the above stated period, our client will be constrained to take appropriate legal action against you, including attachment and sale of the secured assets as well as your other properties, for recovery of the aforesaid outstanding amount together with future interest till its realisation. In that case you will be held responsible for the costs and consequences thereof.",
+    ),
   ];
 
   if (input.isCommercial) {
-    blocks.push({
-      kind: "para",
-      legalReview: true,
-      text: "As the claim is a commercial dispute of specified value, our client is also willing to participate in pre-institution mediation under Section 12A of the Commercial Courts Act, 2015, should you wish to settle the matter.",
-    });
+    blocks.push(
+      p(
+        "As the claim is a commercial dispute of specified value, our client is also willing to participate in pre-institution mediation under Section 12A of the Commercial Courts Act, 2015, should you wish to settle the matter.",
+        true,
+      ),
+    );
   }
 
   blocks.push(
-    { kind: "para", text: "A copy of this notice is retained in our office for further action." },
-    { kind: "signature", lines: ["Yours faithfully,", "", "", `For ${input.advocate.officeName}`, "Advocates for the Bank"] },
+    p(
+      `${fee ? `Our professional fees including expenses of ${formatRs(fee * 100)} for issuing this loan recall notice` : "Our professional fees and expenses for issuing this loan recall notice"} will have to be borne by you. No further notice will be issued in this respect, and this notice is without prejudice to our client's rights to proceed under the law simultaneously.`,
+    ),
+    { kind: "signature", lines: ["", `For ${office?.firmName ?? "Advocates for the Bank"}${office?.firmTagline ? ` — ${office.firmTagline}` : ""}`] },
   );
 
   return {
     templateId: "demand_notice.en",
     layout: "letter",
-    version: 1,
-    effectiveFrom: "2026-10-20",
-    legalBasis: "No statutory form; elements per docs/plan.md B2 (civil recovery, not SARFAESI 13(2))",
-    title: "DEMAND NOTICE",
-    meta: [`Ref.: ${input.refNo}`, `Date: ${formatDateIN(input.noticeDate)}`, "By RPAD / Speed Post / Email"],
-    to: input.borrowers.flatMap((p, i) => [
-      `${i + 1}. ${p.name} (${ROLE_LABEL[p.role]})`,
-      ...(p.address ? [`   ${p.address}`] : []),
-    ]),
+    version: 2,
+    effectiveFrom: "2026-10-26",
+    legalBasis: "No statutory form; office format (civil recovery, not SARFAESI 13(2))",
+    title: "",
+    meta: [],
+    to: [],
+    letterhead: office
+      ? [
+          office.firmName.toUpperCase(),
+          ...(office.firmTagline ? [office.firmTagline] : []),
+          ...(office.address ? [office.address] : []),
+          ...(office.email ? [`E-mail: ${office.email}`] : []),
+          ...(office.contact ? [`Contact: ${office.contact}`] : []),
+        ]
+      : undefined,
     blocks,
   };
 }
