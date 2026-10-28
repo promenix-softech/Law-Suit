@@ -23,7 +23,7 @@ describe("buildBundleIndex", () => {
     expect(t).toContain("Sr. No. | Particulars | Exhibit | Pages");
     expect(t).toContain("1 | Plaint |  | 2 – 9");
     expect(t).toContain("2 | Loan agreement | A | 10");
-    expect(t).toContain("COMMERCIAL SUIT NO. ________ OF 2026");
+    expect(t).toContain("COMMERCIAL SUIT NO. __________/2026");
     expect(t).not.toContain("Synthetic address");
   });
 

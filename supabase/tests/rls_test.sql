@@ -1254,6 +1254,154 @@ begin
 end $$;
 rollback;
 
+-- ---------------------------------------------------------------- office settings (20261026000000, 20261026010000)
+update public.organizations set office_profile = '{"firmName": "Demo Legal Associates"}'
+ where id = '11111111-1111-1111-1111-111111111111';
+
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000d1');
+select pg_temp.expect((public.office_config() -> 'office_profile' ->> 'firmName') = 'Demo Legal Associates',
+                      'a drafter reads the office profile through office_config()');
+select pg_temp.expect((select name from public.organizations) = 'Demo Advocates', 'members still read the office name');
+do $$ begin
+  begin
+    perform office_profile from public.organizations;
+    raise exception 'FAIL: office_profile readable directly';
+  exception when insufficient_privilege then raise notice 'ok - office_profile is not readable directly';
+  end;
+  begin
+    perform public.update_office_settings('{"firmName": "Hijacked"}', '{}');
+    raise exception 'FAIL: a drafter changed the office settings';
+  exception when insufficient_privilege then raise notice 'ok - only an admin changes office settings';
+  end;
+end $$;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000f1');
+select pg_temp.expect(public.office_config() is null, 'field staff do not see the office profile or settings');
+rollback;
+
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+select public.update_office_settings('{"firmName": "Demo Legal Associates", "advocates": ["ADV. A. DEMO"]}', '{"forum": "summary_suit", "margins": "office"}');
+select pg_temp.expect((public.office_config() -> 'settings' ->> 'margins') = 'office', 'an admin sets the office settings');
+reset role;
+select pg_temp.expect(exists (select 1 from public.audit_log where entity = 'organizations'
+                              and org_id = '11111111-1111-1111-1111-111111111111' and actor_id = '00000000-0000-0000-0000-00000000000a'),
+                      'office settings changes are in the audit chain');
+rollback;
+
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000b9');
+select pg_temp.expect(coalesce(public.office_config() -> 'office_profile' ->> 'firmName', '') <> 'Demo Legal Associates',
+                      'another office cannot read the office profile');
+select public.update_office_settings('{"firmName": "Other"}', '{}');
+reset role;
+select pg_temp.expect((select office_profile ->> 'firmName' from public.organizations where id = '11111111-1111-1111-1111-111111111111') = 'Demo Legal Associates',
+                      'another office''s admin changes only its own office');
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000b9');
+update public.cases set signatory_name = 'Outsider' where id = 'c0000000-0000-0000-0000-000000000001';
+reset role;
+select pg_temp.expect((select signatory_name from public.cases where id = 'c0000000-0000-0000-0000-000000000001') is null,
+                      'another office cannot set the signatory of a case');
+rollback;
+
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000a1');
+select pg_temp.expect((public.office_config() -> 'office_profile' ->> 'firmName') = 'Demo Legal Associates',
+                      'an approver reads the office profile through office_config()');
+do $$ begin
+  begin
+    perform settings from public.organizations;
+    raise exception 'FAIL: settings readable directly';
+  exception when insufficient_privilege then raise notice 'ok - settings are not readable directly';
+  end;
+  begin
+    perform public.update_office_settings('{"firmName": "X"}', '{}');
+    raise exception 'FAIL: an approver changed the office settings';
+  exception when insufficient_privilege then raise notice 'ok - an approver cannot change office settings';
+  end;
+end $$;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000f1');
+do $$ begin
+  begin
+    perform public.update_office_settings('{"firmName": "X"}', '{}');
+    raise exception 'FAIL: field staff changed the office settings';
+  exception when insufficient_privilege then raise notice 'ok - field staff cannot change office settings';
+  end;
+end $$;
+reset role;
+select pg_temp.expect(not has_function_privilege('anon', 'public.office_config()', 'execute')
+                      and not has_function_privilege('anon', 'public.update_office_settings(jsonb, jsonb)', 'execute'),
+                      'anon cannot call the office settings functions');
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+do $$ begin
+  begin
+    perform public.update_office_settings(null, '{}');
+    raise exception 'FAIL: null profile accepted';
+  exception when check_violation then raise notice 'ok - office settings must be JSON objects';
+  end;
+  begin
+    perform public.update_office_settings('{}', '{"forum": "drt"}');
+    raise exception 'FAIL: unknown forum accepted';
+  exception when check_violation then raise notice 'ok - only known forum / margin values are stored';
+  end;
+  begin
+    perform public.update_office_settings('{}', jsonb_build_object('x', repeat('a', 5000)));
+    raise exception 'FAIL: oversized settings accepted';
+  exception when check_violation then raise notice 'ok - oversized settings are refused';
+  end;
+end $$;
+rollback;
+
+-- Approver and field staff cannot change what the plaint prints.
+insert into public.parties (id, org_id, case_id, role, name) values
+  ('e0000000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', 'c0000000-0000-0000-0000-000000000001', 'borrower', 'M/s Demo Firm');
+insert into public.loans (id, org_id, case_id) values
+  ('e1000000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', 'c0000000-0000-0000-0000-000000000001');
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000a1');
+update public.parties set through_capacity = 'Proprietor', through_name = 'X' where id = 'e0000000-0000-0000-0000-000000000001';
+update public.loans set executed_docs = '[{"title":"X","date":null}]' where id = 'e1000000-0000-0000-0000-000000000001';
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000f1');
+update public.parties set through_capacity = 'Proprietor', through_name = 'X' where id = 'e0000000-0000-0000-0000-000000000001';
+update public.loans set executed_docs = '[{"title":"X","date":null}]' where id = 'e1000000-0000-0000-0000-000000000001';
+reset role;
+select pg_temp.expect((select through_name from public.parties where id = 'e0000000-0000-0000-0000-000000000001') is null
+                      and (select executed_docs from public.loans where id = 'e1000000-0000-0000-0000-000000000001') = '[]'::jsonb,
+                      'approver and field staff cannot edit "through" or executed documents');
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000d1');
+update public.loans set executed_docs = '[{"title":"Demand Promissory Note","date":"2023-07-12"}]' where id = 'e1000000-0000-0000-0000-000000000001';
+reset role;
+select pg_temp.expect((select jsonb_array_length(executed_docs) from public.loans where id = 'e1000000-0000-0000-0000-000000000001') = 1,
+                      'the assigned drafter can record executed documents');
+rollback;
+
+begin;
+do $$ begin
+  begin
+    update public.organizations set office_profile = '[]' where id = '11111111-1111-1111-1111-111111111111';
+    raise exception 'FAIL: office_profile accepted a non-object';
+  exception when check_violation then raise notice 'ok - office_profile must be a JSON object';
+  end;
+  begin
+    insert into public.parties (org_id, case_id, role, name, through_capacity)
+    values ('11111111-1111-1111-1111-111111111111', 'c0000000-0000-0000-0000-000000000001', 'borrower', 'M/s Demo', 'Proprietor');
+    raise exception 'FAIL: "through" capacity accepted without a name';
+  exception when check_violation then raise notice 'ok - "through" needs both capacity and name';
+  end;
+  begin
+    insert into public.loans (org_id, case_id, executed_docs)
+    values ('11111111-1111-1111-1111-111111111111', 'c0000000-0000-0000-0000-000000000001', '{}');
+    raise exception 'FAIL: executed_docs accepted a non-array';
+  exception when check_violation then raise notice 'ok - executed_docs must be a JSON array';
+  end;
+  begin
+    update public.cases set expenses_paise = -1 where id = 'c0000000-0000-0000-0000-000000000001';
+    raise exception 'FAIL: negative expenses accepted';
+  exception when check_violation then raise notice 'ok - claim heads cannot be negative';
+  end;
+end $$;
+rollback;
+
 select pg_temp.expect(
   not exists (select 1 from pg_tables where schemaname = 'public' and not rowsecurity),
   'RLS enabled on every public table');

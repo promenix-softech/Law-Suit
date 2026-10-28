@@ -74,6 +74,7 @@ export function BundleForm({ caseId, documents }: { caseId: string; documents: D
   const [pending, start] = useTransition();
   const [result, setResult] = useState<ActionResult | null>(null);
   const [picked, setPicked] = useState<{ document_id: string; title: string }[]>([]);
+  const [includeIndex, setIncludeIndex] = useState(false);
 
   const toggle = (id: string) =>
     setPicked((p) => (p.some((x) => x.document_id === id) ? p.filter((x) => x.document_id !== id) : [...p, { document_id: id, title: "" }]));
@@ -93,7 +94,7 @@ export function BundleForm({ caseId, documents }: { caseId: string; documents: D
                 </label>
                 {i >= 0 && (
                   <>
-                    <span className="pill pill-violet">Exhibit {exhibitMark(i)}</span>
+                    <span className="pill pill-violet">Annexure {exhibitMark(i)}</span>
                     <input
                       className="input-glass max-w-72 flex-1 py-1 text-sm"
                       placeholder="Title, e.g. Loan agreement dated …"
@@ -110,12 +111,19 @@ export function BundleForm({ caseId, documents }: { caseId: string; documents: D
       ) : (
         <p className="muted text-sm">No scans uploaded; the bundle will hold the pleadings only.</p>
       )}
+      <p className="muted text-xs">
+        Needs the approved plaint and list of documents. Every page is stamped with its page number and each annexure&apos;s first page with its mark.
+      </p>
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={includeIndex} onChange={(e) => setIncludeIndex(e.target.checked)} />
+        Add the system&apos;s index page at the front (optional — the list of documents is the index)
+      </label>
       <button
         className="btn btn-primary"
         disabled={pending}
         onClick={() =>
           start(async () => {
-            const r = await queueBundle(caseId, picked);
+            const r = await queueBundle(caseId, picked, includeIndex);
             setResult(r);
             if (r.ok) router.refresh();
           })

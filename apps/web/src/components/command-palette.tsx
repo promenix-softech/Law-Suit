@@ -84,6 +84,7 @@ export function CommandPalette({ lang, roles }: { lang: Lang; roles: string[] })
             { key: "a:batches", label: t("Bulk upload"), group: "action" as const, run: go("/dashboard/batches") },
             { key: "a:audit", label: t("Audit log"), group: "action" as const, run: go("/dashboard/audit") },
             { key: "a:billing", label: t("Billing"), group: "action" as const, run: go("/dashboard/billing") },
+            { key: "a:settings", label: t("Office settings"), group: "action" as const, run: go("/dashboard/settings") },
           ]
         : []),
       {

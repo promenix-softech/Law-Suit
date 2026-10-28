@@ -63,7 +63,7 @@ export interface CourtFeeResult {
 /** Court fee on a money suit in a civil/commercial court of the given state. */
 export function courtFeeFor(state: StateCode, claimPaise: Paise): CourtFeeResult {
   if (state === "MH") {
-    const act = "Maharashtra Court-fees Act";
+    const act = "Maharashtra Court-fees Act, 1959";
     try {
       return { feePaise: maharashtraCourtFee(claimPaise), act, note: null };
     } catch (e) {

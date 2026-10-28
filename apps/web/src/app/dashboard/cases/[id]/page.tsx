@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { CASE_STATUSES, commercialCheck, courtFeeFor, formatINR, isStateCode, recoveryForum, stateName } from "@civil-suits/domain";
+import { CASE_STATUSES, courtFeeFor, formatINR, isStateCode, recoveryForum, stateName } from "@civil-suits/domain";
 import { DraftPreview } from "@/components/draft-preview";
 import { TopBar } from "@/components/top-bar";
 import type { T } from "@/lib/i18n";
@@ -16,6 +16,11 @@ import { AssignForm } from "./assign-form";
 import { OcrControls } from "./ocr-controls";
 import { BundleForm, ExportCase, MakePdf } from "./job-controls";
 import { AssignTask } from "../../tasks/task-controls";
+import { formatDocumentLines, readExecutedDocs } from "@/lib/particulars";
+import { SuitParticulars } from "./particulars-form";
+
+const rupeesText = (paise: number | string | null) => (paise == null || Number(paise) === 0 ? "" : String(Number(paise) / 100));
+const isoToDot = (d: string | null) => (d ? d.split("-").reverse().join(".") : "");
 
 const BUNDLE_READY = ["approved", "notary_stamp", "efiling_ready", "filed"];
 type JobRow = {
@@ -120,7 +125,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
   const { data: c } = await supabase
     .from("cases")
     .select(
-      "id, org_id, case_no_internal, status, suit_type, claim_amount_paise, is_commercial, needs_12a, urgent_interim_relief, assigned_drafter, assigned_approver, courts(name, state), bank_branches(branch_name, ifsc, banks(name)), parties(id, name, role, address, aadhaar_last4, position), loans(facility_type, account_last4, sanction_date, sanction_amount_paise, roi_bps, npa_date, outstanding_paise, interest_upto_date), notices(id, dispatch_mode, tracking_no, sent_at), mediations(id, authority, applied_at, outcome, report_date, report_path)",
+      "id, org_id, case_no_internal, status, suit_type, claim_amount_paise, is_commercial, needs_12a, urgent_interim_relief, assigned_drafter, assigned_approver, courts(name, state), bank_branches(branch_name, ifsc, banks(name)), signatory_name, signatory_designation, signatory_age, penal_interest_paise, expenses_paise, parties(id, name, role, address, aadhaar_last4, position, through_capacity, through_name), loans(id, facility_type, account_last4, sanction_date, sanction_amount_paise, roi_bps, npa_date, outstanding_paise, interest_upto_date, application_date, purpose, executed_docs, tenure_months, created_at), notices(id, dispatch_mode, tracking_no, sent_at), mediations(id, authority, applied_at, outcome, report_date, report_path)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -201,6 +206,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
   const nameOf = (uid: string | null) => [...drafters, ...approvers].find((p) => p.id === uid)?.name ?? "—";
 
   const roleNames = (roles ?? []).map((r) => r.role as string);
+  if (roleNames.length > 0 && roleNames.every((r) => r === "field")) redirect("/dashboard/tasks");
   const isApprover = roleNames.includes("approver");
   const canEdit = roleNames.includes("admin") || c.assigned_drafter === auth.user.id;
 
@@ -230,8 +236,8 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
   const loan = one(c.loans);
   const branch = one(c.bank_branches) as { branch_name: string; ifsc: string | null; banks: Rel<{ name: string }> } | null;
   const claim = c.claim_amount_paise == null ? null : Number(c.claim_amount_paise);
-  const check =
-    claim == null ? null : commercialCheck({ specifiedValuePaise: claim, lenderIsBank: true, urgentInterimRelief: c.urgent_interim_relief });
+  // The suit type follows the office's forum setting (admin); the case row already carries it.
+  const check = claim == null ? null : { needs12A: c.needs_12a, isCommercial: c.is_commercial };
   const forum = claim == null ? null : recoveryForum({ claimPaise: claim, lenderIsBank: true });
   const isDrt = forum?.forum === "drt";
   const [statusLabel, statusTone] = caseStatus(c.status, t);
@@ -483,6 +489,39 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
           </Section>
         )}
 
+        {canEdit && !isDrt && (
+          <Section
+            title={t("Suit particulars")}
+            subtitle="Printed in the plaint, decree, list of documents and affidavit in the office format · amounts totalled in code"
+            delay={330}
+          >
+            <SuitParticulars
+              initial={{
+                caseId: c.id,
+                signatoryName: c.signatory_name ?? "",
+                signatoryDesignation: c.signatory_designation ?? "",
+                signatoryAge: c.signatory_age == null ? "" : String(c.signatory_age),
+                penalInterest: c.penal_interest_paise == null ? "" : String(Number(c.penal_interest_paise) / 100),
+                expenses: rupeesText(c.expenses_paise),
+                parties: parties.map((p) => ({ id: p.id, throughCapacity: p.through_capacity ?? "", throughName: p.through_name ?? "" })),
+                loans: [...(c.loans ?? [])]
+                  .sort((a, b) => a.created_at.localeCompare(b.created_at))
+                  .map((l) => ({
+                    id: l.id,
+                    applicationDate: isoToDot(l.application_date),
+                    purpose: l.purpose ?? "",
+                    tenureMonths: l.tenure_months == null ? "" : String(l.tenure_months),
+                    executedDocs: formatDocumentLines(readExecutedDocs(l.executed_docs)),
+                  })),
+              }}
+              partyNames={parties.map((p) => p.name)}
+              loanNames={[...(c.loans ?? [])]
+                .sort((a, b) => a.created_at.localeCompare(b.created_at))
+                .map((l) => `${l.facility_type ?? "Loan"}${l.account_last4 ? ` · A/c XXXX${l.account_last4}` : ""}`)}
+            />
+          </Section>
+        )}
+
         <Section title={t("Drafts")} subtitle="Generated from verified case data · approval enforced by the database" delay={340}>
           {canEdit && (
             <div className="flex flex-wrap gap-3">
@@ -492,12 +531,18 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
               ) : (
                 <>
                   <GenerateDraft caseId={c.id} kind="plaint" label="Generate plaint" />
+                  <GenerateDraft caseId={c.id} kind="list_of_documents" label="Generate list of documents" />
                   <GenerateDraft caseId={c.id} kind="vakalatnama" label="Generate vakalatnama" />
                   <GenerateDraft
                     caseId={c.id}
                     kind="affidavit"
                     label={c.is_commercial ? "Generate statement of truth" : "Generate affidavit"}
                   />
+                  <GenerateDraft caseId={c.id} kind="address_memo" label="Generate address memo" />
+                  {c.suit_type === "summary_o37" && <GenerateDraft caseId={c.id} kind="draft_decree" label="Generate draft decree" />}
+                  <GenerateDraft caseId={c.id} kind="bbe_certificate" label="Generate Bankers' Books certificate" />
+                  <GenerateDraft caseId={c.id} kind="court_fee_letter" label="Generate court-fee letter to bank" />
+                  <GenerateDraft caseId={c.id} kind="efiling_sheet" label="Generate e-filing data sheet" />
                   {c.is_commercial && c.urgent_interim_relief && (
                     <GenerateDraft caseId={c.id} kind="interim_application" label="Generate interim application" />
                   )}

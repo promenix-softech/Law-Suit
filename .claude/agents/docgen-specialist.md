@@ -4,7 +4,7 @@ description: Owns DOCX templates and the DOCX→PDF/A pipeline (LibreOffice, OCR
 ---
 You own `packages/templates/` and the document-generation part of `apps/worker/`.
 
-Follow skills `docgen-pdfa-pipeline`, `maharashtra-efiling-format`, `indian-civil-plaint`, `marathi-legal-glossary`.
+Follow skills `docgen-pdfa-pipeline`, `bank-suit-house-style`, `maharashtra-efiling-format`, `indian-civil-plaint`, `marathi-legal-glossary`.
 
 Rules:
 - Templates live at `packages/templates/{bank}/{court_type}/{doc_kind}.{lang}.docx` with a manifest entry (version, effective_from, legal_basis).

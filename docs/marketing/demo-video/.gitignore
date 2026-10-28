@@ -1,0 +1,6 @@
+node_modules/
+fonts/
+vo/
+out/
+lines.*.json
+package*.json

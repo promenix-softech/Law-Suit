@@ -1,0 +1,72 @@
+{
+  "voices": { "en": "aditya", "mr": "aditya" },
+  "scenes": [
+    {
+      "id": "s01-intro",
+      "min": 6.5,
+      "lead": 2.6,
+      "en": "Promenix Softech presents... Civil Suits. Bank recovery litigation, automated — from the scanned loan file to the e-filing bundle.",
+      "mr": "प्रोमेनिक्स सॉफ्टेक सादर करत आहे... सिव्हिल सूट्स. बँक वसुली दाव्यांचे काम — स्कॅन केलेल्या कर्ज-फाईलपासून ई-फायलिंग बंडलपर्यंत, पूर्णपणे ऑटोमेटेड."
+    },
+    {
+      "id": "s02-problem",
+      "min": 7,
+      "en": "Every recovery suit begins as a thick loan file. Names, account numbers and amounts are typed again and again — into the plaint, the vakalatnama, the affidavit and a dozen other papers. One wrong rate, one wrong paragraph reference, and the suit comes back.",
+      "mr": "प्रत्येक वसुली दावा एका जाड कर्ज-फाईलपासून सुरू होतो. नावे, खाते क्रमांक, रकमा — पुन्हा पुन्हा टाइप कराव्या लागतात: फिर्याद, वकीलपत्र, प्रतिज्ञापत्र आणि इतर डझनभर कागदपत्रांत. एक व्याजदर चुकला, एक परिच्छेद-संदर्भ चुकला, की दावा परत येतो."
+    },
+    {
+      "id": "s03-upload",
+      "min": 7,
+      "en": "With Civil Suits, the clerk simply uploads the scans. Indian-language OCR reads every page, and AI picks out the borrowers, facilities, rates and dues. Every value is linked to its source page, and checked by a person before it is used.",
+      "mr": "सिव्हिल सूट्समध्ये क्लार्क फक्त स्कॅन अपलोड करतो. भारतीय भाषांसाठीचा ओसीआर प्रत्येक पान वाचतो, आणि एआय कर्जदार, सुविधा, व्याजदर आणि थकबाकी शोधून काढतो. प्रत्येक माहिती मूळ पानाशी जोडलेली, आणि वापरण्यापूर्वी माणसाने तपासलेली."
+    },
+    {
+      "id": "s04-compute",
+      "min": 6,
+      "en": "Amounts are never guessed. Principal, penal interest, expenses and the Maharashtra court fee are calculated by tested code — right down to the paisa.",
+      "mr": "रकमांचा अंदाज कधीच नाही. मुद्दल, दंडव्याज, खर्च आणि महाराष्ट्र कोर्ट फी — सगळे तपासलेल्या कोडने, अगदी पैशापर्यंत अचूक मोजले जाते."
+    },
+    {
+      "id": "s05-suitset",
+      "min": 8,
+      "en": "Then one click builds the complete suit set, in your office's own format: demand notice, plaint, list of documents, vakalatnama, affidavit, address memo, draft decree, bank certificate and court-fee letter. The same facts, the same rates, the same numbers — in every single paper.",
+      "mr": "आणि मग एका क्लिकमध्ये, तुमच्या ऑफिसच्या स्वतःच्या फॉरमॅटमध्ये, संपूर्ण दावा-संच तयार: डिमांड नोटीस, फिर्याद, कागदपत्रांची यादी, वकीलपत्र, प्रतिज्ञापत्र, पत्ता मेमो, ड्राफ्ट डिक्री, बँक प्रमाणपत्र आणि कोर्ट-फी पत्र. प्रत्येक कागदात तीच माहिती, तेच व्याजदर, तेच आकडे."
+    },
+    {
+      "id": "s06-approval",
+      "min": 6,
+      "en": "Every draft goes to an approver who can never be its own author — a rule enforced by the database itself. And every action is written to a tamper-evident audit log.",
+      "mr": "प्रत्येक मसुदा अशा अप्रूव्हरकडे जातो, जो त्याचा लेखक कधीच असू शकत नाही — हा नियम थेट डेटाबेसमध्ये. आणि प्रत्येक कृती बदलता न येणाऱ्या ऑडिट लॉगमध्ये नोंदवली जाते."
+    },
+    {
+      "id": "s07-bundle",
+      "min": 7,
+      "en": "Approved papers and annexures become a single e-filing bundle: PDF-A, bookmarked, every page numbered and every annexure marked — ready for the court portal, with the portal data sheet already filled in.",
+      "mr": "मंजूर कागदपत्रे आणि जोडपत्रे मिळून एकच ई-फायलिंग बंडल: पीडीएफ-ए, बुकमार्कसह, प्रत्येक पानाला क्रमांक आणि प्रत्येक जोडपत्राला खूण — कोर्ट पोर्टलसाठी तयार, आणि पोर्टलची माहितीही आधीच भरलेली."
+    },
+    {
+      "id": "s08-roles",
+      "min": 6.5,
+      "en": "Admins run the office. Drafters, approvers and field staff see only what their work needs. Personal details are encrypted, and the AI only ever sees masked placeholders.",
+      "mr": "ॲडमिन ऑफिस चालवतो. ड्राफ्टर, अप्रूव्हर आणि फील्ड स्टाफला फक्त त्यांच्या कामापुरतेच दिसते. वैयक्तिक माहिती एन्क्रिप्टेड असते, आणि एआयला फक्त झाकलेलीच माहिती दिसते."
+    },
+    {
+      "id": "s09-dashboard",
+      "min": 5.5,
+      "en": "A live dashboard follows every case, from the bank's call to filing, with deadline alerts — in English, or in Marathi.",
+      "mr": "लाइव्ह डॅशबोर्डवर प्रत्येक प्रकरण दिसते — बँकेच्या कॉलपासून दावा दाखल होईपर्यंत, मुदतीच्या सूचनांसह — इंग्रजीत किंवा मराठीत."
+    },
+    {
+      "id": "s10-benefits",
+      "min": 9,
+      "en": "The result? A suit that took about five and a half hours of drafting now takes about one and a quarter. At a hundred and fifty suits a month, that frees more than six hundred staff hours — so your office can grow without growing its headcount.",
+      "mr": "परिणाम? ज्या दाव्याला सुमारे साडेपाच तास लागायचे, तो आता सुमारे सव्वा तासात. महिन्याला दीडशे दाव्यांमागे सहाशेहून अधिक तास वाचतात — म्हणजे स्टाफ न वाढवता तुमचे ऑफिस वाढू शकते."
+    },
+    {
+      "id": "s11-outro",
+      "min": 7,
+      "en": "Civil Suits, by Promenix Softech. Built for India's recovery lawyers. Book your demo today.",
+      "mr": "सिव्हिल सूट्स — प्रोमेनिक्स सॉफ्टेककडून. भारतातील वसुली वकिलांसाठी. आजच तुमचा डेमो बुक करा."
+    }
+  ]
+}

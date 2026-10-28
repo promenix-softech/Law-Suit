@@ -15,13 +15,13 @@ describe("states", () => {
 describe("courtFeeFor", () => {
   it("uses the Maharashtra Court-fees Act in Maharashtra", () => {
     const r = courtFeeFor("MH", rupees(5_00_000));
-    expect(r).toEqual({ feePaise: maharashtraCourtFee(rupees(5_00_000)), act: "Maharashtra Court-fees Act", note: null });
+    expect(r).toEqual({ feePaise: maharashtraCourtFee(rupees(5_00_000)), act: "Maharashtra Court-fees Act, 1959", note: null });
   });
 
   it("returns no fee (not a guess) where the Maharashtra slab is unverified", () => {
     const r = courtFeeFor("MH", rupees(50_000));
     expect(r.feePaise).toBeNull();
-    expect(r.act).toBe("Maharashtra Court-fees Act");
+    expect(r.act).toBe("Maharashtra Court-fees Act, 1959");
     expect(r.note).toMatch(/LEGAL_REVIEW/);
   });
 

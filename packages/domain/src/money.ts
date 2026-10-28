@@ -13,13 +13,22 @@ export function assertPaise(value: number, name = "amount"): void {
   }
 }
 
-/** Indian digit grouping, e.g. 2500000 paise -> "₹25,000.00". */
-export function formatINR(paise: Paise): string {
-  assertPaise(paise);
-  const rupeePart = Math.floor(paise / 100);
-  const p = String(paise % 100).padStart(2, "0");
+const groupIndian = (rupeePart: number) => {
   const s = String(rupeePart);
   const last3 = s.slice(-3);
   const rest = s.slice(0, -3).replace(/\B(?=(\d{2})+(?!\d))/g, ",");
-  return `₹${rest ? rest + "," : ""}${last3}.${p}`;
+  return `${rest ? rest + "," : ""}${last3}`;
+};
+
+/** Pleading style used in plaints and court papers: "Rs. 14,45,310/-"; paise only when present. */
+export function formatRs(paise: Paise): string {
+  assertPaise(paise);
+  const p = paise % 100;
+  return `Rs. ${groupIndian(Math.floor(paise / 100))}${p ? `.${String(p).padStart(2, "0")}` : ""}/-`;
+}
+
+/** Indian digit grouping, e.g. 2500000 paise -> "₹25,000.00". */
+export function formatINR(paise: Paise): string {
+  assertPaise(paise);
+  return `₹${groupIndian(Math.floor(paise / 100))}.${String(paise % 100).padStart(2, "0")}`;
 }

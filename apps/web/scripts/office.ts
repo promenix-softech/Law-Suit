@@ -9,14 +9,19 @@
  *   create   --name "Patil & Associates" --admin-email admin@firm.in --admin-name "A. Patil" [--gstin ...]
  *   add-user --office <org id> --email ... --name ... --role admin|drafter|approver|field
  *   add-court --office <org id> --name "Civil Judge Senior Division, Pune" --district Pune --type civil|commercial|drt --state MH
- *   add-bank  --office <org id> --bank "State Bank of India" --code SBI --branch "Shivajinagar, Pune" --ifsc SBIN0001234
+ *   add-bank  --office <org id> --bank "State Bank of India" --code SBI --branch "Shivajinagar, Pune" --ifsc SBIN0001234 [--address "..."]
+ *   set-profile --office <org id> --file office-profile.json
+ *             firm name, advocates, advocate code, sanad no., address, contact, fee account — printed on
+ *             the vakalatnama and the court-fee letter. Keep the JSON outside the repository.
  *
  * New users get an invitation email from Supabase Auth to set their own password.
  */
+import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { isStateCode } from "@civil-suits/domain";
+import { OfficeProfileSchema } from "../src/lib/office-profile";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const secret = process.env.SUPABASE_SECRET_KEY;
@@ -85,7 +90,7 @@ async function main() {
   const { values: v } = parseArgs({
     args: rest,
     options: Object.fromEntries(
-      ["name", "admin-email", "admin-name", "gstin", "office", "email", "role", "district", "type", "state", "bank", "code", "branch", "ifsc"].map(
+      ["name", "admin-email", "admin-name", "gstin", "office", "email", "role", "district", "type", "state", "bank", "code", "branch", "ifsc", "address", "file"].map(
         (k) => [k, { type: "string" as const }],
       ),
     ),
@@ -146,12 +151,19 @@ async function main() {
       "bank",
     );
     await must(
-      db.from("bank_branches").insert({ org_id: orgId, bank_id: bank.id, branch_name: Name.parse(v.branch), ifsc }).select("id").single(),
+      db.from("bank_branches")
+        .insert({ org_id: orgId, bank_id: bank.id, branch_name: Name.parse(v.branch), ifsc, address: v.address ? z.string().trim().max(400).parse(v.address) : null })
+        .select("id").single(),
       "branch",
     );
     console.log(`Added ${code} / ${v.branch} to "${org.name}".`);
+  } else if (command === "set-profile") {
+    if (!v.file) throw new Error("--file office-profile.json is required");
+    const profile = OfficeProfileSchema.parse(JSON.parse(readFileSync(v.file, "utf8")));
+    await must(db.from("organizations").update({ office_profile: profile }).eq("id", orgId).select("id").single(), "office profile");
+    console.log(`Office profile set for "${org.name}" (${profile.advocates?.length ?? 0} advocates).`);
   } else {
-    console.error("Commands: list | create | add-user | add-court | add-bank (see the header of scripts/office.ts)");
+    console.error("Commands: list | create | add-user | add-court | add-bank | set-profile (see the header of scripts/office.ts)");
     process.exit(1);
   }
 }

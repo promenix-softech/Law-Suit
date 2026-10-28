@@ -25,7 +25,7 @@ export function buildBundleIndex(input: CaptionInput & { entries: BundleEntry[] 
     meta: [],
     to: [],
     blocks: [
-      ...caption(input, { addresses: false }),
+      ...caption(input, { full: false }),
       { kind: "center", bold: true, lines: ["INDEX"] },
       {
         kind: "table",

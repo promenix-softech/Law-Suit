@@ -16,8 +16,8 @@ describe("buildInterimApplication", () => {
   const t = toPlainText(buildInterimApplication({ ...base, claimPaise: rupees(8_90_000), filingDate: "2026-10-22" }));
 
   it("is filed in the commercial suit and cites the claim from code", () => {
-    expect(t).toContain("INTERIM APPLICATION NO. ________ OF 2026");
-    expect(t).toContain("COMMERCIAL SUIT NO. ________ OF 2026");
+    expect(t).toContain("INTERIM APPLICATION NO. __________/2026");
+    expect(t).toContain("COMMERCIAL SUIT NO. __________/2026");
     expect(t).toContain("₹8,90,000.00");
   });
 

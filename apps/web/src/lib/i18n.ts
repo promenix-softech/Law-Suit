@@ -34,6 +34,8 @@ const MR: Record<string, string> = {
   "Audit log": "ऑडिट लॉग",
   "Bulk upload": "बल्क अपलोड",
   Billing: "बिलिंग",
+  "Office settings": "कार्यालय सेटिंग्ज",
+  "Suit particulars": "दाव्याचे तपशील",
   "Sign out": "बाहेर पडा",
   "no role": "भूमिका नाही",
   Search: "शोधा",

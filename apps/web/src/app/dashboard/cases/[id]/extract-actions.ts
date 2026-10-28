@@ -2,10 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { commercialCheck } from "@civil-suits/domain";
+import { commercialCheck, suitRoute } from "@civil-suits/domain";
 import { encryptText } from "@/lib/crypto";
 import { FIELD_BY_KEY, normalise } from "@/lib/extract/fields";
 import { decodeField, encodeField } from "@/lib/extract/stored";
+import { loadOfficeConfig, OFFICE_CONFIG_ERROR } from "@/lib/office-profile";
 import { createClient } from "@/lib/supabase/server";
 import type { ActionResult } from "./actions";
 
@@ -138,14 +139,17 @@ export async function applyVerifiedFields(caseId: string): Promise<ActionResult>
   if (v.has("outstanding_amount")) {
     const claim = Number(v.get("outstanding_amount"));
     const check = commercialCheck({ specifiedValuePaise: claim, lenderIsBank: true, urgentInterimRelief: c.urgent_interim_relief });
+    const config = await loadOfficeConfig(supabase);
+    if (!config) return { ok: false, error: OFFICE_CONFIG_ERROR };
+    const route = suitRoute(check, config.settings.forum, c.suit_type);
     const { error } = await supabase
       .from("cases")
       .update({
         claim_amount_paise: claim,
         specified_value_paise: claim,
-        is_commercial: check.isCommercial,
-        needs_12a: check.needs12A,
-        suit_type: check.isCommercial ? "commercial" : c.suit_type === "commercial" ? "ordinary" : c.suit_type,
+        is_commercial: route.isCommercial,
+        needs_12a: route.needs12A,
+        suit_type: route.suitType,
       })
       .eq("id", caseId);
     if (error) return fail("the claim");

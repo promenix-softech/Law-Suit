@@ -5,9 +5,16 @@ const A4 = { w: 595.28, h: 841.89 };
 
 describe("orderParts", () => {
   const d = (key: string) => ({ key, title: key, pages: 1 });
-  it("puts the plaint first, annexures next, then vakalatnama and SOT", () => {
-    const parts = orderParts([d("statement_of_truth"), d("vakalatnama"), d("plaint")], [d("annex-0"), d("annex-1")]);
-    expect(parts.map((p) => p.key)).toEqual(["plaint", "annex-0", "annex-1", "vakalatnama", "statement_of_truth"]);
+  it("puts the plaint first, annexures next, then the SOT", () => {
+    const parts = orderParts([d("statement_of_truth"), d("plaint")], [d("annex-0"), d("annex-1")]);
+    expect(parts.map((p) => p.key)).toEqual(["plaint", "annex-0", "annex-1", "statement_of_truth"]);
+  });
+  it("follows the office's filed order and leaves the draft decree out", () => {
+    const parts = orderParts(
+      [d("draft_decree"), d("address_memo"), d("affidavit"), d("list_of_documents"), d("vakalatnama"), d("plaint")],
+      [d("annex-0")],
+    );
+    expect(parts.map((p) => p.key)).toEqual(["plaint", "vakalatnama", "list_of_documents", "annex-0", "address_memo", "affidavit"]);
   });
   it("needs the plaint", () => {
     expect(() => orderParts([d("vakalatnama")], [])).toThrow(/plaint/);
@@ -47,7 +54,13 @@ describe("pdfmarks", () => {
     const marks = pdfmarks("CS-1", planPages([{ key: "p", title: "Plaint", pages: 3 }, { key: "a", title: "Deed", pages: 1, mark: "A" }], 1));
     expect(marks.match(/\/OUT pdfmark/g)).toHaveLength(3);
     expect(marks).toContain("/Page 5 ");
-    expect(marks).toContain(pdfHexString("Exhibit A – Deed"));
+    expect(marks).toContain(pdfHexString("Annexure A – Deed"));
+  });
+  it("has no index bookmark when the bundle has no system index", () => {
+    const marks = pdfmarks("CS-1", planPages([{ key: "p", title: "Plaint", pages: 3 }], 0));
+    expect(marks.match(/\/OUT pdfmark/g)).toHaveLength(1);
+    expect(marks).toContain("/Page 1 ");
+    expect(marks).not.toContain(pdfHexString("Index"));
   });
 });
 

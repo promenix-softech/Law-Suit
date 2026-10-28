@@ -76,6 +76,8 @@ export default async function DashboardPage() {
 
   const orgName = one(profile?.organizations as Rel<{ name: string }>)?.name;
   const roleNames = (roles ?? []).map((r) => r.role as string);
+  // Field staff only work their tasks; the case file (parties, loans, drafts) is for drafters, approvers and admins.
+  const fieldOnly = roleNames.length > 0 && roleNames.every((r) => r === "field");
   const isApprover = roleNames.includes("approver");
   // Maker-checker: an approver's queue never shows their own drafts.
   const queue = (pending ?? []).filter((d) => d.created_by !== auth.user.id);
@@ -255,7 +257,7 @@ export default async function DashboardPage() {
           </div>
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {tasks?.map((tk) => (
-              <Link key={tk.id} href={`/dashboard/cases/${tk.case_id}`} className="glass-card block p-4">
+              <Link key={tk.id} href={fieldOnly ? "/dashboard/tasks" : `/dashboard/cases/${tk.case_id}`} className="glass-card block p-4">
                 <p className="font-semibold">{title(tk.kind)}</p>
                 <p className="muted mt-1 text-sm">
                   {one(tk.cases as Rel<{ case_no_internal: string }>)?.case_no_internal} · {title(tk.status)}

@@ -2,7 +2,10 @@ import {
   AlignmentType,
   BorderStyle,
   Document,
+  Footer,
+  Header,
   Packer,
+  PageNumber,
   Paragraph,
   Table,
   TableCell,
@@ -12,7 +15,7 @@ import {
   convertInchesToTwip,
   convertMillimetersToTwip,
 } from "docx";
-import { LEGAL_REVIEW, type DocModel } from "./model";
+import { LEGAL_REVIEW, alphaMark, type DocModel } from "./model";
 
 interface Profile {
   /** Half-points. */
@@ -66,9 +69,24 @@ const BOX_BORDER = { style: BorderStyle.SINGLE, size: 8, color: "000000" };
 const NO_BORDER = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
 type Align = (typeof AlignmentType)[keyof typeof AlignmentType];
 
+/**
+ * Margins for court papers, an office setting chosen by its admin. "office": the margins of the
+ * office's own filed papers (top/bottom 1.26", left 1.5", right 1.0"), accepted on e-filing;
+ * "efiling_rules": the e-Filing Rules profile above.
+ */
+export type CourtMargins = "office" | "efiling_rules";
+
+const OFFICE_MARGINS: Profile["margin"] = {
+  top: convertInchesToTwip(1.26),
+  bottom: convertInchesToTwip(1.26),
+  left: convertInchesToTwip(1.5),
+  right: convertInchesToTwip(1.0),
+};
+
 /** Renders a template DocModel as DOCX. [[LEGAL_REVIEW]] paragraphs are highlighted. */
-export async function renderDocx(doc: DocModel): Promise<Buffer> {
-  const pf = PROFILES[doc.layout ?? "efiling"];
+export async function renderDocx(doc: DocModel, opts: { courtMargins?: CourtMargins } = {}): Promise<Buffer> {
+  const base = PROFILES[doc.layout ?? "efiling"];
+  const pf = (doc.layout ?? "efiling") === "efiling" && (opts.courtMargins ?? "office") === "office" ? { ...base, margin: OFFICE_MARGINS } : base;
   const textWidth = A4.width - pf.margin.left - pf.margin.right;
   const twips = (percent: number) => Math.round((textWidth * percent) / 100);
 
@@ -117,6 +135,21 @@ export async function renderDocx(doc: DocModel): Promise<Buffer> {
     });
   };
 
+  /** Borderless two-column block: advocate's signature left, party's right. */
+  const signColumns = (left: string[], right: string[]) => {
+    const cell = (lines: string[], align: Align) =>
+      new TableCell({
+        width: { size: Math.round(textWidth / 2), type: WidthType.DXA },
+        borders: { top: NO_BORDER, bottom: NO_BORDER, left: NO_BORDER, right: NO_BORDER },
+        children: (lines.length ? lines : [""]).map((l) => new Paragraph({ alignment: align, spacing: { line: 276, after: 0 }, children: [run(l, { bold: !!l })] })),
+      });
+    return new Table({
+      width: { size: textWidth, type: WidthType.DXA },
+      columnWidths: [Math.round(textWidth / 2), Math.round(textWidth / 2)],
+      rows: [new TableRow({ children: [cell(left, AlignmentType.LEFT), cell(right, AlignmentType.RIGHT)] })],
+    });
+  };
+
   const children: (Paragraph | Table)[] = [
     ...(doc.title ? [para([run(doc.title, { bold: true })], AlignmentType.CENTER)] : []),
     ...doc.meta.map((m) => para([run(m)], AlignmentType.RIGHT)),
@@ -134,7 +167,29 @@ export async function renderDocx(doc: DocModel): Promise<Buffer> {
         ),
       );
     else if (b.kind === "fields") b.rows.forEach(([k, v]) => children.push(para([run(`${k}: `, { bold: true }), run(v)])));
-    else if (b.kind === "list") b.items.forEach((t, i) => children.push(para([run(`${i + 1}. ${t}`)])));
+    else if (b.kind === "list")
+      b.items.forEach((t, i) =>
+        children.push(
+          new Paragraph({
+            children: [run(`${b.style === "alpha" ? `${alphaMark(i)})` : `${i + 1}.`}\t${t}`)],
+            alignment: AlignmentType.JUSTIFIED,
+            indent: { left: 1080, hanging: 360 },
+            tabStops: [{ type: "left", position: 1080 }],
+            spacing: { line: pf.line, after: 120 },
+          }),
+        ),
+      );
+    else if (b.kind === "lines") {
+      // Caption-style lines: near-single spacing and no gap between them, as the office prints party blocks.
+      const alignment = b.align === "right" ? AlignmentType.RIGHT : b.align === "center" ? AlignmentType.CENTER : AlignmentType.LEFT;
+      for (const l of b.lines) {
+        children.push(
+          new Paragraph({ children: [run(l, { bold: b.bold })], alignment, indent: b.indent ? { left: 360 } : undefined, spacing: { line: 276, after: 0 } }),
+        );
+      }
+      children.push(new Paragraph({ spacing: { line: 276, after: 0 }, children: [] }));
+    }
+    else if (b.kind === "sign2") children.push(signColumns(b.left, b.right), para([]));
     else if (b.kind === "boxes") children.push(stampBoxes(b.items), para([]));
     else if (b.kind === "spacer") {
       // Blank lines keep the stamp-paper area empty; the note is a small grey hint for the clerk.
@@ -148,7 +203,46 @@ export async function renderDocx(doc: DocModel): Promise<Buffer> {
     creator: "Civil Suits",
     title: doc.title,
     description: `${doc.templateId} v${doc.version}`,
-    sections: [{ properties: { page: { size: A4, margin: pf.margin } }, children }],
+    sections: [
+      {
+        properties: { page: { size: A4, margin: pf.margin } },
+        headers:
+          doc.runningHeader || doc.letterhead?.length
+            ? {
+                default: new Header({
+                  children: [
+                    // Letterhead: firm name large and bold, then address lines small, as on the office's notices.
+                    ...(doc.letterhead ?? []).map(
+                      (l, i) =>
+                        new Paragraph({
+                          spacing: { after: 0 },
+                          children: [new TextRun({ text: l, font: FONT, bold: i === 0, size: i === 0 ? 32 : 18 })],
+                        }),
+                    ),
+                    ...(doc.runningHeader
+                      ? [new Paragraph({ alignment: AlignmentType.RIGHT, children: [run(doc.runningHeader, { bold: true })] })]
+                      : []),
+                  ],
+                }),
+              }
+            : undefined,
+        footers: doc.pageNumbers
+          ? {
+              default: new Footer({
+                children: [
+                  new Paragraph({
+                    alignment: AlignmentType.CENTER,
+                    children: [
+                      new TextRun({ font: FONT, size: 20, children: ["Page ", PageNumber.CURRENT, " of ", PageNumber.TOTAL_PAGES] }),
+                    ],
+                  }),
+                ],
+              }),
+            }
+          : undefined,
+        children,
+      },
+    ],
   });
   return Packer.toBuffer(document);
 }

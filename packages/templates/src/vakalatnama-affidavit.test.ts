@@ -1,61 +1,56 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { buildAffidavit } from "./affidavit";
-import type { CaptionInput } from "./caption";
 import { toPlainText } from "./model";
+import { captionFixture as base, officeFixture } from "./testFixtures";
 import { buildVakalatnama } from "./vakalatnama";
-
-const base: CaptionInput = {
-  court: { name: "Civil Judge Senior Division", place: "Pune" },
-  year: 2026,
-  suitType: "commercial",
-  bank: { name: "State Bank of India", branch: "Demo Branch, Pune" },
-  defendants: [
-    { name: "Vijay Sample Jadhav", role: "borrower", address: "Synthetic address, Pune" },
-    { name: "Asha Fake Jadhav", role: "guarantor", address: null },
-  ],
-};
 
 const golden = (name: string) => readFileSync(new URL(`./__golden__/${name}`, import.meta.url), "utf8");
 
-describe("buildVakalatnama", () => {
+describe("buildVakalatnama (office format)", () => {
   it("matches the golden text", () => {
-    expect(toPlainText(buildVakalatnama(base))).toBe(golden("vakalatnama.en.txt"));
+    expect(toPlainText(buildVakalatnama({ ...base, office: officeFixture }))).toBe(golden("vakalatnama.en.txt"));
   });
 
-  it("has boxes for both stamps and flags their amounts", () => {
+  it("appoints the firm and its advocates and prints the firm block", () => {
+    const t = toPlainText(buildVakalatnama({ ...base, office: officeFixture }));
+    expect(t).toContain("hereby appoint and authorise DEMO LEGAL ASSOCIATES, ADV. A. DEMO and ADV. B. SAMPLE to act, appear and plead");
+    expect(t).toContain("ADVOCATE CODE – 00000");
+    expect(t).toContain("(SANAD NO: MAH/0000/2020)");
+    expect(t).toContain(">> Exhibit No. ______");
+  });
+
+  it("prints blanks when the office profile is not set", () => {
     const t = toPlainText(buildVakalatnama(base));
-    expect(t).toContain("[ Advocates' Welfare Fund stamp ₹20 ]");
-    expect(t).toContain("[ Court-fee stamp ₹10 ]");
-    expect(t).toMatch(/\[\[LEGAL_REVIEW\]\] Stamp amounts/);
+    expect(t).toContain("appoint and authorise __________ to act");
+    expect(t).toContain("OFFICE: __________");
   });
 
-  it("names the appointed advocates with enrolment numbers", () => {
-    const t = toPlainText(buildVakalatnama({ ...base, advocates: [{ name: "A. Demo Advocate", enrolmentNo: "MAH/0000/2010" }] }));
-    expect(t).toContain("appoint and retain A. Demo Advocate");
-    expect(t).toContain("Enrolment No. MAH/0000/2010");
-  });
-
-  it("omits defendant addresses in the caption", () => {
-    expect(toPlainText(buildVakalatnama(base))).not.toContain("Synthetic address");
+  it("uses the short caption (no addresses, no officer)", () => {
+    const t = toPlainText(buildVakalatnama(base));
+    expect(t).not.toContain("Fake Industrial Estate");
+    expect(t).not.toContain("AGE:");
   });
 });
 
-describe("buildAffidavit", () => {
-  it("matches the golden text (commercial → statement of truth)", () => {
-    expect(toPlainText(buildAffidavit(base))).toBe(golden("statement_of_truth.en.txt"));
+describe("buildAffidavit (office format)", () => {
+  it("matches the golden text (affidavit in support of plaint)", () => {
+    expect(toPlainText(buildAffidavit(base))).toBe(golden("affidavit.en.txt"));
   });
 
-  it("is an affidavit in support for non-commercial suits", () => {
-    const doc = buildAffidavit({ ...base, suitType: "ordinary" });
-    expect(doc.templateId).toBe("affidavit.en");
-    const t = toPlainText(doc);
-    expect(t).toContain("AFFIDAVIT IN SUPPORT OF THE PLAINT");
-    expect(t).not.toContain("consequences of making a false statement");
+  it("is sworn by the officer for the Plaintiff (not 'Applicant') with the AFFIDAVIT page header", () => {
+    const d = buildAffidavit(base);
+    expect(d.runningHeader).toBe("AFFIDAVIT");
+    const t = toPlainText(d);
+    expect(t).toContain("I, NEHA DEMO DESHMUKH, Age: 39 years, Occupation: Service, Senior Manager of the Plaintiff Bank");
+    expect(t).toContain("Adv. for Plaintiff");
+    expect(t).not.toContain("Applicant");
   });
 
-  it("leaves the top of the first page blank for stamp paper", () => {
-    expect(buildAffidavit(base).blocks[0]).toEqual({ kind: "spacer", lines: 8, note: "Stamp paper — leave this space blank" });
+  it("is a flagged statement of truth for commercial suits", () => {
+    const d = buildAffidavit({ ...base, suitType: "commercial" });
+    expect(d.templateId).toBe("statement_of_truth.en");
+    expect(toPlainText(d)).toContain("consequences of making a false statement");
   });
 
   it("requires a defendant", () => {

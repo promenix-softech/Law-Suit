@@ -18,18 +18,25 @@ Never invent statutory wording. Where exact text is unknown, insert `[[LEGAL_REV
 9. **Valuation** for jurisdiction and court fee (computed by `maharashtraCourtFee`, never by hand/LLM).
 10. Interest claimed: rate, period, pendente lite and future interest.
 
+Office format (caption, paragraph order, wording, mistakes to avoid): skill `bank-suit-house-style`.
+
 ## Suit types
-- **Ordinary suit**: CPC verification at the end.
-- **Summary suit (Order XXXVII)**: title must carry "(Under Order XXXVII of the Code of Civil Procedure, 1908)" and the plaint must aver that no relief outside the scope of Order XXXVII is claimed `[[LEGAL_REVIEW]]` for exact averment. Order XIII-A summary judgment does not apply.
+- **Ordinary suit**: CPC verification at the end. Registry name: Special Civil Suit (Senior Division) / Regular Civil Suit (Junior Division).
+- **Summary suit (Order XXXVII)**: "(Under Order XXXVII of the Code of Civil Procedure, 1908)" immediately below the suit number (R2(1)(c)); the plaint avers (a) the suit is filed under Order XXXVII and (b) no relief outside its ambit is claimed (R2(1)(a),(b)) — so **no prayer for sale of mortgaged/hypothecated property** in an O37 plaint. Registry name: Special Summary Suit (Senior Division) / Summary Suit (Junior Division). The office files a **draft decree** (plaint paragraphs under a "DECREE" header) with it. Order XIII-A summary judgment does not apply.
 - **Commercial suit** (`commercialCheck().isCommercial` — bank lender and specified value ≥ ₹3 lakh incl. interest to filing):
   - Sec 12A pre-institution mediation is mandatory unless urgent interim relief is sought (Patil Automation v. Rakheja Engineers, (2022) 10 SCC 1 — plaint rejected under O.VII R.11 otherwise). Plead compliance and annex the failure/non-starter report.
   - **Statement of truth** in Commercial Courts format replaces ordinary verification.
 
-## Prayer clause (structure)
-(a) decree for ₹[amount] with interest @ [rate]% p.a. from [date] till filing; (b) pendente lite and future interest; (c) costs; (d) such other relief.
+## Particulars of claim and prayer
+Claim = A principal + normal interest (sum of `loans.outstanding_paise`) + B penal interest (`cases.penal_interest_paise`, NIL when 0) + C expenses (`cases.expenses_paise`) — always via `particularsOfClaim()`; that total drives valuation, court fee, forum and the commercial check.
+Prayer: (a) decree for the total with further interest at the contract rate(s) with monthly rests from the claim date till realisation, jointly and severally; (b) costs; (c) other just orders; (d) leave to amend.
 
-## Annexures / list of documents
-Sanction letter, loan agreement, statement of account with Bankers' Books certificate (BBE Act 2026, Second Schedule for electronic records — `[[LEGAL_REVIEW]]` until gazette text verified), demand notice + postal proof, 12A report (commercial), board resolution/POA of signing officer.
+## Annexures / list of documents (office order, `standardDocuments()`)
+Officer's ID proof; authority letter / POA of the officer; per facility the loan application and every executed document (DPN, agreements, guarantee, consent letter, mortgage/hypothecation papers — `loans.executed_docs`); demand notice + proof of dispatch; 12A report (commercial); Bankers' Books certificate; account statement. Marks A, B, C …; page numbers filled after pagination.
+The office still certifies print-outs under **s.2A of the Bankers' Books Evidence Act, 1891** (Oct 2026 filings). The repo's earlier note of a "BBE Act 2026" is unconfirmed — `[[LEGAL_REVIEW]]` until the owner confirms which Act applies to filings from now on.
 
 ## Vakalatnama (Maharashtra)
-Advocates' Welfare Fund stamp (statute: ₹20 — confirm with Bar Council) + court-fee stamp (₹10 subordinate courts). Leave boxes for both.
+Office format: "Exhibit No." top right, short caption, "I / We, the undersigned <bank>, <branch>, through its authorised officer … appoint and authorise <FIRM>, <ADV. …> to act, appear and plead", firm block (name, tagline, advocate code, sanad no., office address, contact, e-mail from `organizations.office_profile`), witness, "Accepted and filed on". Advocates' Welfare Fund stamp (statute: ₹20 — confirm with Bar Council) + court-fee stamp (₹10 subordinate courts) are affixed by hand.
+
+## Affidavit in support of plaint (non-commercial)
+CPC O.VI R.15(4). Officer swears he knows the facts by virtue of his post, signed the plaint for the bank, contents and prayers true per knowledge and bank records, nothing suppressed. Party is the **Plaintiff** (never "Applicant"). "I know the Affiant / Adv. for Plaintiff" left, "Affiant" right.

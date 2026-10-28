@@ -1,63 +1,58 @@
 import { caption, type CaptionInput } from "./caption";
+import { BLANK, joinAnd, type OfficeProfile } from "./format";
 import type { DocModel } from "./model";
 
 export interface VakalatnamaInput extends CaptionInput {
-  /** Advocate(s) being appointed; blank lines are printed when unknown. */
-  advocates?: { name: string; enrolmentNo?: string | null }[];
-  /** Stamp amounts in rupees. Statute says ₹20 welfare stamp; confirm with the Bar Council. */
-  welfareStampRupees?: number;
-  courtFeeStampRupees?: number;
+  /** The advocates' office; blanks are printed for anything not configured. */
+  office?: OfficeProfile | null;
 }
 
 /**
- * Vakalatnama by the Plaintiff bank appointing its advocates. The powers clause differs from
- * office to office, so it is left flagged for the advocate to replace with their standard text.
+ * Vakalatnama by the Plaintiff bank in the office's format: exhibit number box, short
+ * caption, appointment of the firm and its advocates, the firm's block (code, sanad no.,
+ * address, contact), witness and acceptance. Stamps are affixed by hand in the margin.
  */
 export function buildVakalatnama(input: VakalatnamaInput): DocModel {
-  const welfare = input.welfareStampRupees ?? 20;
-  const courtFee = input.courtFeeStampRupees ?? 10;
-  const advocates = input.advocates?.length ? input.advocates : [{ name: "____________________", enrolmentNo: null }];
-  const names = advocates.map((a) => a.name).join(", ");
+  const o = input.office;
+  const appointees = [o?.firmName?.toUpperCase() ?? BLANK, ...(o?.advocates ?? [])];
 
   return {
     templateId: "vakalatnama.en",
-    version: 1,
-    effectiveFrom: "2026-10-20",
+    version: 2,
+    effectiveFrom: "2026-10-26",
     legalBasis: "CPC Order III Rule 4; Maharashtra Advocates' Welfare Fund Act s.18(1); Court-fees Act Sch. II",
-    title: "VAKALATNAMA",
+    title: "",
     meta: [],
     to: [],
     blocks: [
-      { kind: "boxes", items: [`Advocates' Welfare Fund stamp ₹${welfare}`, `Court-fee stamp ₹${courtFee}`] },
+      { kind: "lines", align: "right", bold: true, lines: ["Exhibit No. ______"] },
+      { kind: "lines", align: "center", bold: true, lines: ["VAKALATNAMA"] },
+      ...caption(input, { full: false }),
       {
         kind: "para",
-        legalReview: true,
-        text: `Stamp amounts (welfare stamp ₹${welfare}, court-fee stamp ₹${courtFee}) to be confirmed for this court before use.`,
-      },
-      ...caption(input, { addresses: false }),
-      {
-        kind: "para",
-        text: `We, ${input.bank.name}, ${input.bank.branch}, the Plaintiff above named, acting through our authorised officer, do hereby appoint and retain ${names}, Advocate(s), to appear, act and plead for us in the above suit and in all proceedings arising from it.`,
+        text: `I / We, the undersigned ${input.bank.name}, ${input.bank.branch}, through its authorised officer, the Plaintiff above named, hereby appoint and authorise ${joinAnd(appointees)} to act, appear and plead for and on my/our behalf in the above matter.`,
       },
       {
-        kind: "para",
-        legalReview: true,
-        text: "Powers conferred on the Advocate(s) — to file pleadings, affidavits and applications, to receive and withdraw documents and moneys, to engage other advocates, and to compromise — as per the office's standard vakalatnama.",
+        kind: "lines",
+        align: "center",
+        bold: true,
+        lines: [
+          o?.firmName?.toUpperCase() ?? BLANK,
+          ...(o?.firmTagline ? [o.firmTagline.toUpperCase()] : []),
+          ...(o?.advocateCode ? [`ADVOCATE CODE – ${o.advocateCode}`] : []),
+          ...(o?.sanadNo ? [`(SANAD NO: ${o.sanadNo})`] : []),
+        ],
       },
       {
-        kind: "para",
-        text: `In witness whereof we have signed this vakalatnama at ${input.court.place} on this ____ day of ______________ ${input.year}.`,
+        kind: "lines",
+        lines: [
+          `OFFICE: ${o?.address?.toUpperCase() ?? BLANK}`,
+          `CONTACT No: ${o?.contact ?? BLANK}   MAIL ID – ${o?.email?.toUpperCase() ?? BLANK}`,
+        ],
       },
-      {
-        kind: "signature",
-        lines: ["", "Executant", `For ${input.bank.name}`, "Name: ____________________", "Designation: ______________", "(Seal of the Bank)"],
-      },
-      { kind: "heading", text: "Accepted" },
-      {
-        kind: "list",
-        items: advocates.map((a) => `${a.name} — Enrolment No. ${a.enrolmentNo ?? "____________"} — Signature: ____________`),
-      },
-      { kind: "para", text: "Address for service: ______________________________________" },
+      { kind: "lines", lines: ["*To appear, act and plead for me/us as my/our Advocate/s in the above matter.", "*In witness whereof I/we have signed below this vakalatnama."] },
+      { kind: "sign2", left: ["Witness", "", `Accepted and filed on __/__/${input.year}`, "", "Signature of Advocate/s"], right: ["", "For the Plaintiff (Authorised Officer)"] },
+      { kind: "spacer", lines: 0, note: "Affix the Advocates' Welfare Fund stamp and court-fee stamp in the margin" },
     ],
   };
 }

@@ -1,0 +1,13 @@
+UNION BANK OF INDIA,
+MODEL COLONY BRANCH (DEMO), NASHIK
+
+C E R T I F I C A T E
+(Under Section 2A of the Bankers' Books Evidence Act, 1891)
+
+This is to certify that, to the best of my knowledge and belief, the computer system is operated properly and the print-out of the loan account of M/S DEMO AGRO TRADERS through its Partner KIRAN TEST PAWAR, Loan A/c No. XXXXXX0041 and XXXXXX0087, is appropriately derived from the relevant data at Union Bank of India, Model Colony Branch (Demo), Nashik (Address: Shop 0, Demo Arcade, Model Colony, Nashik 422000).
+
+[[LEGAL_REVIEW]] Section 2A(b) and (c) particulars — brief description of the computer system and of the safeguards against unauthorised access and alteration, by the person in charge of the system — to be confirmed with the bank's standard certificate.
+
+Date: __/__/2026
+Place: Nashik    >> Authorised Signatory
+>> (Union Bank of India, Model Colony Branch (Demo), Nashik)

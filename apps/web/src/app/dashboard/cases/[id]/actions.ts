@@ -2,21 +2,33 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { canTransition, courtFeeFor, drtFee, isStateCode, recoveryForum, type CaseStatus } from "@civil-suits/domain";
+import { canTransition, courtFeeFor, drtFee, isStateCode, particularsOfClaim, recoveryForum, type CaseStatus } from "@civil-suits/domain";
 import {
+  buildAddressMemo,
   buildAffidavit,
+  buildBbeCertificate,
+  buildCourtFeeLetter,
   buildDemandNotice,
+  buildDraftDecree,
+  buildEfilingSheet,
   buildInterimApplication,
+  buildListOfDocuments,
   buildOriginalApplication,
   buildPlaint,
   buildVakalatnama,
   courtTitle,
+  standardDocuments,
   suitTypeOf,
   type CaptionInput,
+  type Defendant,
   type DocModel,
+  type Facility,
+  type PlaintInput,
   type SuitType,
 } from "@civil-suits/templates";
 import { renderDocx } from "@/lib/docx";
+import { loadOfficeConfig, OFFICE_CONFIG_ERROR, type OfficeConfig } from "@/lib/office-profile";
+import { readExecutedDocs } from "@/lib/particulars";
 import { createClient } from "@/lib/supabase/server";
 import { todayIST } from "@/lib/ui";
 
@@ -59,7 +71,7 @@ export async function recordUpload(input: z.infer<typeof UploadInput>): Promise<
 }
 
 const CASE_SELECT =
-  "id, org_id, case_no_internal, status, needs_12a, suit_type, is_commercial, urgent_interim_relief, claim_amount_paise, organizations(name), courts(name, district, court_type, state), bank_branches(branch_name, banks(name)), parties(name, role, address, position), loans(facility_type, account_last4, sanction_date, sanction_amount_paise, roi_bps, npa_date, outstanding_paise, interest_upto_date), notices(sent_at), mediations(outcome, report_path, report_date)";
+  "id, org_id, case_no_internal, status, needs_12a, suit_type, is_commercial, urgent_interim_relief, claim_amount_paise, signatory_name, signatory_designation, signatory_age, penal_interest_paise, expenses_paise, organizations(name), courts(name, district, court_type, state, header_template), bank_branches(branch_name, address, banks(name)), parties(name, role, address, position, through_capacity, through_name), loans(facility_type, account_last4, sanction_date, sanction_amount_paise, roi_bps, npa_date, outstanding_paise, interest_upto_date, application_date, purpose, executed_docs, tenure_months, created_at), notices(sent_at), mediations(outcome, report_path, report_date)";
 
 type CaseRow = {
   id: string;
@@ -68,7 +80,14 @@ type CaseRow = {
   status: CaseStatus;
 };
 
-type PartyRow = { name: string; role: "borrower" | "co_borrower" | "guarantor"; address: string | null; position: number };
+type PartyRow = {
+  name: string;
+  role: "borrower" | "co_borrower" | "guarantor";
+  address: string | null;
+  position: number;
+  through_capacity: string | null;
+  through_name: string | null;
+};
 type LoanRow = {
   facility_type: string | null;
   account_last4: string | null;
@@ -78,6 +97,11 @@ type LoanRow = {
   npa_date: string | null;
   outstanding_paise: number | string | null;
   interest_upto_date: string | null;
+  application_date: string | null;
+  purpose: string | null;
+  executed_docs: unknown;
+  tenure_months: number | null;
+  created_at: string;
 };
 /** Shape of CASE_SELECT; to-one relations may come back as object or single-item array. */
 type CaseDetail = CaseRow & {
@@ -85,26 +109,34 @@ type CaseDetail = CaseRow & {
   is_commercial: boolean;
   urgent_interim_relief: boolean;
   claim_amount_paise: number | string | null;
+  signatory_name: string | null;
+  signatory_designation: string | null;
+  signatory_age: number | null;
+  penal_interest_paise: number | string | null;
+  expenses_paise: number | string;
   organizations: Rel<{ name: string }>;
-  courts: Rel<{ name: string; district: string; court_type: string; state: string }>;
-  bank_branches: Rel<{ branch_name: string; banks: Rel<{ name: string }> }>;
+  courts: Rel<{ name: string; district: string; court_type: string; state: string; header_template: string | null }>;
+  bank_branches: Rel<{ branch_name: string; address: string | null; banks: Rel<{ name: string }> }>;
   parties: PartyRow[] | null;
-  loans: Rel<LoanRow>;
+  loans: LoanRow[] | null;
   notices: { sent_at: string | null }[] | null;
   mediations: { outcome: string | null; report_path: string | null; report_date: string | null }[] | null;
 };
 
+const PENAL_PENDING = "Enter the penal interest in Suit particulars first (0 for NIL) — it decides the suit amount and court fee, then regenerate the plaint.";
 
 /** Assembles the template for one document kind from case data. Amounts come from the DB / domain code. */
-function buildModel(kind: DocKind, c: CaseDetail, version: number): DocModel | string {
-  const loan = one(c.loans);
+function buildModel(kind: DocKind, c: CaseDetail, version: number, config: OfficeConfig): DocModel | string {
+  const loans = [...(c.loans ?? [])].sort((a, b) => a.created_at.localeCompare(b.created_at));
+  const loan = loans[0];
   const branch = one(c.bank_branches);
   const parties = [...(c.parties ?? [])].sort((a, b) => a.position - b.position);
   if (!parties.length) return "Add at least one borrower first.";
-  if (!loan || loan.outstanding_paise == null || !loan.interest_upto_date) {
+  if (!loan || loans.some((l) => l.outstanding_paise == null) || !loan.interest_upto_date) {
     return "Loan details (outstanding amount and date) are missing.";
   }
-  const bank = { name: one(branch?.banks ?? null)?.name ?? "the Bank", branch: branch?.branch_name ?? "" };
+  const bank = { name: one(branch?.banks ?? null)?.name ?? "the Bank", branch: branch?.branch_name ?? "", address: branch?.address ?? null };
+  const office = config.profile;
   const loanBase = {
     facilityType: loan.facility_type ?? "Loan",
     accountLast4: loan.account_last4,
@@ -113,80 +145,131 @@ function buildModel(kind: DocKind, c: CaseDetail, version: number): DocModel | s
     rateBps: loan.roi_bps,
     npaDate: loan.npa_date,
   };
+  const defendants: Defendant[] = parties.map((p) => ({
+    name: p.name,
+    role: p.role,
+    address: p.address,
+    through: p.through_capacity && p.through_name ? { capacity: p.through_capacity, name: p.through_name } : null,
+  }));
+  // The full account number stays encrypted; drafts show the last four digits.
+  const facilities: Facility[] = loans.map((l) => ({
+    facilityType: l.facility_type ?? "Loan",
+    accountNo: l.account_last4 ? `XXXXXX${l.account_last4}` : null,
+    sanctionAmountPaise: l.sanction_amount_paise == null ? null : Number(l.sanction_amount_paise),
+    sanctionDate: l.sanction_date,
+    applicationDate: l.application_date,
+    purpose: l.purpose,
+    rateBps: l.roi_bps,
+    tenureMonths: l.tenure_months,
+    documents: readExecutedDocs(l.executed_docs),
+  }));
+  const npaDate = loans.map((l) => l.npa_date).filter((d): d is string => !!d).sort()[0] ?? null;
+  // Particulars of claim: A = outstanding of every facility, B = penal interest, C = expenses.
+  const claim = particularsOfClaim({
+    principalInterestPaise: loans.reduce((s, l) => s + Number(l.outstanding_paise), 0),
+    penalInterestPaise: c.penal_interest_paise == null ? null : Number(c.penal_interest_paise),
+    expensesPaise: Number(c.expenses_paise ?? 0),
+  });
 
   if (kind === "demand_notice") {
     return buildDemandNotice({
       noticeDate: todayIST(),
-      refNo: `${c.case_no_internal}/DN/${version}`,
-      advocate: { officeName: one(c.organizations)?.name ?? "Advocates", address: "" },
+      refNo: office?.refPrefix ? `${office.refPrefix}/${c.case_no_internal}/DN/${version}` : null,
+      office,
       bank,
-      borrowers: parties.map((p) => ({ name: p.name, role: p.role, address: p.address })),
-      loan: { ...loanBase, outstandingPaise: Number(loan.outstanding_paise), interestUptoDate: loan.interest_upto_date },
-      paymentDays: 15,
+      defendants,
+      facilities,
+      npaDate,
+      claimPaise: claim.totalPaise,
+      claimAsOn: loan.interest_upto_date,
+      paymentDays: office?.noticeDays ?? 7,
       isCommercial: c.is_commercial,
     });
   }
 
   const court = one(c.courts);
   if (!court) return "Assign a court to the case first.";
-  const claim = Number(c.claim_amount_paise ?? loan.outstanding_paise);
   // Bank debts of ₹20 lakh or more go to the DRT; the civil court has no jurisdiction.
-  const forum = recoveryForum({ claimPaise: claim, lenderIsBank: true }).forum;
+  const forum = recoveryForum({ claimPaise: claim.totalPaise, lenderIsBank: true }).forum;
   if (forum === "drt" && kind !== "original_application") return "Claim of ₹20 lakh or more: generate the DRT Original Application instead.";
+  const sentOn = (c.notices ?? []).flatMap((n) => (n.sent_at ? [n.sent_at] : [])).sort().pop();
   if (kind === "original_application") {
     if (forum !== "drt") return "The DRT is only for bank debts of ₹20 lakh or more.";
     if (court.court_type !== "drt") return "Assign a DRT bench as the court for this case first.";
-    const sentOn = (c.notices ?? []).flatMap((n) => (n.sent_at ? [n.sent_at] : [])).sort().pop();
     return buildOriginalApplication({
       bench: { name: courtTitle(court.name, court.district), place: court.district },
       year: Number(todayIST().slice(0, 4)),
       bank,
       defendants: parties.map((p) => ({ name: p.name, role: p.role, address: p.address })),
       loan: loanBase,
-      claimPaise: claim,
+      claimPaise: claim.totalPaise,
       claimAsOn: loan.interest_upto_date,
-      feePaise: drtFee(claim),
+      feePaise: drtFee(claim.totalPaise),
       notice: sentOn ? { date: sentOn.slice(0, 10) } : null,
       filingDate: todayIST(),
     });
   }
   const captionInput: CaptionInput = {
-    court: { name: courtTitle(court.name, court.district), place: court.district },
+    court: { name: courtTitle(court.name, court.district), place: court.district, heading: court.header_template },
     year: Number(todayIST().slice(0, 4)),
     suitType: suitTypeOf(c),
     bank,
-    defendants: parties.map((p) => ({ name: p.name, role: p.role, address: p.address })),
+    officer: c.signatory_name ? { name: c.signatory_name, designation: c.signatory_designation, age: c.signatory_age } : null,
+    defendants,
   };
-  if (kind === "vakalatnama") return buildVakalatnama(captionInput);
+  if (kind === "vakalatnama") return buildVakalatnama({ ...captionInput, office });
+  if (kind === "address_memo") return buildAddressMemo(captionInput);
   if (kind === "interim_application") {
     if (captionInput.suitType !== "commercial" || !c.urgent_interim_relief) {
       return "An interim application is for commercial suits that seek urgent interim relief.";
     }
-    return buildInterimApplication({ ...captionInput, claimPaise: claim, filingDate: todayIST() });
+    return buildInterimApplication({ ...captionInput, claimPaise: claim.totalPaise, filingDate: todayIST() });
   }
   if (kind === "affidavit") return buildAffidavit(captionInput);
 
-  const sent = (c.notices ?? []).flatMap((n) => (n.sent_at ? [n.sent_at] : [])).sort().pop();
   const med = (c.mediations ?? []).find(
     (m): m is { outcome: "failed" | "non_starter"; report_path: string; report_date: string } =>
       (m.outcome === "failed" || m.outcome === "non_starter") && !!m.report_path && !!m.report_date,
   );
 
   // Court-fee law follows the court's state; unconfigured states get no fee and a review flag.
-  const fee = isStateCode(court.state) ? courtFeeFor(court.state, claim) : { feePaise: null, act: null };
+  const fee = isStateCode(court.state) ? courtFeeFor(court.state, claim.totalPaise) : { feePaise: null, act: null };
 
-  return buildPlaint({
+  // Papers that fix the suit amount wait until penal interest is decided (0 = NIL).
+  if (claim.penalPending && (kind === "court_fee_letter" || kind === "draft_decree" || kind === "efiling_sheet")) return PENAL_PENDING;
+
+  if (kind === "court_fee_letter") {
+    if (fee.feePaise == null || !fee.act) return "Court fee for this court is not configured yet.";
+    return buildCourtFeeLetter({
+      refNo: `${office?.refPrefix ?? "CF"}/${c.case_no_internal}/${version}`,
+      date: todayIST(),
+      bank,
+      borrower: parties[0]!.name,
+      claimPaise: claim.totalPaise,
+      courtFeePaise: fee.feePaise,
+      courtFeeAct: fee.act,
+      office,
+    });
+  }
+
+  const plaintInput: PlaintInput = {
     ...captionInput,
-    loan: loanBase,
-    claimPaise: claim,
+    facilities,
+    npaDate,
+    claim,
     claimAsOn: loan.interest_upto_date,
     courtFeePaise: fee.feePaise,
     courtFeeAct: fee.act,
-    notice: sent ? { date: sent.slice(0, 10) } : null,
+    notice: sentOn ? { date: sentOn.slice(0, 10) } : null,
     mediation: med ? { reportDate: med.report_date, outcome: med.outcome } : null,
     urgentInterimRelief: c.urgent_interim_relief,
     filingDate: todayIST(),
-  });
+  };
+  if (kind === "draft_decree") return buildDraftDecree(plaintInput);
+  if (kind === "list_of_documents") return buildListOfDocuments({ ...captionInput, entries: standardDocuments(plaintInput) });
+  if (kind === "bbe_certificate") return buildBbeCertificate({ ...plaintInput, place: court.district });
+  if (kind === "efiling_sheet") return buildEfilingSheet(plaintInput);
+  return buildPlaint(plaintInput);
 }
 
 async function setCaseStatus(supabase: Supabase, c: { id: string; status: CaseStatus; needs_12a?: boolean }, to: CaseStatus) {
@@ -291,8 +374,21 @@ export async function recordMediationOutcome(input: z.infer<typeof MediationOutc
   return { ok: true, message: "Mediation outcome recorded." };
 }
 
-const DocKindSchema = z.enum(["demand_notice", "plaint", "vakalatnama", "affidavit", "original_application", "interim_application"]);
-type DocKind = z.infer<typeof DocKindSchema>;
+const DocKindSchema = z.enum([
+  "demand_notice",
+  "plaint",
+  "vakalatnama",
+  "affidavit",
+  "original_application",
+  "interim_application",
+  "address_memo",
+  "list_of_documents",
+  "bbe_certificate",
+  "draft_decree",
+  "court_fee_letter",
+  "efiling_sheet",
+]);
+export type DocKind = z.infer<typeof DocKindSchema>;
 const LABEL: Record<DocKind, string> = {
   demand_notice: "Demand notice",
   plaint: "Plaint",
@@ -300,6 +396,12 @@ const LABEL: Record<DocKind, string> = {
   affidavit: "Affidavit",
   original_application: "Original Application",
   interim_application: "Interim application",
+  address_memo: "Address memo",
+  list_of_documents: "List of documents",
+  bbe_certificate: "Bankers' Books certificate",
+  draft_decree: "Draft decree",
+  court_fee_letter: "Court-fee letter to the bank",
+  efiling_sheet: "E-filing data sheet",
 };
 
 /** What a generated document advances the case to, if anything. */
@@ -340,10 +442,12 @@ export async function generateDraft(caseId: string, kindInput: string): Promise<
   }
   const version = draft.current_version + 1;
 
-  const model = buildModel(kind.data, c as unknown as CaseDetail, version);
+  const config = await loadOfficeConfig(supabase);
+  if (!config) return { ok: false, error: OFFICE_CONFIG_ERROR };
+  const model = buildModel(kind.data, c as unknown as CaseDetail, version, config);
   if (typeof model === "string") return { ok: false, error: model };
 
-  const file = await renderDocx(model);
+  const file = await renderDocx(model, { courtMargins: config.settings.margins });
   const path = `${c.org_id}/${caseId}/drafts/${storedKind}-en-v${version}-${Date.now()}.docx`;
   const up = await supabase.storage.from(BUCKET).upload(path, file, { contentType: DOCX_MIME });
   if (up.error) return { ok: false, error: "Could not store the generated file." };
@@ -371,11 +475,12 @@ export async function submitForApproval(draftId: string): Promise<ActionResult> 
 
   const { data: d } = await supabase
     .from("drafts")
-    .select("id, case_id, doc_kind, status, current_version, cases(id, status)")
+    .select("id, case_id, doc_kind, status, current_version, cases(id, status, penal_interest_paise)")
     .eq("id", draftId)
     .single();
   if (!d) return { ok: false, error: "Draft not found." };
   if (d.current_version < 1) return { ok: false, error: "Generate the document first." };
+  if (d.doc_kind === "plaint" && one(d.cases)?.penal_interest_paise == null) return { ok: false, error: PENAL_PENDING };
   if (d.status !== "draft" && d.status !== "returned") return { ok: false, error: "Draft is already submitted or approved." };
 
   const { data: updated, error } = await supabase

@@ -1,0 +1,21 @@
+{
+  "firmName": "Demo Legal Associates",
+  "firmTagline": "Advocates & Legal Consultants",
+  "advocateCode": "00000",
+  "sanadNo": "MAH/0000/2020",
+  "address": "Office 0, Synthetic Chambers, Demo Road, Nashik 422000",
+  "contact": "+91-90000 00000",
+  "email": "office@demo-legal.test",
+  "advocates": ["ADV. A. DEMO", "ADV. B. SAMPLE"],
+  "feeAccount": {
+    "accountName": "Demo Legal Associates",
+    "accountNo": "000000000000",
+    "accountType": "Current",
+    "bank": "Demo Bank",
+    "branch": "Nashik",
+    "ifsc": "DEMO0000000"
+  },
+  "refPrefix": "DLA",
+  "noticeDays": 7,
+  "noticeFeeRupees": 3500
+}
