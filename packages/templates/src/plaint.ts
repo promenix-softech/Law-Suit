@@ -44,6 +44,12 @@ const cap = (s: string) => s[0]!.toUpperCase() + s.slice(1);
 const rs = (paise: Paise) => `${formatRs(paise)} (${rupeesInWords(paise)})`;
 const accounts = (fs: Facility[]) => joinAnd(fs.map((f) => f.accountNo ?? BLANK));
 const rates = (fs: Facility[]) => joinAnd(fs.map((f) => (f.rateBps != null ? pctBps(f.rateBps) : "____%")));
+/** " for working capital" — the office writes the purpose after "for"; added when it was left out. */
+const forPurpose = (purpose?: string | null) => {
+  const t = purpose?.trim();
+  if (!t) return "";
+  return /^for\b/i.test(t) ? ` ${t}` : ` for ${t[0]!.toLowerCase()}${t.slice(1)}`;
+};
 
 /**
  * Plaint for recovery of bank dues in the office's format (see skill bank-suit-house-style):
@@ -96,11 +102,11 @@ export function buildPlaint(input: PlaintInput, opts: { decree?: boolean } = {})
     blocks.push(
       i === 0
         ? p(
-            `That the Defendant No. 1 was in need of financial assistance of ${amt} and therefore approached the Plaintiff Bank${f.applicationDate ? ` on ${formatDateDot(f.applicationDate)}` : ""} with a request to grant a ${f.facilityType}${f.purpose ? ` ${f.purpose}` : ""}. After considering the loan application, the Plaintiff sanctioned the ${f.facilityType} of ${amt}${f.sanctionDate ? ` on ${formatDateDot(f.sanctionDate)}` : ""}. For availing the said facility, ${D} executed the following documents in favour of the Plaintiff Bank:`,
+            `That the Defendant No. 1 was in need of financial assistance of ${amt} and therefore approached the Plaintiff Bank${f.applicationDate ? ` on ${formatDateDot(f.applicationDate)}` : ""} with a request to grant a ${f.facilityType}${forPurpose(f.purpose)}. After considering the loan application, the Plaintiff sanctioned the ${f.facilityType} of ${amt}${f.sanctionDate ? ` on ${formatDateDot(f.sanctionDate)}` : ""}. For availing the said facility, ${D} executed the following documents in favour of the Plaintiff Bank:`,
           )
         : {
             kind: "para",
-            text: `That ${D} further approached the Plaintiff Bank${f.applicationDate ? ` on ${formatDateDot(f.applicationDate)}` : ""} for a ${f.facilityType} of ${amt}${f.purpose ? ` ${f.purpose}` : ""}, which the Plaintiff sanctioned${f.sanctionDate ? ` on ${formatDateDot(f.sanctionDate)}` : ""}. For availing the said facility, ${D} executed the following documents in favour of the Plaintiff Bank:`,
+            text: `That ${D} further approached the Plaintiff Bank${f.applicationDate ? ` on ${formatDateDot(f.applicationDate)}` : ""} for a ${f.facilityType} of ${amt}${forPurpose(f.purpose)}, which the Plaintiff sanctioned${f.sanctionDate ? ` on ${formatDateDot(f.sanctionDate)}` : ""}. For availing the said facility, ${D} executed the following documents in favour of the Plaintiff Bank:`,
           },
     );
     blocks.push(

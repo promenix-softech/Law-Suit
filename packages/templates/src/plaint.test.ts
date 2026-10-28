@@ -145,6 +145,14 @@ describe("buildPlaint (office format)", () => {
     const claim = particularsOfClaim({ principalInterestPaise: rupees(5_00_000), penalInterestPaise: rupees(1_000), expensesPaise: 0 });
     expect(text({ claim })).toContain("Rs. 5,01,000/-");
   });
+
+  it("writes the purpose after 'for' even when the user typed it without", () => {
+    const [first, ...rest] = plaintFixture.facilities;
+    const t = text({ facilities: [{ ...first!, purpose: "Working capital" }, ...rest] });
+    expect(t).toContain("a request to grant a Term Loan for working capital.");
+    expect(text()).toContain("for purchase of a tractor-trailer.");
+    expect(text()).not.toContain("for for");
+  });
 });
 
 describe("buildDraftDecree", () => {

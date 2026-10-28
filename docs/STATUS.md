@@ -135,7 +135,7 @@
 - [x] Demo offices renamed to fictional firm names without city names: **Nirmal Nyay Associates (Demo)** (MH, was "Demo Advocates (Synthetic)") and **Satyam Vidhi Chambers (Demo)** (MP); simple shared demo passwords per office set on the demo DB (handed to the owner in a PDF, not in the repo)
 - [ ] Owner: disable or re-password all demo accounts before any real data goes in (the site is public and the demo passwords are simple)
 
-## Done (slice 19 — office format from the office's filed papers, 26 Oct) — NOT yet applied to the demo DB
+## Done (slice 19 — office format from the office's filed papers, 26 Oct) — applied to the demo DB (28 Oct)
 - [x] Studied the office's real O37 suit set (plaint, list of documents, affidavit, vakalatnama, address memo, decree, BBE certificate, court-fee letter, GRAS e-challan, e-filing entry). Format only — no real data in the repo; synthetic fixture `packages/templates/src/testFixtures.ts`
 - [x] Domain: `formatRs` (Rs. 14,45,310/-), `rupeesInWords`, `particularsOfClaim` (A + B + C); court-fee slab formula matched a fee actually paid on a real GRAS e-challan (amount kept out of the repo)
 - [x] Templates v2 in the office format: full/short caption (officer, constitution, "Through its Proprietor", shared address), registry names (Special Summary Suit …), plaint paragraph order with per-facility executed documents, particulars-of-claim table, O37 R2 averments, computed paragraph references, running header + "Page X of Y"; new papers: list of documents, address memo, draft decree, BBE certificate, court-fee letter, e-filing data sheet. Originals' mistakes corrected (see skill `bank-suit-house-style`). Goldens + DOCX samples `docs/samples/suit-set/`
@@ -146,8 +146,10 @@
 - [x] Owner's answers (26 Oct): notice's interest rate is the correct one (one rate per facility everywhere); penal interest decided later — blank = pending ("To be determined", fee letter / e-filing sheet / decree / plaint approval wait), 0 = NIL; list of documents mandatory in the bundle, system index optional (off by default)
 - [x] Real papers used for format only: test/sample case replaced by an invented one (other bank, court, names, addresses, dates, amounts); figures of the real case removed from code, docs and history; local copies of the uploads deleted
 - [x] Admin-only office settings (migration `20261026010000_office_settings`): `organizations.settings` (forum for bank claims — default Order XXXVII summary suit; margins — default office margins), office profile edited by admins on `/dashboard/settings`; read via `office_config()` (admin/drafter/approver; never field staff); `office_profile`/`settings` no longer readable directly; changes audited (`organizations_audit`). Field-only users are sent to their tasks instead of the case file. Demo office profile invented (`docs/samples/demo-office-profile.json`)
-- [ ] Owner: approve applying `20261026000000_office_format` and `20261026010000_office_settings` to the demo DB (schema only — no case data) (web code reads the new columns — deploy only after the migration)
-- [ ] Owner: answer `docs/open-questions.md` #12–20 (forum for ≥ ₹3 lakh, margins, full account numbers, BBE Act, sale prayer …)
+- [x] Applied to the demo DB on 28 Oct (owner approved): `office_format`, `office_settings`, `office_settings_values` (schema only). Demo data filled with invented values: both offices' profiles and settings, case signatory / penal interest / expenses, loan application date / purpose / executed documents, bank branch addresses; claim amounts recomputed A + B + C. Hero case DEMO-2026-0002 moved to drafting with penal interest left pending
+- [x] Plaint writes the loan purpose after "for" even when it was typed without (test added)
+- [x] Demo dry run (28 Oct, local app on the demo DB, throwaway QA users): all papers generate; penal pending blocks the decree and plaint approval; maker-checker approval works. Talk track: `docs/demo-script.md`
+- [ ] Owner: answer `docs/open-questions.md` #14–19, #24 (full account numbers, BBE Act, sale prayer, PAN / fee account …)
 
 ## Next (Phase 1)
 - [ ] Owner: VPS for the worker (Docker), service-role key there only; run converters without network before real data
