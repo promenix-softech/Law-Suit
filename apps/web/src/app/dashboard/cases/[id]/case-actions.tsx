@@ -150,19 +150,49 @@ function useBatch() {
   return { progress, result, run };
 }
 
-/** One click for the whole suit set, each paper exactly as its own button would make it. */
-export function GenerateAll({ caseId, kinds, lang }: { caseId: string; kinds: { kind: DocKind; label: string }[]; lang: Lang }) {
+/**
+ * One click for the whole suit set, each paper exactly as its own button would make it. Papers
+ * not made yet come first (the main button); regenerating everything is the quieter second
+ * button and asks before replacing approved papers.
+ */
+export function GenerateAll({
+  caseId,
+  kinds,
+  lang,
+}: {
+  caseId: string;
+  kinds: { kind: DocKind; label: string; exists: boolean; approved: boolean }[];
+  lang: Lang;
+}) {
   const t = translator(lang);
   const { progress, result, run } = useBatch();
+  const missing = kinds.filter((k) => !k.exists);
+  const approved = kinds.filter((k) => k.approved).length;
+  const gen = (list: typeof kinds, done: string) =>
+    run(list.map((k) => ({ label: k.label, go: () => generateDraft(caseId, k.kind) })), done);
   return (
     <div className="space-y-1">
-      <button
-        disabled={!!progress}
-        className="btn btn-primary px-5 py-3 text-base"
-        onClick={() => run(kinds.map((k) => ({ label: k.label, go: () => generateDraft(caseId, k.kind) })), `All ${kinds.length} papers generated.`)}
-      >
-        {progress ? `${t("Generating")} ${progress}…` : `✦ ${t("Generate all papers")} (${kinds.length})`}
-      </button>
+      <div className="flex flex-wrap gap-2">
+        {missing.length > 0 && (
+          <button disabled={!!progress} className="btn btn-primary px-5 py-3 text-base" onClick={() => gen(missing, `${missing.length} papers generated.`)}>
+            {progress
+              ? `${t("Generating")} ${progress}…`
+              : `✦ ${missing.length === kinds.length ? t("Generate all papers") : t("Generate missing papers")} (${missing.length})`}
+          </button>
+        )}
+        {missing.length < kinds.length && (
+          <button
+            disabled={!!progress}
+            className="btn px-4 py-3 text-sm"
+            onClick={() => {
+              if (approved && !window.confirm(`${approved} ${t("approved papers will need approval again. Regenerate all?")}`)) return;
+              gen(kinds, `All ${kinds.length} papers regenerated.`);
+            }}
+          >
+            {progress && !missing.length ? `${t("Generating")} ${progress}…` : `↻ ${t("Regenerate all")} (${kinds.length})`}
+          </button>
+        )}
+      </div>
       <Status result={result} />
     </div>
   );
@@ -187,13 +217,18 @@ export function SubmitAll({ drafts, lang }: { drafts: { id: string; label: strin
   );
 }
 
-export function SubmitDraft({ draftId }: { draftId: string }) {
+export function SubmitDraft({ draftId, primary = false, lang = "en" }: { draftId: string; primary?: boolean; lang?: Lang }) {
+  const t = translator(lang);
   const [pending, start] = useTransition();
   const [result, setResult] = useState<ActionResult | null>(null);
   return (
     <span className="inline-flex flex-col gap-1">
-      <button onClick={() => start(async () => setResult(await submitForApproval(draftId)))} disabled={pending} className="btn">
-        {pending ? "Sending…" : "Submit for approval →"}
+      <button
+        onClick={() => start(async () => setResult(await submitForApproval(draftId)))}
+        disabled={pending}
+        className={`btn px-3 py-1.5 text-xs ${primary ? "btn-primary" : ""}`}
+      >
+        {pending ? `${t("Sending")}…` : `${t("Submit for approval")} →`}
       </button>
       <Status result={result} />
     </span>

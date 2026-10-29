@@ -1,4 +1,6 @@
+import { redirect } from "next/navigation";
 import { SideNav, type NavItem } from "@/components/side-nav";
+import { myFirmCode, requestFirm } from "@/lib/firm-server";
 import { getT } from "@/lib/lang";
 import { createClient } from "@/lib/supabase/server";
 
@@ -10,12 +12,19 @@ export default async function DashboardLayout({ children }: LayoutProps<"/dashbo
   const supabase = await createClient();
   const { data: auth } = supabase ? await supabase.auth.getUser() : { data: { user: null } };
   if (!supabase || !auth.user) return <>{children}</>;
+  // A session never crosses firms: on another firm's address (or after choosing another firm's
+  // code) the account is signed out. RLS keeps the data apart regardless.
+  const firm = await requestFirm();
+  if (firm) {
+    const own = await myFirmCode(supabase, auth.user.id);
+    if (own && own !== firm.code) redirect("/auth/sign-out");
+  }
 
   const { t } = await getT();
   const [{ data: roles }, { count: tasksOpen }, { data: pending }] = await Promise.all([
     supabase.from("user_roles").select("role").eq("user_id", auth.user.id),
     supabase.from("tasks").select("id", { count: "exact", head: true }).eq("assignee_id", auth.user.id).in("status", ["open", "in_progress"]),
-    supabase.from("drafts").select("created_by").eq("status", "in_approval"),
+    supabase.from("drafts").select("created_by, cases!inner(archived_at)").eq("status", "in_approval").is("cases.archived_at", null),
   ]);
   const r = new Set((roles ?? []).map((x) => x.role as string));
   const admin = r.has("admin");

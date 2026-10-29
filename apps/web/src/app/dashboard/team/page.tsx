@@ -24,7 +24,7 @@ export default async function TeamPage() {
     supabase.from("user_roles").select("role").eq("user_id", auth.user.id),
     supabase.from("profiles").select("id, full_name").order("full_name"),
     supabase.from("user_roles").select("user_id, role"),
-    supabase.from("cases").select("assigned_drafter, assigned_approver, status"),
+    supabase.from("cases").select("assigned_drafter, assigned_approver, status").is("archived_at", null),
     supabase.from("tasks").select("assignee_id, status"),
   ]);
   const roleNames = (myRoles ?? []).map((r) => r.role as string);

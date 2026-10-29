@@ -29,7 +29,7 @@ export default async function BatchReviewPage({ params }: PageProps<"/dashboard/
   if (!batch) notFound();
   const [{ data: pages }, { data: cases }, signed] = await Promise.all([
     supabase.from("batch_pages").select("page_no, class, class_confidence, account_last4, borrower_hint, group_no, flags").eq("batch_id", id).order("page_no"),
-    supabase.from("cases").select("id, case_no_internal").order("case_no_internal").limit(500),
+    supabase.from("cases").select("id, case_no_internal").is("archived_at", null).order("case_no_internal").limit(500),
     supabase.storage.from("case-batches").createSignedUrl(batch.storage_path, 300),
   ]);
 

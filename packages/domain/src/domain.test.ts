@@ -182,4 +182,9 @@ describe("canTransition", () => {
     expect(canTransition("in_approval", "drafting")).toBe(true);
     expect(canTransition("drafting", "filed")).toBe(false);
   });
+  it("an approved plaint can be reopened until it goes to the notary", () => {
+    expect(canTransition("approved", "drafting")).toBe(true);
+    expect(canTransition("notary_stamp", "drafting")).toBe(false);
+    expect(canTransition("filed", "drafting")).toBe(false);
+  });
 });

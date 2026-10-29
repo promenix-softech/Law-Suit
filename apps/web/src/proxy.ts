@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { isOwnHost } from "@/lib/firm";
 import { supabaseEnv } from "@/lib/supabase/env";
 
 const MAX_COOKIE_BYTES = 16 * 1024;
@@ -13,7 +14,8 @@ const CANONICAL_HOST = process.env.CANONICAL_HOST;
  */
 export async function proxy(request: NextRequest) {
   const host = request.headers.get("host");
-  if (CANONICAL_HOST && process.env.VERCEL_ENV === "production" && host && host !== CANONICAL_HOST) {
+  // Firms sign in at <code>.<canonical host>; those addresses stay.
+  if (CANONICAL_HOST && process.env.VERCEL_ENV === "production" && host && !isOwnHost(host, CANONICAL_HOST)) {
     const target = new URL(request.nextUrl.pathname + request.nextUrl.search, `https://${CANONICAL_HOST}`);
     return NextResponse.redirect(target, 308);
   }

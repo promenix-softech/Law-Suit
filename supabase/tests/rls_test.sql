@@ -625,10 +625,10 @@ begin
   raise notice 'ok - invoice amounts are immutable, payment status can be recorded';
 end $$;
 
--- deleting a billed case does not remove its suit pack from the bill
+-- deleting a billed case (service role only, e.g. an erasure request) does not remove its suit pack from the bill
 begin;
-select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
 delete from public.cases where id = 'c0000000-0000-0000-0000-000000000001';
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
 select pg_temp.expect(public.billable_suit_packs('11111111-1111-1111-1111-111111111111', '2026-10-01', '2026-10-31') = 2,
   'a deleted case still counts as billed');
 rollback;
@@ -1519,6 +1519,89 @@ begin
     raise exception 'FAIL: invite attempt by another office''s user';
   exception when check_violation then raise notice 'ok - invite attempt must be by a user of the same office';
   end;
+end $$;
+
+-- case archive (20261030000000): admins archive and restore; archived cases are admin-only and read-only
+do $$
+begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000d2', true);
+  set local role authenticated;
+  begin
+    update public.cases set archived_at = now(), archived_by = auth.uid(), archive_reason = 'duplicate'
+     where id = 'c0000000-0000-0000-0000-000000000002';
+    raise exception 'FAIL: drafter archived a case';
+  exception when insufficient_privilege then raise notice 'ok - only an admin archives a case';
+  end;
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', true);
+  begin
+    delete from public.cases where id = 'c0000000-0000-0000-0000-000000000002';
+    raise exception 'FAIL: admin deleted a case';
+  exception when insufficient_privilege then raise notice 'ok - cases cannot be deleted from the app';
+  end;
+  begin
+    update public.cases set archived_at = now(), archived_by = auth.uid(), archive_reason = null
+     where id = 'c0000000-0000-0000-0000-000000000002';
+    raise exception 'FAIL: archived without a reason';
+  exception when check_violation then raise notice 'ok - archiving needs a reason';
+  end;
+end $$;
+
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+update public.cases set archived_at = '2000-01-01', archived_by = '00000000-0000-0000-0000-0000000000d1',
+       archive_reason = 'Filed twice by mistake'
+ where id = 'c0000000-0000-0000-0000-000000000002';
+select pg_temp.expect(
+  (select archived_by = '00000000-0000-0000-0000-00000000000a' and archived_at > '2026-01-01'
+     from public.cases where id = 'c0000000-0000-0000-0000-000000000002'),
+  'archiver and time are the caller and the server clock');
+select pg_temp.expect((select count(*) from public.cases) = 2, 'admin still sees an archived case');
+select pg_temp.expect(not public.can_edit_case('c0000000-0000-0000-0000-000000000002'), 'archived case is not editable');
+do $$
+begin
+  update public.cases set claim_amount_paise = 1 where id = 'c0000000-0000-0000-0000-000000000002';
+  raise exception 'FAIL: edited an archived case';
+exception when insufficient_privilege then raise notice 'ok - archived case is read-only, even for admins';
+end $$;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000d2');
+select pg_temp.expect((select count(*) from public.cases where id = 'c0000000-0000-0000-0000-000000000002') = 0,
+  'assigned drafter no longer sees an archived case');
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000a1');
+select pg_temp.expect((select count(*) from public.cases where id = 'c0000000-0000-0000-0000-000000000002') = 0,
+  'approver no longer sees an archived case');
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+update public.cases set archived_at = null, archived_by = null, archive_reason = null
+ where id = 'c0000000-0000-0000-0000-000000000002';
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000d2');
+select pg_temp.expect((select count(*) from public.cases where id = 'c0000000-0000-0000-0000-000000000002') = 1,
+  'a restored case is visible and editable again');
+select pg_temp.expect(public.can_edit_case('c0000000-0000-0000-0000-000000000002'), 'restored case is editable');
+rollback;
+
+-- firm code (20261030010000): the sign-in page learns a firm's name from its code, nothing more
+update public.organizations set slug = 'demo-adv' where id = '11111111-1111-1111-1111-111111111111';
+begin;
+set local role anon;
+select pg_temp.expect((select name from public.firm_by_code(' DEMO-adv ')) = 'Demo Advocates', 'firm found by its code');
+select pg_temp.expect((select count(*) from public.firm_by_code('other')) = 0, 'unknown code finds nothing');
+select pg_temp.expect((select count(*) from public.firm_by_code('')) = 0, 'empty code finds nothing');
+rollback;
+do $$
+begin
+  update public.organizations set slug = '9bad code' where id = '22222222-2222-2222-2222-222222222222';
+  raise exception 'FAIL: invalid firm code stored';
+exception when check_violation then raise notice 'ok - firm codes are lower-case letters, digits and hyphens';
+end $$;
+do $$
+begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', true);
+  set local role authenticated;
+  update public.organizations set slug = 'renamed' where id = '11111111-1111-1111-1111-111111111111';
+  if (select slug from public.organizations where id = '11111111-1111-1111-1111-111111111111') <> 'demo-adv' then
+    raise exception 'FAIL: office admin changed the firm code';
+  end if;
+  raise notice 'ok - an office admin cannot change the firm code';
+exception when insufficient_privilege then raise notice 'ok - an office admin cannot change the firm code';
 end $$;
 
 select pg_temp.expect(
