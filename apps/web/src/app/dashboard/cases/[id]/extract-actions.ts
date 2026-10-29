@@ -7,6 +7,7 @@ import { encryptText } from "@/lib/crypto";
 import { FIELD_BY_KEY, normalise } from "@/lib/extract/fields";
 import { decodeField, encodeField } from "@/lib/extract/stored";
 import { loadOfficeConfig, OFFICE_CONFIG_ERROR } from "@/lib/office-profile";
+import { ExecutedDocsSchema } from "@/lib/particulars";
 import { createClient } from "@/lib/supabase/server";
 import type { ActionResult } from "./actions";
 
@@ -109,6 +110,11 @@ export async function applyVerifiedFields(caseId: string): Promise<ActionResult>
   if (v.has("loan_purpose")) loanPatch.purpose = v.get("loan_purpose");
   if (v.has("application_date")) loanPatch.application_date = v.get("application_date");
   if (v.has("tenure_months")) loanPatch.tenure_months = Number(v.get("tenure_months"));
+  if (v.has("executed_documents")) {
+    // Stored as the normalised JSON list; re-checked against the column's schema before writing.
+    const docs = ExecutedDocsSchema.safeParse(JSON.parse(v.get("executed_documents")!));
+    if (docs.success) loanPatch.executed_docs = docs.data;
+  }
 
   const applied: string[] = [];
   const fail = (what: string): ActionResult => ({ ok: false, error: `Could not update ${what}.` });

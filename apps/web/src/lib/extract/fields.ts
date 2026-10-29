@@ -7,7 +7,13 @@ import { checkModelOutput, formatINR, rupees, stripInvisible } from "@civil-suit
  * Normalised storage (before encryption): date → YYYY-MM-DD, amount → integer paise,
  * rate → integer basis points, account → digits only, text → trimmed.
  */
-export type FieldKind = "text" | "date" | "amount" | "rate" | "ifsc" | "account" | "months";
+export type FieldKind = "text" | "date" | "amount" | "rate" | "ifsc" | "account" | "months" | "doclist";
+
+/** A document the borrower or guarantor executed, as printed in the plaint. */
+export interface ExecutedDoc {
+  title: string;
+  date: string | null;
+}
 
 export interface FieldDef {
   key: string;
@@ -38,20 +44,40 @@ export const FIELDS: FieldDef[] = [
   { key: "loan_purpose", label: "Loan purpose", kind: "text", description: "Purpose for which the loan was sanctioned, as written in the sanction letter or agreement", maxLength: 200 },
   { key: "application_date", label: "Loan application date", kind: "date", description: "Date of the borrower's loan application, if stated" },
   { key: "tenure_months", label: "Tenure (months)", kind: "months", description: "Repayment period in months, or the number of monthly instalments" },
+  {
+    key: "executed_documents",
+    label: "Documents executed",
+    kind: "doclist",
+    description:
+      "ALL documents in this file that the borrower or guarantor signed or accepted — go through every page and list each one: loan application, sanction letter (signed 'Accepted'), loan agreement, deed of guarantee, deed of hypothecation, demand promissory note, balance confirmation or acknowledgement of debt. One entry per document as 'Title | DD/MM/YYYY' (the date it was signed), entries separated by semicolons. Do not list bank letters the borrower did not sign, such as NPA notices or statements of account",
+  },
 ];
 
 export const FIELD_BY_KEY = new Map(FIELDS.map((f) => [f.key, f]));
 
 /** JSON schema for the extractor: every field needs a type and a description. */
 export function extractionSchema(): string {
-  const properties: Record<string, { type: string; description: string }> = {};
+  const properties: Record<string, { type: string; description: string; items?: { type: string; description: string } }> = {};
   for (const f of FIELDS) {
-    properties[f.key] = {
-      type: "string",
-      description: `${f.description}. Copy exactly as printed; leave empty if not present.`,
-    };
+    const description = `${f.description}. Copy exactly as printed; leave empty if not present.`;
+    // A list asked for as one string came back with a single entry in live tests; as an array
+    // the extractor goes through every page.
+    properties[f.key] =
+      f.kind === "doclist"
+        ? { type: "array", description, items: { type: "string", description: "One document as 'Title | DD/MM/YYYY'" } }
+        : { type: "string", description };
   }
   return JSON.stringify({ type: "object", properties });
+}
+
+/** An extractor value as the text we normalise: strings, numbers, or a list joined with "; ". */
+export function rawText(raw: unknown): string | null {
+  if (typeof raw === "string" || typeof raw === "number") return String(raw).trim() || null;
+  if (Array.isArray(raw)) {
+    const items = raw.filter((x): x is string => typeof x === "string").map((x) => x.trim()).filter(Boolean);
+    return items.length ? items.join("; ") : null;
+  }
+  return null;
 }
 
 export type Normalised = { ok: true; stored: string } | { ok: false; reason: string };
@@ -121,6 +147,34 @@ export function parseRateBps(raw: string): number | null {
   return bps > 0 && bps <= 5000 ? bps : null;
 }
 
+/**
+ * One document entry: "Demand Promissory Note | 12.07.2023", "Guarantee Agreement dated
+ * 12.07.2023", or a title alone. Null when a date is present but unreadable.
+ */
+export function parseDocumentLine(raw: string): ExecutedDoc | null {
+  const line = raw.trim().replace(/\.$/, "");
+  const m = /^(.*?)(?:\s*\|\s*|\s+dated\s+)(\S+)$/i.exec(line);
+  const title = (m ? m[1]! : line).trim();
+  const date = m ? parseDate(m[2]!) : null;
+  if (!title || title.length > 300 || (m && !date)) return null;
+  return { title, date };
+}
+
+/** A list of executed documents, one per line or separated by semicolons (at most 60). */
+export function parseDocList(raw: string): ExecutedDoc[] | null {
+  const parts = raw.split(/\r?\n|;/).map((s) => s.trim()).filter(Boolean);
+  if (!parts.length || parts.length > 60) return null;
+  const docs: ExecutedDoc[] = [];
+  for (const p of parts) {
+    const d = parseDocumentLine(p);
+    if (!d) return null;
+    docs.push(d);
+  }
+  return docs;
+}
+
+const dmy = (iso: string, sep: string) => iso.split("-").reverse().join(sep);
+
 /** "60", "60 months", "72 monthly instalments of Rs. 18,200/-", "84 EMIs" → months (1–480). */
 export function parseMonths(raw: string): number | null {
   const s = raw.trim();
@@ -166,8 +220,20 @@ export function normalise(kind: FieldKind, raw: string): Normalised {
       const n = parseMonths(s);
       return n != null ? { ok: true, stored: String(n) } : { ok: false, reason: "Not a number of months" };
     }
+    case "doclist": {
+      const docs = parseDocList(s);
+      return docs ? { ok: true, stored: JSON.stringify(docs) } : { ok: false, reason: "Write each document as Title | DD/MM/YYYY, separated by ;" };
+    }
   }
 }
+
+const readDocList = (stored: string): ExecutedDoc[] => {
+  try {
+    return JSON.parse(stored) as ExecutedDoc[];
+  } catch {
+    return [];
+  }
+};
 
 /** Human display of a normalised value. Account numbers are always masked. */
 export function display(kind: FieldKind, stored: string): string {
@@ -184,6 +250,10 @@ export function display(kind: FieldKind, stored: string): string {
       return `XXXXXX${stored.slice(-4)}`;
     case "months":
       return `${stored} months`;
+    case "doclist": {
+      const docs = readDocList(stored);
+      return `${docs.length} document${docs.length === 1 ? "" : "s"}: ${docs.map((d) => (d.date ? `${d.title} (${dmy(d.date, "-")})` : d.title)).join("; ")}`;
+    }
     default:
       return stored;
   }
@@ -193,6 +263,7 @@ export function display(kind: FieldKind, stored: string): string {
 export function editable(kind: FieldKind, stored: string): string {
   if (kind === "amount") return (Number(stored) / 100).toFixed(2);
   if (kind === "rate") return (Number(stored) / 100).toFixed(2);
+  if (kind === "doclist") return readDocList(stored).map((d) => (d.date ? `${d.title} | ${dmy(d.date, ".")}` : d.title)).join("; ");
   return kind === "date" ? display(kind, stored) : stored;
 }
 
@@ -201,9 +272,15 @@ export const LOW_CONFIDENCE = 0.85;
 
 /** Reads a leaf confidence from extractor annotations; accepts 0–1 or 0–100 scales. */
 export function confidenceOf(annotations: unknown, key: string): number | null {
-  const leaf = (annotations as Record<string, unknown> | null)?.[key] as { confidence?: unknown } | undefined;
-  const c = typeof leaf?.confidence === "number" ? leaf.confidence : Number(leaf?.confidence);
-  if (!Number.isFinite(c)) return null;
-  const v = c > 1 ? c / 100 : c;
-  return Math.max(0, Math.min(1, Math.round(v * 1000) / 1000));
+  const node = (annotations as Record<string, unknown> | null)?.[key];
+  // A list is only as sure as its least certain entry.
+  const leaves = (Array.isArray(node) ? node : [node]) as ({ confidence?: unknown } | undefined)[];
+  const values = leaves.map((leaf) => {
+    const c = typeof leaf?.confidence === "number" ? leaf.confidence : Number(leaf?.confidence);
+    if (!Number.isFinite(c)) return null;
+    const v = c > 1 ? c / 100 : c;
+    return Math.max(0, Math.min(1, Math.round(v * 1000) / 1000));
+  });
+  if (!values.length || values.some((v) => v == null)) return null;
+  return Math.min(...(values as number[]));
 }

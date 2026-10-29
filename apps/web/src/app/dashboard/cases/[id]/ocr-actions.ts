@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { canTransition, type CaseStatus } from "@civil-suits/domain";
 import { encryptText } from "@/lib/crypto";
-import { confidenceOf, extractionSchema, FIELDS, normalise } from "@/lib/extract/fields";
+import { confidenceOf, extractionSchema, FIELDS, normalise, rawText } from "@/lib/extract/fields";
 import {
   COST_PAISE_PER_PAGE,
   EXTRACT_COST_PAISE_PER_PAGE,
@@ -154,9 +154,7 @@ async function saveExtraction(supabase: Supabase, job: { org_id: string; documen
   const locked = new Set((verified ?? []).map((v) => v.field_key));
 
   const rows = FIELDS.flatMap((f) => {
-    const raw = result[f.key];
-    if (typeof raw !== "string" && typeof raw !== "number") return [];
-    const text = String(raw).trim();
+    const text = rawText(result[f.key]);
     if (!text || locked.has(f.key)) return [];
     const n = normalise(f.kind, text);
     return [

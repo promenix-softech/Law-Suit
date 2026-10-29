@@ -1,10 +1,7 @@
 import { z } from "zod";
-import { parseDate } from "./extract/fields";
+import { parseDocumentLine, type ExecutedDoc } from "./extract/fields";
 
-export interface ExecutedDoc {
-  title: string;
-  date: string | null;
-}
+export type { ExecutedDoc };
 
 /** loans.executed_docs as stored (jsonb is free-form, so it is re-validated on every read). */
 export const ExecutedDocsSchema = z.array(z.object({ title: z.string().trim().min(1).max(300), date: z.iso.date().nullable() })).max(60);
@@ -20,13 +17,10 @@ export function parseDocumentLines(text: string): { ok: true; docs: ExecutedDoc[
   const docs: ExecutedDoc[] = [];
   const lines = text.split(/\r?\n/);
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]!.trim().replace(/\.$/, "");
-    if (!line) continue;
-    const m = /^(.*?)(?:\s*\|\s*|\s+dated\s+)(\S+)$/i.exec(line);
-    const title = (m ? m[1]! : line).trim();
-    const date = m ? parseDate(m[2]!) : null;
-    if (!title || title.length > 300 || (m && !date)) return { ok: false, line: i + 1 };
-    docs.push({ title, date });
+    if (!lines[i]!.trim()) continue;
+    const doc = parseDocumentLine(lines[i]!);
+    if (!doc) return { ok: false, line: i + 1 };
+    docs.push(doc);
   }
   return docs.length > 60 ? { ok: false, line: 61 } : { ok: true, docs };
 }

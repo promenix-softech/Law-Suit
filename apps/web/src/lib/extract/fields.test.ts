@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { confidenceOf, display, editable, extractionSchema, FIELDS, normalise, parseAmountPaise, parseDate, parseMonths, parseRateBps } from "./fields";
+import { confidenceOf, display, editable, extractionSchema, FIELDS, normalise, parseAmountPaise, parseDate, parseDocList, parseMonths, parseRateBps, rawText } from "./fields";
 
 describe("parseDate (day-first, as in Indian documents)", () => {
   it.each([
@@ -138,22 +138,68 @@ describe("parseMonths (loan tenure)", () => {
   });
 });
 
+describe("parseDocList (documents executed)", () => {
+  it("reads lists separated by new lines or semicolons", () => {
+    expect(parseDocList("Loan Application | 01/03/2023; Sanction Letter | 12/03/2023")).toEqual([
+      { title: "Loan Application", date: "2023-03-01" },
+      { title: "Sanction Letter", date: "2023-03-12" },
+    ]);
+    expect(parseDocList("Term Loan Agreement dated 12.03.2023\nDeed of Guarantee | 12-03-2023\nHypothecation Deed")).toEqual([
+      { title: "Term Loan Agreement", date: "2023-03-12" },
+      { title: "Deed of Guarantee", date: "2023-03-12" },
+      { title: "Hypothecation Deed", date: null },
+    ]);
+  });
+
+  it("refuses unreadable dates and empty lists", () => {
+    expect(parseDocList("Sanction Letter | 32/13/2023")).toBeNull();
+    expect(parseDocList(" ; ")).toBeNull();
+  });
+
+  it("normalises, displays and edits a list", () => {
+    const n = normalise("doclist", "Sanction Letter | 12/03/2023; Deed of Guarantee");
+    expect(n.ok).toBe(true);
+    const stored = (n as { stored: string }).stored;
+    expect(JSON.parse(stored)).toEqual([
+      { title: "Sanction Letter", date: "2023-03-12" },
+      { title: "Deed of Guarantee", date: null },
+    ]);
+    expect(display("doclist", stored)).toBe("2 documents: Sanction Letter (12-03-2023); Deed of Guarantee");
+    expect(editable("doclist", stored)).toBe("Sanction Letter | 12.03.2023; Deed of Guarantee");
+    // the edited form reads back to the same list
+    expect(normalise("doclist", editable("doclist", stored))).toEqual(n);
+  });
+});
+
 describe("particulars fields", () => {
   it("asks for the details the suit particulars need", () => {
     const keys = FIELDS.map((f) => f.key);
-    for (const k of ["guarantor_address", "loan_purpose", "application_date", "tenure_months"]) expect(keys).toContain(k);
+    for (const k of ["guarantor_address", "loan_purpose", "application_date", "tenure_months", "executed_documents"]) expect(keys).toContain(k);
   });
 });
 
 describe("extractionSchema", () => {
-  it("describes every field as a string with a description", () => {
+  it("describes every field with a description; lists as arrays of strings", () => {
     const schema = JSON.parse(extractionSchema());
     expect(schema.type).toBe("object");
     expect(Object.keys(schema.properties)).toEqual(FIELDS.map((f) => f.key));
-    for (const p of Object.values(schema.properties) as { type: string; description: string }[]) {
-      expect(p.type).toBe("string");
+    for (const f of FIELDS) {
+      const p = schema.properties[f.key] as { type: string; description: string; items?: { type: string } };
       expect(p.description.length).toBeGreaterThan(10);
+      if (f.kind === "doclist") expect(p).toMatchObject({ type: "array", items: { type: "string" } });
+      else expect(p.type).toBe("string");
     }
+  });
+});
+
+describe("rawText", () => {
+  it("turns extractor values into the text we normalise", () => {
+    expect(rawText("  Term Loan ")).toBe("Term Loan");
+    expect(rawText(60)).toBe("60");
+    expect(rawText(["Sanction Letter | 12/03/2023", " Deed of Guarantee "])).toBe("Sanction Letter | 12/03/2023; Deed of Guarantee");
+    expect(rawText(["", null])).toBeNull();
+    expect(rawText({ a: 1 })).toBeNull();
+    expect(rawText(null)).toBeNull();
   });
 });
 
@@ -163,5 +209,10 @@ describe("confidenceOf", () => {
     expect(confidenceOf({ a: { confidence: 87 } }, "a")).toBe(0.87);
     expect(confidenceOf({ a: {} }, "a")).toBeNull();
     expect(confidenceOf(null, "a")).toBeNull();
+  });
+
+  it("takes the lowest item confidence for a list", () => {
+    expect(confidenceOf({ a: [{ confidence: 0.9 }, { confidence: 0.286 }] }, "a")).toBe(0.286);
+    expect(confidenceOf({ a: [] }, "a")).toBeNull();
   });
 });
