@@ -14,6 +14,8 @@ export interface FieldDef {
   label: string;
   kind: FieldKind;
   description: string;
+  /** Tighter limit than the kind's own, to match the column it is applied to. */
+  maxLength?: number;
 }
 
 export const FIELDS: FieldDef[] = [
@@ -33,7 +35,7 @@ export const FIELDS: FieldDef[] = [
   { key: "outstanding_as_on", label: "Outstanding as on", kind: "date", description: "Date as on which the outstanding amount is stated" },
   // Suit particulars the plaint prints; the drafter still verifies each one.
   { key: "guarantor_address", label: "Guarantor address", kind: "text", description: "Residential address of the guarantor, if any" },
-  { key: "loan_purpose", label: "Loan purpose", kind: "text", description: "Purpose for which the loan was sanctioned, as written in the sanction letter or agreement" },
+  { key: "loan_purpose", label: "Loan purpose", kind: "text", description: "Purpose for which the loan was sanctioned, as written in the sanction letter or agreement", maxLength: 200 },
   { key: "application_date", label: "Loan application date", kind: "date", description: "Date of the borrower's loan application, if stated" },
   { key: "tenure_months", label: "Tenure (months)", kind: "months", description: "Repayment period in months, or the number of monthly instalments" },
 ];
@@ -121,7 +123,10 @@ export function parseRateBps(raw: string): number | null {
 
 /** "60", "60 months", "72 monthly instalments of Rs. 18,200/-", "84 EMIs" → months (1–480). */
 export function parseMonths(raw: string): number | null {
-  const m = /^(\d{1,3})(?:\s+(?:months?|monthly\b.*|equated\b.*|emis?|instal(?:l)?ments?\b.*))?$/i.exec(raw.trim());
+  const s = raw.trim();
+  // Quarterly, half-yearly, yearly or bi-monthly instalments are not a count of months.
+  if (/quarter|half|year|annual|bi-?month/i.test(s)) return null;
+  const m = /^(\d{1,3})(?:\s+(?:months?|monthly\b.*|equated\b.*|emis?|instal(?:l)?ments?\b.*))?$/i.exec(s);
   if (!m) return null;
   const n = Number(m[1]);
   return n >= 1 && n <= 480 ? n : null;

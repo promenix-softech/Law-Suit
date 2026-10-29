@@ -183,6 +183,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
       {
         key: f.key,
         label: f.label,
+        kind: f.kind,
         raw: p.raw,
         initial: p.stored ? editable(f.kind, p.stored) : p.raw,
         display: p.stored ? display(f.kind, p.stored) : null,
@@ -553,7 +554,8 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
             <div className="mb-4 flex flex-wrap items-start gap-3">
               <GenerateAll caseId={c.id} kinds={suitSet} />
               <SubmitAll
-                drafts={(drafts ?? []).filter((d) => d.status === "draft" || d.status === "returned").map((d) => ({ id: d.id, label: title(d.doc_kind) }))}
+                // Returned papers go back one by one, after the approver's comments are dealt with.
+                drafts={(drafts ?? []).filter((d) => d.status === "draft").map((d) => ({ id: d.id, label: title(d.doc_kind) }))}
               />
             </div>
           )}

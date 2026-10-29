@@ -1435,6 +1435,26 @@ begin
   end;
   reset role;
 end $$;
+-- an admin who adds a version to someone else's draft becomes an editor and cannot approve it
+savepoint before_edit;
+insert into public.draft_versions (org_id, draft_id, version, docx_path, created_by) values
+  ('11111111-1111-1111-1111-111111111111', 'd0000000-0000-0000-0000-0000000000a1', 1,
+   '11111111-1111-1111-1111-111111111111/c0000000-0000-0000-0000-000000000002/drafts/v.docx',
+   '00000000-0000-0000-0000-00000000000a');
+do $$
+begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', true);
+  set local role authenticated;
+  begin
+    insert into public.approvals (org_id, draft_id, decision)
+    values ('11111111-1111-1111-1111-111111111111', 'd0000000-0000-0000-0000-0000000000a1', 'approved');
+    raise exception 'FAIL: admin approved a draft they edited';
+  exception when check_violation then
+    raise notice 'ok - admin cannot approve a draft they edited';
+  end;
+  reset role;
+end $$;
+rollback to savepoint before_edit;
 select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
 insert into public.approvals (org_id, draft_id, decision)
 values ('11111111-1111-1111-1111-111111111111', 'd0000000-0000-0000-0000-0000000000a1', 'approved');

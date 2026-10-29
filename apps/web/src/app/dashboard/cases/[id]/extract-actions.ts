@@ -27,6 +27,9 @@ export async function verifyField(input: z.infer<typeof VerifyInput>): Promise<A
   const def = FIELD_BY_KEY.get(fieldKey)!;
   const n = normalise(def.kind, value);
   if (!n.ok) return { ok: false, error: `${def.label}: ${n.reason.toLowerCase()}.` };
+  if (def.maxLength && n.stored.length > def.maxLength) {
+    return { ok: false, error: `${def.label}: shorten to ${def.maxLength} characters.` };
+  }
 
   const supabase = await createClient();
   if (!supabase) return { ok: false, error: "Database is not configured." };
@@ -134,7 +137,8 @@ export async function applyVerifiedFields(caseId: string): Promise<ActionResult>
 
   const guarantor = v.get("guarantor_name");
   const guarantorAddress = v.get("guarantor_address") ?? null;
-  const known = (c.parties ?? []).find((p) => p.role === "guarantor" && (!guarantor || p.name === guarantor));
+  // The address goes only to the guarantor whose verified name it was read with.
+  const known = guarantor ? (c.parties ?? []).find((p) => p.role === "guarantor" && p.name === guarantor) : undefined;
   if (guarantor && !known) {
     const position = Math.max(0, ...(c.parties ?? []).map((p) => p.position)) + 1;
     const { error } = await supabase

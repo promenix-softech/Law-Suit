@@ -169,7 +169,9 @@
 - [x] Admin may record approvals (migration `20261029000000_admin_can_approve`); maker-checker unchanged — RLS tests: admin approves another's draft, not own; field cannot
 - [x] AI: "Upload & read with AI" starts OCR + extraction on upload; extraction adds guarantor address, loan purpose, application date, tenure (months) and applies them after verification; rate parser accepts one fixed rate with descriptive words ("10.75% per annum, with monthly rests"), still refuses floating / split rates; "Verify these N" for ≥ 95 % values after an explicit "I compared with the scan" tick
 - [x] Case page: "Generate all papers" and "Submit all for approval" (same actions as the single buttons), "Open scan" button per document
-- [ ] Next: invite users from the Team page (edge function holding the service key), auto-fill executed documents from the scan, Marathi labels for the new admin forms
+- [x] Security review (FAIL → fixed): bulk verify never overwrites an edited value and covers only names / addresses / IFSC (confidence is model output); quarterly / half-yearly / yearly instalments are not months; guarantor address only with its verified name; loan purpose ≤ 200 chars at verify; "Submit all" skips returned papers; RLS test: an admin who adds a version cannot approve it
+- Residual (accepted, for an ADR): an admin can edit case facts (loan, parties, verified fields) that feed a draft written by someone else and then approve that draft — the trigger only checks the draft's author and versions (already true for anyone holding admin + approver). "Cannot remove own admin role" is enforced in the app, not the DB
+- [ ] Next: invite users from the Team page (edge function holding the service key), auto-fill executed documents from the scan, Marathi labels for the new admin forms, record "bulk" verification in the audit trail
 
 ## Next (Phase 1)
 - [ ] Owner: VPS for the worker (Docker), service-role key there only; run converters without network before real data

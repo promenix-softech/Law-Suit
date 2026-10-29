@@ -3,11 +3,13 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import type { FieldKind } from "@/lib/extract/fields";
 import { applyVerifiedFields, verifyField } from "./extract-actions";
 
 export type ReviewRow = {
   key: string;
   label: string;
+  kind: FieldKind;
   raw: string;
   /** Value prefilled in the input (normalised and editable), or the raw text if it failed validation. */
   initial: string;
@@ -26,9 +28,8 @@ function ConfidencePill({ c, invalid }: { c: number | null; invalid: boolean }) 
   return <span className={`pill ${c >= LOW ? "pill-green" : "pill-amber"}`}>{Math.round(c * 100)}%</span>;
 }
 
-function Row({ r, caseId, canEdit }: { r: ReviewRow; caseId: string; canEdit: boolean }) {
+function Row({ r, caseId, canEdit, value, setValue }: { r: ReviewRow; caseId: string; canEdit: boolean; value: string; setValue: (v: string) => void }) {
   const router = useRouter();
-  const [value, setValue] = useState(r.initial);
   const [pending, start] = useTransition();
   const [err, setErr] = useState<string | null>(null);
   const invalid = !!r.reason;
@@ -86,14 +87,25 @@ function Row({ r, caseId, canEdit }: { r: ReviewRow; caseId: string; canEdit: bo
 
 /** Only values the extractor was sure of (and code accepted) can be confirmed together. */
 const SURE = 0.95;
+/**
+ * The extractor's confidence is model output over an untrusted scan, so bulk confirmation is
+ * limited to names, addresses and IFSC. Amounts, rates, account numbers, tenure and dates
+ * (claim and limitation) are always verified one by one.
+ */
+const BULK_KINDS: FieldKind[] = ["text", "ifsc"];
 
 export function ExtractionReview({ rows, caseId, canEdit }: { rows: ReviewRow[]; caseId: string; canEdit: boolean }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [checked, setChecked] = useState(false);
+  // Inputs live here so the bulk button can never overwrite a value the drafter has edited.
+  const [values, setValues] = useState<Record<string, string>>({});
+  const valueOf = (r: ReviewRow) => values[r.key] ?? r.initial;
   const verified = rows.filter((r) => r.verified).length;
-  const sure = rows.filter((r) => !r.verified && !r.reason && r.confidence != null && r.confidence >= SURE);
+  const sure = rows.filter(
+    (r) => !r.verified && !r.reason && BULK_KINDS.includes(r.kind) && r.confidence != null && r.confidence >= SURE && valueOf(r) === r.initial,
+  );
 
   // The drafter still confirms: the bulk button needs an explicit "I compared these" tick,
   // and low-confidence or invalid values always stay for one-by-one checking.
@@ -115,7 +127,7 @@ export function ExtractionReview({ rows, caseId, canEdit }: { rows: ReviewRow[];
         <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 px-4 py-3 text-sm">
           <label className="flex items-center gap-2">
             <input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)} className="accent-emerald-600" />
-            I have compared the {sure.length} values marked ≥ {Math.round(SURE * 100)}% with the scan
+            I have compared these {sure.length} names / addresses / IFSC (≥ {Math.round(SURE * 100)}%, unedited) with the scan — amounts, rates and dates are checked one by one
           </label>
           <button disabled={!checked || pending} onClick={verifySure} className="btn btn-primary px-4 py-1.5 text-sm">
             {pending ? "Verifying…" : `✓ Verify these ${sure.length}`}
@@ -135,7 +147,7 @@ export function ExtractionReview({ rows, caseId, canEdit }: { rows: ReviewRow[];
           </thead>
           <tbody>
             {rows.map((r) => (
-              <Row key={r.key} r={r} caseId={caseId} canEdit={canEdit} />
+              <Row key={r.key} r={r} caseId={caseId} canEdit={canEdit} value={valueOf(r)} setValue={(v) => setValues((m) => ({ ...m, [r.key]: v }))} />
             ))}
           </tbody>
         </table>

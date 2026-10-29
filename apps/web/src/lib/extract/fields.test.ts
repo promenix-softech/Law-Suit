@@ -115,7 +115,19 @@ describe("parseMonths (loan tenure)", () => {
     expect(parseMonths(raw)).toBe(n);
   });
 
-  it.each(["0", "five years", "Rs. 14,050 for 60 months", "1000 months", "60 days"])("rejects %s", (raw) => {
+  it.each([
+    "0",
+    "five years",
+    "Rs. 14,050 for 60 months",
+    "1000 months",
+    "60 days",
+    // not monthly: the count is not a number of months
+    "20 equated quarterly instalments",
+    "10 half-yearly instalments",
+    "5 yearly instalments",
+    "5 annual instalments",
+    "30 bi-monthly instalments",
+  ])("rejects %s", (raw) => {
     expect(parseMonths(raw)).toBeNull();
   });
 
