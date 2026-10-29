@@ -27,7 +27,9 @@ import {
   type PlaintInput,
   type SuitType,
 } from "@civil-suits/templates";
+import JSZip from "jszip";
 import { renderDocx } from "@/lib/docx";
+import { EXTERNAL_TARGET, inspectDocx } from "@/lib/docx-zip";
 import { loadOfficeConfig, OFFICE_CONFIG_ERROR, type OfficeConfig } from "@/lib/office-profile";
 import { readExecutedDocs } from "@/lib/particulars";
 import { createClient } from "@/lib/supabase/server";
@@ -428,6 +430,11 @@ const ADVANCES_TO: Partial<Record<DocKind, CaseStatus>> = {
   original_application: "drafting",
 };
 
+/** The suit itself (plaint / OA) can change only until it goes to the notary. */
+const SUIT_KINDS = new Set(["plaint", "original_application"]);
+const SUIT_LOCKED: CaseStatus[] = ["notary_stamp", "efiling_ready", "filed", "listed", "disposed"];
+const SUIT_LOCKED_ERROR = "The plaint has gone to the notary or the court; it can no longer be changed here.";
+
 /** Builds a document from case data and stores it as a new draft version (DOCX). */
 export async function generateDraft(caseId: string, kindInput: string): Promise<ActionResult> {
   const kind = DocKindSchema.safeParse(kindInput);
@@ -437,6 +444,7 @@ export async function generateDraft(caseId: string, kindInput: string): Promise<
 
   const { data: c } = await supabase.from("cases").select(CASE_SELECT).eq("id", caseId).single();
   if (!c) return { ok: false, error: "Case not found." };
+  if (SUIT_KINDS.has(kind.data) && SUIT_LOCKED.includes(c.status as CaseStatus)) return { ok: false, error: SUIT_LOCKED_ERROR };
   // In a commercial suit the supporting affidavit is the statement of truth.
   const storedKind =
     kind.data === "affidavit" && suitTypeOf(c as unknown as CaseDetail) === "commercial" ? "statement_of_truth" : kind.data;
@@ -476,12 +484,77 @@ export async function generateDraft(caseId: string, kindInput: string): Promise<
   // A new version always needs a fresh approval.
   await supabase.from("drafts").update({ current_version: version, status: "draft" }).eq("id", draft.id);
 
+  // (A new plaint version on an approved case sends it back to drafting: database trigger.)
   const next = ADVANCES_TO[kind.data];
   if (next) await setCaseStatus(supabase, c as CaseRow, next);
 
   revalidatePath(`/dashboard/cases/${caseId}`);
   const label = storedKind === "statement_of_truth" ? "Statement of truth" : LABEL[kind.data];
   return { ok: true, message: `${label} v${version} generated.` };
+}
+
+const MAX_CORRECTION_BYTES = 10 * 1024 * 1024;
+const CorrectionInput = z.object({
+  draftId: z.uuid(),
+  path: z.string().min(1).max(500),
+  note: z.string().trim().min(3).max(300),
+});
+
+/**
+ * Stores a Word file the drafter corrected by hand (already uploaded by the browser under the
+ * case's drafts folder) as the draft's next version. Like a regenerated version it needs a fresh
+ * approval, and its uploader counts as an editor, so they can never approve it.
+ */
+export async function recordCorrection(input: z.input<typeof CorrectionInput>): Promise<ActionResult> {
+  const parsed = CorrectionInput.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Say in a few words what you corrected (3–300 characters)." };
+  const { draftId, path, note } = parsed.data;
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, error: "Database is not configured." };
+
+  const { data: d } = await supabase
+    .from("drafts")
+    .select("id, org_id, case_id, doc_kind, status, current_version, cases(id, status)")
+    .eq("id", draftId)
+    .single();
+  const c = one(d?.cases ?? null) as CaseRow | null;
+  if (!d || !c) return { ok: false, error: "Draft not found." };
+  if (!path.startsWith(`${d.org_id}/${d.case_id}/drafts/`) || !path.endsWith(".docx")) return { ok: false, error: "Invalid file path." };
+  if (d.status === "in_approval") return { ok: false, error: "This paper is with the approver. Ask for it back before correcting it." };
+  if (SUIT_KINDS.has(d.doc_kind) && SUIT_LOCKED.includes(c.status)) return { ok: false, error: SUIT_LOCKED_ERROR };
+  // The person recording the file must be the one who uploaded it: they become its author.
+  const { data: mine } = await supabase.rpc("uploaded_by_me", { p_path: path });
+  if (mine !== true) return { ok: false, error: "Upload the file yourself, then save it." };
+
+  // Check what was uploaded before it becomes a version: a real Word file, within the size
+  // limits (declared sizes, before anything is unpacked), no macros, no links to outside files.
+  const { data: blob } = await supabase.storage.from(BUCKET).download(path);
+  if (!blob) return { ok: false, error: "The uploaded file could not be read." };
+  if (blob.size > MAX_CORRECTION_BYTES) return { ok: false, error: "The Word file is larger than 10 MB." };
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  const check = inspectDocx(bytes);
+  if (!check.ok) return { ok: false, error: check.error };
+  try {
+    const zip = await JSZip.loadAsync(bytes);
+    for (const rels of check.entries.filter((e) => e.name.endsWith(".rels"))) {
+      if (EXTERNAL_TARGET.test((await zip.file(rels.name)?.async("string")) ?? "")) {
+        return { ok: false, error: "The Word file links to outside files. Remove the links and upload again." };
+      }
+    }
+  } catch {
+    return { ok: false, error: "The Word file is damaged." };
+  }
+
+  const version = d.current_version + 1;
+  const ver = await supabase
+    .from("draft_versions")
+    .insert({ org_id: d.org_id, draft_id: d.id, version, docx_path: path, diff_summary: `Corrected by hand: ${note}` });
+  if (ver.error) return { ok: false, error: "You cannot correct drafts of this case." };
+  // A new plaint version on an approved case sends it back to drafting (database trigger).
+  await supabase.from("drafts").update({ current_version: version, status: "draft" }).eq("id", d.id);
+
+  revalidatePath(`/dashboard/cases/${d.case_id}`);
+  return { ok: true, message: `Corrected file saved as v${version}. Submit it for approval when ready.` };
 }
 
 /** Drafter sends the current version to the approver. */

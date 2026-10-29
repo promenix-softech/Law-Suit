@@ -322,6 +322,51 @@ body {
 }
 
 /* ---------------------------------------------------------- draft preview */
+/* ------------------------------------------------------------- next step + papers (case page) */
+.next-step {
+  border: 1px solid var(--glass-border);
+  background: var(--glass);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  box-shadow: var(--shadow);
+}
+.next-step-action {
+  background: linear-gradient(120deg, rgba(99, 102, 241, 0.16), rgba(139, 92, 246, 0.12) 60%, var(--glass));
+  border-color: rgba(139, 92, 246, 0.35);
+}
+.next-step-action .next-step-icon {
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #fff;
+  box-shadow: 0 10px 24px -8px rgba(139, 92, 246, 0.7);
+  animation: next-pulse 2.4s ease-in-out infinite;
+}
+.next-step-action:hover { transform: translateY(-1px); }
+.next-step-wait .next-step-icon { background: rgba(245, 158, 11, 0.15); }
+.next-step-done .next-step-icon { background: rgba(16, 185, 129, 0.18); color: rgb(5, 150, 105); }
+@keyframes next-pulse {
+  0%, 100% { box-shadow: 0 10px 24px -8px rgba(139, 92, 246, 0.7), 0 0 0 0 rgba(139, 92, 246, 0.35); }
+  50% { box-shadow: 0 10px 24px -8px rgba(139, 92, 246, 0.7), 0 0 0 10px rgba(139, 92, 246, 0); }
+}
+.pipeline-seg {
+  transform-origin: left center;
+  animation: seg-grow 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  transition: opacity 0.2s ease, filter 0.2s ease;
+}
+.pipeline-seg:hover { filter: brightness(1.15); }
+@keyframes seg-grow {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+.paper-card { transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease; }
+.paper-approved { box-shadow: inset 3px 0 0 rgb(16, 185, 129), var(--shadow); }
+.paper-returned { box-shadow: inset 3px 0 0 rgb(245, 158, 11), var(--shadow); }
+.paper-missing:hover { border-color: rgba(139, 92, 246, 0.45); }
+:target { animation: target-flash 1.6s ease-out; }
+@keyframes target-flash {
+  0% { box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.55), var(--shadow); }
+  100% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0), var(--shadow); }
+}
+
 /* components/draft-preview.tsx: full-screen reader with a book view (3D page turn) and a scroll view */
 .pv-root { animation: pv-in 0.22s ease-out; }
 @keyframes pv-in {
@@ -427,7 +472,10 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .pv-root,
-  .pv-skeleton { animation: none; }
+  .pv-skeleton,
+  .next-step-action .next-step-icon,
+  .pipeline-seg,
+  :target { animation: none; }
   .backdrop .blob,
   .fade-up { animation: none; }
   .glass-card,

@@ -7,7 +7,11 @@ import type { T } from "@/lib/i18n";
 import { getT } from "@/lib/lang";
 import { createClient } from "@/lib/supabase/server";
 import { caseStatus, draftStatus, fmtDate, title } from "@/lib/ui";
-import { DecideDraft, GenerateAll, GenerateDraft, MediationOutcome, MediationStart, NoticeForm, SubmitAll, SubmitDraft, UploadScan } from "./case-actions";
+import { DecideDraft, GenerateAll, MediationOutcome, MediationStart, NoticeForm, SubmitAll, SubmitDraft, UploadScan } from "./case-actions";
+import { CorrectDraft, RegenerateDraft } from "./draft-controls";
+import { EditDraftText } from "./draft-editor";
+import { ArchiveCase, RestoreCase } from "./archive-controls";
+import { checklist, nextStep, type CaseFacts } from "@/lib/next-step";
 import type { DocKind } from "./actions";
 import { display, editable, FIELDS } from "@/lib/extract/fields";
 import { decodeField } from "@/lib/extract/stored";
@@ -20,7 +24,10 @@ import { AssignTask } from "../../tasks/task-controls";
 import { formatDocumentLines, readExecutedDocs } from "@/lib/particulars";
 import { SuitParticulars } from "./particulars-form";
 
-const rupeesText = (paise: number | string | null) => (paise == null || Number(paise) === 0 ? "" : String(Number(paise) / 100));
+/** The person's note on a hand-made version (uploaded Word file or edited here); null for generated ones. */
+const changeNote = (summary: string | null) => summary?.match(/^(?:Corrected by hand|Edited in Civil Suits[^:]*): (.+)$/)?.[1] ?? null;
+
+const rupeesText =(paise: number | string | null) => (paise == null || Number(paise) === 0 ? "" : String(Number(paise) / 100));
 const isoToDot = (d: string | null) => (d ? d.split("-").reverse().join(".") : "");
 
 const BUNDLE_READY = ["approved", "notary_stamp", "efiling_ready", "filed"];
@@ -105,9 +112,21 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function Section({ title: t, subtitle, children, delay = 0 }: { title: string; subtitle?: string; children: React.ReactNode; delay?: number }) {
+function Section({
+  title: t,
+  subtitle,
+  children,
+  delay = 0,
+  id,
+}: {
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+  delay?: number;
+  id?: string;
+}) {
   return (
-    <section className="glass-card fade-up p-6" style={{ animationDelay: `${delay}ms` }}>
+    <section id={id} className="glass-card fade-up scroll-mt-24 p-6" style={{ animationDelay: `${delay}ms` }}>
       <h2 className="text-lg font-semibold">{t}</h2>
       {subtitle && <p className="muted mt-0.5 text-sm">{subtitle}</p>}
       <div className="mt-4">{children}</div>
@@ -126,7 +145,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
   const { data: c } = await supabase
     .from("cases")
     .select(
-      "id, org_id, case_no_internal, status, suit_type, claim_amount_paise, is_commercial, needs_12a, urgent_interim_relief, assigned_drafter, assigned_approver, courts(name, state), bank_branches(branch_name, ifsc, banks(name)), signatory_name, signatory_designation, signatory_age, penal_interest_paise, expenses_paise, parties(id, name, role, address, aadhaar_last4, position, through_capacity, through_name), loans(id, facility_type, account_last4, sanction_date, sanction_amount_paise, roi_bps, npa_date, outstanding_paise, interest_upto_date, application_date, purpose, executed_docs, tenure_months, created_at), notices(id, dispatch_mode, tracking_no, sent_at), mediations(id, authority, applied_at, outcome, report_date, report_path)",
+      "id, org_id, case_no_internal, status, archived_at, archive_reason, archived_by, suit_type, claim_amount_paise, is_commercial, needs_12a, urgent_interim_relief, assigned_drafter, assigned_approver, courts(name, state), bank_branches(branch_name, ifsc, banks(name)), signatory_name, signatory_designation, signatory_age, penal_interest_paise, expenses_paise, parties(id, name, role, address, aadhaar_last4, position, through_capacity, through_name), loans(id, facility_type, account_last4, sanction_date, sanction_amount_paise, roi_bps, npa_date, outstanding_paise, interest_upto_date, application_date, purpose, executed_docs, tenure_months, created_at), notices(id, dispatch_mode, tracking_no, sent_at), mediations(id, authority, applied_at, outcome, report_date, report_path)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -139,7 +158,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
     supabase
       .from("drafts")
       .select(
-        "id, doc_kind, language, status, created_by, current_version, draft_versions(id, version, docx_path, pdf_path, created_at), approvals(decision, comments, created_at)",
+        "id, doc_kind, language, status, created_by, current_version, draft_versions(id, version, docx_path, pdf_path, diff_summary, created_at), approvals(decision, comments, created_at)",
       )
       .eq("case_id", id)
       .order("doc_kind"),
@@ -211,8 +230,11 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
   const roleNames = (roles ?? []).map((r) => r.role as string);
   if (roleNames.length > 0 && roleNames.every((r) => r === "field")) redirect("/dashboard/tasks");
   // Admins may decide too; the database still refuses anyone who wrote or edited the draft.
-  const isApprover = roleNames.includes("approver") || roleNames.includes("admin");
-  const canEdit = roleNames.includes("admin") || c.assigned_drafter === auth.user.id;
+  const isAdmin = roleNames.includes("admin");
+  const archived = !!c.archived_at;
+  const isApprover = !archived && (roleNames.includes("approver") || isAdmin);
+  // An archived case is read-only for everyone (the database enforces it) until it is restored.
+  const canEdit = !archived && (isAdmin || c.assigned_drafter === auth.user.id);
 
   const mediations = [...(c.mediations ?? [])];
   const notices = [...(c.notices ?? [])].sort((a, b) => (b.sent_at ?? "").localeCompare(a.sent_at ?? ""));
@@ -266,6 +288,60 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
         ...(c.is_commercial && c.urgent_interim_relief ? [{ kind: "interim_application" as const, label: "Interim application" }] : []),
       ];
 
+  // Drafts by suit-set paper (the commercial affidavit is stored as the statement of truth).
+  type DraftRow = NonNullable<typeof drafts>[number];
+  const draftOf = (kind: DocKind): DraftRow | undefined =>
+    (drafts ?? []).find((d) => d.doc_kind === kind || (kind === "affidavit" && d.doc_kind === "statement_of_truth"));
+  const paperDrafts = suitSet.map((p) => ({ ...p, draft: draftOf(p.kind) }));
+  const otherDrafts = (drafts ?? []).filter((d) => !paperDrafts.some((p) => p.draft?.id === d.id));
+  const allDrafts = drafts ?? [];
+  const count = (s: string) => paperDrafts.filter((p) => p.draft?.status === s).length;
+
+  const missing = isDrt
+    ? []
+    : [
+        ...(c.penal_interest_paise == null ? ["Penal interest"] : []),
+        ...(!c.signatory_name ? ["Bank's signing officer"] : []),
+        ...(!(c.loans ?? []).length ? ["Loan details"] : []),
+      ];
+  const notice = draftOf("demand_notice");
+  const mediationState: CaseFacts["mediation"] = !mediations.length
+    ? "none"
+    : mediations.some((m) => m.outcome === "settled")
+      ? "settled"
+      : mediations.some((m) => m.outcome === "failed" || m.outcome === "non_starter")
+        ? "failed"
+        : "pending";
+  const facts: CaseFacts = {
+    status: c.status as CaseFacts["status"],
+    archived,
+    needs12A: c.needs_12a,
+    isDrt,
+    scans: docs?.length ?? 0,
+    readingNow: [...latestJob.values()].some((j) => j.status === "running" || j.status === "queued"),
+    extracted: reviewRows.length,
+    unverified: reviewRows.filter((r) => !r.verified).length,
+    noticeDrafted: !!notice && notice.current_version > 0,
+    noticeSent: notices.length > 0,
+    mediation: mediationState,
+    missing,
+    papers: {
+      expected: suitSet.length,
+      generated: paperDrafts.filter((p) => (p.draft?.current_version ?? 0) > 0).length,
+      draft: count("draft"),
+      returned: count("returned"),
+      inApproval: count("in_approval"),
+      approved: count("approved"),
+    },
+    plaintApproved: BUNDLE_READY.includes(c.status),
+    bundleBuilt: bundles.some((b) => b.status === "done"),
+    canEdit,
+    awaitingMe: isApprover ? allDrafts.filter((d) => d.status === "in_approval" && d.created_by !== auth.user.id).length : 0,
+  };
+  const step = nextStep(facts);
+  const checks = checklist(facts);
+  const WHO: Record<string, string> = { you: "Your turn", approver: "Approver's turn", drafter: "Drafter's turn", field: "Field staff", nobody: "" };
+
   return (
     <>
       <TopBar
@@ -288,11 +364,64 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
           </p>
         </div>
 
+        {archived && (
+          <div className="fade-up flex flex-wrap items-center gap-4 rounded-3xl border border-amber-500/30 bg-amber-500/10 p-5">
+            <span className="text-3xl" aria-hidden>
+              🗄
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold">{t("This case is archived")}</p>
+              <p className="muted text-sm">
+                {fmtDate(c.archived_at)} · “{c.archive_reason}” · {t("read-only until restored")}
+              </p>
+            </div>
+            {isAdmin && <RestoreCase caseId={c.id} lang={lang} />}
+          </div>
+        )}
+
         <div className="glass-card fade-up overflow-x-auto p-4" style={{ animationDelay: "60ms" }}>
           <Stepper status={c.status} needs12A={c.needs_12a} t={t} />
         </div>
 
-        <div className="grid gap-5 md:grid-cols-3">
+        {/* What now: the one next step, worked out in code from the case, and the milestones so far */}
+        <div className="fade-up grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto]" style={{ animationDelay: "80ms" }}>
+          <a
+            href={`#${step.anchor}`}
+            className={`next-step group flex items-center gap-4 rounded-3xl p-5 transition ${
+              step.tone === "action" ? "next-step-action" : step.tone === "done" ? "next-step-done" : "next-step-wait"
+            }`}
+          >
+            <span className="next-step-icon grid h-12 w-12 shrink-0 place-items-center rounded-2xl text-xl" aria-hidden>
+              {step.tone === "action" ? "➜" : step.tone === "done" ? "✓" : "⏳"}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="label block">
+                {t("Next step")}
+                {WHO[step.who] && <> · {t(WHO[step.who])}</>}
+              </span>
+              <span className="mt-0.5 block text-lg font-semibold">
+                {t(step.title)}
+                {step.count != null && <span className="tabular-nums"> ({step.count})</span>}
+              </span>
+              {step.detail && <span className="muted block text-sm">{step.detail.split(", ").map((m) => t(m)).join(", ")}</span>}
+            </span>
+            {step.tone === "action" && <span className="btn btn-primary shrink-0 px-4 py-2 text-sm transition group-hover:translate-x-0.5">{t("Go")} →</span>}
+          </a>
+          <ol className="glass-card flex flex-wrap items-center gap-x-4 gap-y-2 p-4 text-sm lg:max-w-xl">
+            {checks.map((ci) => (
+              <li key={ci.label}>
+                <a href={`#${ci.anchor}`} className={`inline-flex items-center gap-1.5 hover:underline ${ci.done ? "" : "muted"}`}>
+                  <span className={`grid h-5 w-5 place-items-center rounded-full text-[11px] ${ci.done ? "bg-emerald-500 text-white" : "border border-current/30"}`}>
+                    {ci.done ? "✓" : ""}
+                  </span>
+                  {t(ci.label)}
+                </a>
+              </li>
+            ))}
+          </ol>
+        </div>
+
+        <div id="summary" className="grid scroll-mt-24 gap-5 md:grid-cols-3">
           <div className="glass-card fade-up p-6 md:col-span-1" style={{ animationDelay: "100ms" }}>
             <p className="label">Claim incl. interest</p>
             <p className="gradient-text mt-1 text-3xl font-semibold tracking-tight">{claim == null ? "—" : formatINR(claim)}</p>
@@ -360,7 +489,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
         </div>
 
         {(canEdit || (caseTasks?.length ?? 0) > 0) && (
-          <Section title={t("Field tasks")} subtitle="Documents, notary, e-filing, dispatch — field staff update from their phone" delay={190}>
+          <Section id="tasks" title={t("Field tasks")} subtitle="Documents, notary, e-filing, dispatch — field staff update from their phone" delay={190}>
             {caseTasks?.length ? (
               <ul className="mb-4 space-y-2 text-sm">
                 {caseTasks.map((t) => (
@@ -423,7 +552,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
         </Section>
 
         <div className="grid gap-5 lg:grid-cols-2">
-          <Section title={t("Demand notice dispatch")} subtitle="Record how and when the notice was sent" delay={220}>
+          <Section id="notice" title={t("Demand notice dispatch")} subtitle="Record how and when the notice was sent" delay={220}>
             <ul className="space-y-2">
               {notices.map((n) => (
                 <li key={n.id} className="flex items-center justify-between rounded-xl bg-white/20 px-3 py-2 text-sm dark:bg-white/5">
@@ -443,7 +572,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
           </Section>
 
           {c.needs_12a ? (
-            <Section title={t("Sec 12A pre-institution mediation")} subtitle="Mandatory before filing a commercial suit" delay={260}>
+            <Section id="mediation" title={t("Sec 12A pre-institution mediation")} subtitle="Mandatory before filing a commercial suit" delay={260}>
               {mediations.map((m) => (
                 <div key={m.id} className="mb-3 rounded-xl bg-white/20 px-3 py-2 text-sm dark:bg-white/5">
                   <div className="flex items-center justify-between">
@@ -474,13 +603,13 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
               {!mediations.length && (canEdit ? <MediationStart caseId={c.id} /> : <p className="muted text-sm">Not started.</p>)}
             </Section>
           ) : (
-            <Section title={t("Sec 12A pre-institution mediation")} delay={260}>
+            <Section id="mediation" title={t("Sec 12A pre-institution mediation")} delay={260}>
               <p className="muted text-sm">Not required for this case.</p>
             </Section>
           )}
         </div>
 
-        <Section title={`${t("Documents")} (${docs?.length ?? 0})`} subtitle="Scans are stored privately; links expire in 5 minutes" delay={300}>
+        <Section id="documents" title={`${t("Documents")} (${docs?.length ?? 0})`} subtitle="Scans are stored privately; links expire in 5 minutes" delay={300}>
           {canEdit && <UploadScan orgId={c.org_id} caseId={c.id} lang={lang} />}
           <ul className="mt-4 space-y-2">
             {docs?.map((d) => (
@@ -509,6 +638,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
 
         {reviewRows.length > 0 && (
           <Section
+            id="extraction"
             title={t("Extracted data — review")}
             subtitle="Read from the scans by Sarvam. Check each value against the source, then verify. Only verified values reach the case."
             delay={320}
@@ -519,6 +649,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
 
         {canEdit && !isDrt && (
           <Section
+            id="particulars"
             title={t("Suit particulars")}
             subtitle="Printed in the plaint, decree, list of documents and affidavit in the office format · amounts totalled in code"
             delay={330}
@@ -550,112 +681,153 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
           </Section>
         )}
 
-        <Section title={t("Drafts")} subtitle="Generated from verified case data · approval enforced by the database" delay={340}>
+        <Section id="drafts" title={t("Drafts")} subtitle={t("Generated from verified case data · approval enforced by the database")} delay={340}>
           {canEdit && (
-            <div className="mb-4 flex flex-wrap items-start gap-3">
-              <GenerateAll caseId={c.id} kinds={suitSet} lang={lang} />
+            <div className="mb-5 flex flex-wrap items-start gap-3">
+              <GenerateAll
+                caseId={c.id}
+                lang={lang}
+                kinds={paperDrafts.map((p) => ({
+                  kind: p.kind,
+                  label: p.label,
+                  exists: (p.draft?.current_version ?? 0) > 0,
+                  approved: p.draft?.status === "approved",
+                }))}
+              />
               <SubmitAll
                 lang={lang}
                 // Returned papers go back one by one, after the approver's comments are dealt with.
-                drafts={(drafts ?? []).filter((d) => d.status === "draft").map((d) => ({ id: d.id, label: title(d.doc_kind) }))}
+                drafts={allDrafts.filter((d) => d.status === "draft").map((d) => ({ id: d.id, label: title(d.doc_kind) }))}
               />
             </div>
           )}
-          {canEdit && (
-            <details className="group">
-              <summary className="muted cursor-pointer text-sm">{t("Or generate one paper at a time")}</summary>
-            <div className="mt-3 flex flex-wrap gap-3">
-              <GenerateDraft caseId={c.id} kind="demand_notice" label="Generate demand notice" />
-              {isDrt ? (
-                <GenerateDraft caseId={c.id} kind="original_application" label="Generate DRT Original Application" />
-              ) : (
-                <>
-                  <GenerateDraft caseId={c.id} kind="plaint" label="Generate plaint" />
-                  <GenerateDraft caseId={c.id} kind="list_of_documents" label="Generate list of documents" />
-                  <GenerateDraft caseId={c.id} kind="vakalatnama" label="Generate vakalatnama" />
-                  <GenerateDraft
-                    caseId={c.id}
-                    kind="affidavit"
-                    label={c.is_commercial ? "Generate statement of truth" : "Generate affidavit"}
-                  />
-                  <GenerateDraft caseId={c.id} kind="address_memo" label="Generate address memo" />
-                  {c.suit_type === "summary_o37" && <GenerateDraft caseId={c.id} kind="draft_decree" label="Generate draft decree" />}
-                  <GenerateDraft caseId={c.id} kind="bbe_certificate" label="Generate Bankers' Books certificate" />
-                  <GenerateDraft caseId={c.id} kind="court_fee_letter" label="Generate court-fee letter to bank" />
-                  <GenerateDraft caseId={c.id} kind="efiling_sheet" label="Generate e-filing data sheet" />
-                  {c.is_commercial && c.urgent_interim_relief && (
-                    <GenerateDraft caseId={c.id} kind="interim_application" label="Generate interim application" />
-                  )}
-                </>
-              )}
-            </div>
-            </details>
-          )}
-          <div className="mt-5 grid gap-4 md:grid-cols-2">
-            {drafts?.map((d) => {
-              const vs = [...(d.draft_versions ?? [])].sort((a, b) => b.version - a.version);
-              const last = [...(d.approvals ?? [])].sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
-              const [label, tone] = draftStatus(d.status, t);
-              return (
-                <div key={d.id} className="glass-card p-5">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-semibold">
-                      {title(d.doc_kind)} <span className="muted text-xs uppercase">{d.language}</span>
-                    </span>
-                    <span className={`pill ${tone}`}>{label}</span>
-                  </div>
-                  <ul className="mt-3 flex flex-wrap gap-2">
-                    {vs.map((v, i) => {
-                      const job = pdfJob(v.id);
-                      return (
-                        <li key={v.version} className="flex flex-wrap items-start gap-2">
-                          <a className="btn px-3 py-1 text-xs" href={v.docx_path ? signed.get(v.docx_path) : undefined}>
-                            ⬇ v{v.version} DOCX · {fmtDate(v.created_at)}
-                          </a>
-                          {v.docx_path && signed.get(v.docx_path) && (
-                            <DraftPreview
-                              url={signed.get(v.docx_path)!}
-                              heading={`${c.case_no_internal} · ${title(d.doc_kind)} v${v.version}`}
-                              lang={lang}
-                            />
-                          )}
-                          {v.pdf_path ? (
-                            <a className="btn px-3 py-1 text-xs" href={signed.get(v.pdf_path)}>
-                              ⬇ PDF/A
-                            </a>
-                          ) : job && job.status !== "failed" ? (
-                            <span className={`pill ${JOB_TONE[job.status]}`}>PDF {job.status}</span>
-                          ) : (
-                            canEdit && i === 0 && <MakePdf caseId={c.id} versionId={v.id} />
-                          )}
-                          {!v.pdf_path && job?.status === "failed" && <span className="pill pill-red">PDF failed</span>}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                  {last && (
-                    <p className="muted mt-3 text-sm">
-                      Last decision: <span className="font-medium">{title(last.decision)}</span>
-                      {last.comments && <> — “{last.comments}”</>}
-                    </p>
-                  )}
-                  {canEdit && (d.status === "draft" || d.status === "returned") && (
-                    <div className="mt-3">
-                      <SubmitDraft draftId={d.id} />
+          <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
+            {[...paperDrafts.map((p) => ({ kind: p.kind as string, label: p.label, draft: p.draft })), ...otherDrafts.map((d) => ({ kind: d.doc_kind as string, label: title(d.doc_kind), draft: d }))].map(
+              ({ kind, label, draft: d }) => {
+                const vs = [...(d?.draft_versions ?? [])].sort((a, b) => b.version - a.version);
+                const latest = vs[0];
+                if (!d || !latest) {
+                  // Not generated yet: one clear button, nothing else.
+                  return (
+                    <div key={kind} className="paper-card paper-missing rounded-3xl border-2 border-dashed border-current/15 p-5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-semibold">{t(label)}</span>
+                        <span className="pill pill-neutral">{t("Not generated")}</span>
+                      </div>
+                      <div className="mt-4">
+                        {canEdit ? (
+                          <RegenerateDraft caseId={c.id} kind={kind as DocKind} exists={false} approved={false} primary lang={lang} />
+                        ) : (
+                          <p className="muted text-sm">{t("The drafter generates it.")}</p>
+                        )}
+                      </div>
                     </div>
-                  )}
-                  {isApprover && d.status === "in_approval" && d.created_by !== auth.user.id && <DecideDraft draftId={d.id} />}
-                </div>
-              );
-            })}
-            {!drafts?.length && <p className="muted text-sm">No drafts yet.</p>}
+                  );
+                }
+                const last = [...(d.approvals ?? [])].sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+                const [statusLabel, tone] = draftStatus(d.status, t);
+                const job = pdfJob(latest.id);
+                const approvedNow = d.status === "approved";
+                const mine = d.created_by === auth.user.id;
+                const url = latest.docx_path ? signed.get(latest.docx_path) : undefined;
+                return (
+                  <div key={d.id} className={`paper-card glass-card p-5 ${approvedNow ? "paper-approved" : d.status === "returned" ? "paper-returned" : ""}`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-semibold">
+                          {title(d.doc_kind)} <span className="muted text-xs uppercase">{d.language}</span>
+                        </p>
+                        <p className="muted text-xs">
+                          v{latest.version} · {fmtDate(latest.created_at)}
+                          {changeNote(latest.diff_summary) && <> · ✎ {changeNote(latest.diff_summary)}</>}
+                        </p>
+                      </div>
+                      <span className={`pill ${tone}`}>{statusLabel}</span>
+                    </div>
+
+                    {d.status === "returned" && last?.decision === "returned" && (
+                      <p className="mt-3 rounded-xl bg-amber-500/10 px-3 py-2 text-sm">
+                        <span className="font-medium">{t("Returned")}:</span> “{last.comments}”
+                      </p>
+                    )}
+
+                    {/* Reading the paper comes first */}
+                    <div className="mt-4 flex flex-wrap items-center gap-2">
+                      {url && <DraftPreview url={url} heading={`${c.case_no_internal} · ${title(d.doc_kind)} v${latest.version}`} lang={lang} />}
+                      {url && (
+                        <a className="btn px-3 py-1 text-xs" href={url}>
+                          ⬇ DOCX
+                        </a>
+                      )}
+                      {latest.pdf_path ? (
+                        <a className="btn px-3 py-1 text-xs" href={signed.get(latest.pdf_path)}>
+                          ⬇ PDF/A
+                        </a>
+                      ) : job && job.status !== "failed" ? (
+                        <span className={`pill ${JOB_TONE[job.status]}`}>PDF {job.status}</span>
+                      ) : (
+                        canEdit && <MakePdf caseId={c.id} versionId={latest.id} />
+                      )}
+                      {!latest.pdf_path && job?.status === "failed" && <span className="pill pill-red">PDF failed</span>}
+                    </div>
+
+                    {/* The one thing to do with it now, then the quieter options */}
+                    <div className="mt-4 flex flex-wrap items-start gap-2 border-t border-current/10 pt-4">
+                      {d.status === "in_approval" &&
+                        (isApprover && !mine ? (
+                          <DecideDraft draftId={d.id} />
+                        ) : (
+                          <span className="muted text-sm">⏳ {t("With the approver")}</span>
+                        ))}
+                      {approvedNow && <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">✓ {t("Approved")}</span>}
+                      {canEdit && d.status === "draft" && <SubmitDraft draftId={d.id} primary lang={lang} />}
+                      {canEdit && d.status !== "in_approval" && (
+                        <>
+                          <RegenerateDraft caseId={c.id} kind={(d.doc_kind === "statement_of_truth" ? "affidavit" : d.doc_kind) as DocKind} exists approved={approvedNow} lang={lang} />
+                          <EditDraftText draftId={d.id} heading={`${c.case_no_internal} · ${title(d.doc_kind)}`} approved={approvedNow} lang={lang} />
+                          <CorrectDraft orgId={c.org_id} caseId={c.id} draftId={d.id} approved={approvedNow} lang={lang} />
+                        </>
+                      )}
+                      {canEdit && d.status === "returned" && <SubmitDraft draftId={d.id} lang={lang} />}
+                    </div>
+
+                    {vs.length > 1 && (
+                      <details className="mt-3">
+                        <summary className="muted cursor-pointer text-xs">
+                          {t("Earlier versions")} ({vs.length - 1})
+                        </summary>
+                        <ul className="mt-2 space-y-1.5">
+                          {vs.slice(1).map((v) => (
+                            <li key={v.id} className="flex flex-wrap items-center gap-2 text-xs">
+                              <span className="muted w-24">
+                                v{v.version} · {fmtDate(v.created_at)}
+                              </span>
+                              {v.docx_path && signed.get(v.docx_path) && (
+                                <>
+                                  <DraftPreview url={signed.get(v.docx_path)!} heading={`${c.case_no_internal} · ${title(d.doc_kind)} v${v.version}`} lang={lang} />
+                                  <a className="btn px-2 py-0.5 text-xs" href={signed.get(v.docx_path)}>
+                                    ⬇ DOCX
+                                  </a>
+                                </>
+                              )}
+                              {changeNote(v.diff_summary) && <span className="muted">✎ {changeNote(v.diff_summary)}</span>}
+                            </li>
+                          ))}
+                        </ul>
+                      </details>
+                    )}
+                  </div>
+                );
+              },
+            )}
           </div>
           <p className="muted mt-4 text-xs">
-            Paragraphs marked [[LEGAL_REVIEW]] (highlighted in the DOCX) must be checked by the advocate before use.
+            {t("Paragraphs marked [[LEGAL_REVIEW]] (highlighted in the DOCX) must be checked by the advocate before use.")}
           </p>
         </Section>
 
         <Section
+          id="bundle"
           title={t("E-filing bundle")}
           subtitle="Index → plaint → annexures → vakalatnama → affidavit / SOT · one PDF/A-2b, A4, bookmarked, ≤ 25 MB"
           delay={380}
@@ -703,6 +875,16 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
             Built by the document worker. Sign with DSC / eSign and pay court fee on eCourts before filing.
           </p>
         </Section>
+
+        {isAdmin && !archived && (
+          <section id="archive" className="fade-up scroll-mt-24 rounded-3xl border border-red-500/20 bg-red-500/5 p-6">
+            <h2 className="text-lg font-semibold">{t("Archive")}</h2>
+            <p className="muted mt-0.5 text-sm">{t("Cases are never deleted. An archived case can be restored by an admin.")}</p>
+            <div className="mt-4">
+              <ArchiveCase caseId={c.id} caseNo={c.case_no_internal} lang={lang} />
+            </div>
+          </section>
+        )}
       </main>
     </>
   );

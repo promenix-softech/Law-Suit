@@ -52,6 +52,7 @@ export function CommandPalette({ lang, roles }: { lang: Lang; roles: string[] })
       const { data } = await createClient()
         .from("cases")
         .select("id, case_no_internal, status, parties(name, position)")
+        .is("archived_at", null)
         .order("case_no_internal")
         .limit(1000);
       if (cancelled) return;

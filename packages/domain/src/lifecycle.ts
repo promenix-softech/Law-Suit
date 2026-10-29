@@ -29,7 +29,8 @@ const NEXT: Record<CaseStatus, readonly CaseStatus[]> = {
   mediation_12a: ["drafting"],
   drafting: ["in_approval"],
   in_approval: ["approved", "drafting"],
-  approved: ["notary_stamp"],
+  // A corrected or regenerated plaint needs a fresh approval, until it has gone to the notary.
+  approved: ["notary_stamp", "drafting"],
   notary_stamp: ["efiling_ready"],
   efiling_ready: ["filed"],
   filed: ["listed"],
