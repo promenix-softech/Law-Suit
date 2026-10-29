@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { beforeAll, describe, expect, it } from "vitest";
 import { decryptText, encryptText } from "../crypto";
-import { normaliseStatus, ocrErrorMessage, pagesFromResults } from "./sarvam";
+import { htmlToText, normaliseStatus, ocrErrorMessage, pagesFromResults } from "./sarvam";
 
 beforeAll(() => {
   process.env.FIELD_ENCRYPTION_KEY = randomBytes(32).toString("base64");
@@ -65,6 +65,35 @@ describe("pagesFromResults", () => {
       { pageNo: 1, text: "STATE BANK OF INDIA\nDemo Branch\n\nSANCTION LETTER" },
       { pageNo: 2, text: "Total outstanding" },
     ]);
+  });
+
+  it("turns HTML table blocks into plain lines", () => {
+    const table =
+      "<table><tr><td>Loan account no.</td><td>DEMO40217731</td></tr><tr><th>Rate</th><td>10.75% p.a. &amp; monthly rests</td></tr></table>";
+    expect(htmlToText(table)).toBe("Loan account no. | DEMO40217731\nRate | 10.75% p.a. & monthly rests");
+    expect(htmlToText("Plain text, no tags")).toBe("Plain text, no tags");
+    expect(pagesFromResults({ documents: [{ pages: [{ page_num: 1, blocks: [{ text: table, reading_order: 1 }] }] }] })[0]!.text).not.toMatch(
+      /<[^>]+>/,
+    );
+  });
+
+  it("keeps only a marker for image blocks (model-written descriptions, not page text)", () => {
+    const res = {
+      documents: [
+        {
+          pages: [
+            {
+              page_num: 1,
+              blocks: [
+                { text: "Branch Manager", layout_tag: "paragraph", reading_order: 1 },
+                { text: "The image depicts a circular stamp…", layout_tag: "image", reading_order: 2 },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    expect(pagesFromResults(res)).toEqual([{ pageNo: 1, text: "Branch Manager\n\n[image]" }]);
   });
 
   it("falls back to position and tolerates empty results", () => {

@@ -79,7 +79,7 @@ type ResultPage = {
   page_number?: number;
   page_num?: number;
   content?: string;
-  blocks?: { text?: string; reading_order?: number }[];
+  blocks?: { text?: string; reading_order?: number; layout_tag?: string }[];
 };
 
 /**
@@ -96,12 +96,35 @@ export function pagesFromResults(results: unknown): { pageNo: number; text: stri
   return pages.sort((a, b) => a.pageNo - b.pageNo);
 }
 
+/**
+ * Image blocks (stamps, logos, photos) carry a model-written description of the picture, not
+ * text printed on the page, so only a marker is kept.
+ */
 function blocksText(blocks: ResultPage["blocks"]): string {
   return [...(blocks ?? [])]
     .sort((a, b) => (a.reading_order ?? 0) - (b.reading_order ?? 0))
-    .map((b) => (b.text ?? "").trim())
+    .map((b) => (b.layout_tag === "image" ? "[image]" : htmlToText(b.text ?? "").trim()))
     .filter(Boolean)
     .join("\n\n");
+}
+
+const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', "#39": "'", nbsp: " " };
+
+/**
+ * Table blocks arrive as HTML (`<table><tr><td>…`). Rows become lines and cells are joined
+ * with " | ", so the OCR text view and anything reading it see plain text, never markup.
+ */
+export function htmlToText(s: string): string {
+  if (!s.includes("<")) return s;
+  return s
+    .replace(/<\/t[dh]>\s*<t[dh][^>]*>/gi, " | ")
+    .replace(/<\/tr>|<br\s*\/?>/gi, "\n")
+    .replace(/<[^>]*>/g, "")
+    .replace(/&(amp|lt|gt|quot|#39|nbsp);/g, (_, e: string) => ENTITIES[e]!)
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .join("\n");
 }
 
 /** Turns SDK/HTTP errors into a message safe to show the user (no keys, no payloads). */
