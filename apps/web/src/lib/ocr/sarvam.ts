@@ -118,17 +118,26 @@ const ENTITIES: Record<string, string> = { quot: '"', "#39": "'", nbsp: " " };
  */
 export function htmlToText(s: string): string {
   if (!s.includes("<")) return s;
-  return s
-    .replace(/<\/t[dh]>\s*<t[dh][^>]*>/gi, " | ")
-    .replace(/<\/tr>|<br\s*\/?>/gi, "\n")
-    .replace(/<[^>]*>/g, "")
-    .replace(/[<>]/g, "")
+  const marked = s.replace(/<\/t[dh]>\s*<t[dh][^>]*>/gi, " | ").replace(/<\/tr>|<br\s*\/?>/gi, "\n");
+  return stripTags(marked)
     .replace(/&(quot|#39|nbsp);/g, (_, e: string) => ENTITIES[e]!)
     .replace(/&amp;/g, "&")
     .split("\n")
     .map((l) => l.trim())
     .filter(Boolean)
     .join("\n");
+}
+
+/** Drops everything from "<" to the next ">" and any stray bracket: the result holds no "<" or ">". */
+function stripTags(s: string): string {
+  let out = "";
+  let inTag = false;
+  for (const ch of s) {
+    if (ch === "<") inTag = true;
+    else if (ch === ">") inTag = false;
+    else if (!inTag) out += ch;
+  }
+  return out;
 }
 
 /** Turns SDK/HTTP errors into a message safe to show the user (no keys, no payloads). */
