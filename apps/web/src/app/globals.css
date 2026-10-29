@@ -150,6 +150,35 @@ body {
     border-radius: 1.25rem;
   }
 
+  /* Left navigation */
+  .side-link {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    border-radius: 0.9rem;
+    padding: 0.55rem 0.75rem;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--fg);
+    transition: background 0.2s ease;
+  }
+  .side-link:hover {
+    background: var(--glass);
+  }
+  .side-link-active {
+    background: var(--glass-strong);
+    box-shadow: inset 0 1px 0 var(--highlight), var(--shadow);
+    font-weight: 600;
+  }
+
+  /* A whole table row or card that opens something: pointer + clear hover. */
+  .row-link {
+    cursor: pointer;
+  }
+  .row-link:hover td {
+    background: var(--glass-strong);
+  }
+
   /* Buttons */
   .btn {
     position: relative;

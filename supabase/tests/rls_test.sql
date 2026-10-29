@@ -1402,6 +1402,47 @@ do $$ begin
 end $$;
 rollback;
 
+-- admin may record approvals (20261029000000); maker-checker still binds the admin
+begin;
+insert into public.drafts (id, org_id, case_id, doc_kind, language, created_by, status) values
+  ('d0000000-0000-0000-0000-0000000000a1', '11111111-1111-1111-1111-111111111111',
+   'c0000000-0000-0000-0000-000000000002', 'vakalatnama', 'en', '00000000-0000-0000-0000-0000000000d2', 'in_approval'),
+  ('d0000000-0000-0000-0000-0000000000a2', '11111111-1111-1111-1111-111111111111',
+   'c0000000-0000-0000-0000-000000000002', 'address_memo', 'en', '00000000-0000-0000-0000-00000000000a', 'in_approval');
+do $$
+begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', true);
+  set local role authenticated;
+  begin
+    insert into public.approvals (org_id, draft_id, decision)
+    values ('11111111-1111-1111-1111-111111111111', 'd0000000-0000-0000-0000-0000000000a2', 'approved');
+    raise exception 'FAIL: admin approved own draft';
+  exception when check_violation then
+    raise notice 'ok - admin cannot approve own draft';
+  end;
+  reset role;
+end $$;
+do $$
+begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000f1', true);
+  set local role authenticated;
+  begin
+    insert into public.approvals (org_id, draft_id, decision)
+    values ('11111111-1111-1111-1111-111111111111', 'd0000000-0000-0000-0000-0000000000a1', 'approved');
+    raise exception 'FAIL: field staff approved';
+  exception when insufficient_privilege then
+    raise notice 'ok - field staff cannot approve';
+  end;
+  reset role;
+end $$;
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+insert into public.approvals (org_id, draft_id, decision)
+values ('11111111-1111-1111-1111-111111111111', 'd0000000-0000-0000-0000-0000000000a1', 'approved');
+select pg_temp.expect(
+  (select status from public.drafts where id = 'd0000000-0000-0000-0000-0000000000a1') = 'approved',
+  'admin can approve a draft written by someone else');
+rollback;
+
 select pg_temp.expect(
   not exists (select 1 from pg_tables where schemaname = 'public' and not rowsecurity),
   'RLS enabled on every public table');

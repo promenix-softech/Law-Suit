@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { canTransition, courtFeeFor, drtFee, isStateCode, particularsOfClaim, recoveryForum, type CaseStatus } from "@civil-suits/domain";
+import { startExtraction, startOcr } from "./ocr-actions";
 import {
   buildAddressMemo,
   buildAffidavit,
@@ -45,13 +46,16 @@ const UploadInput = z.object({
   caseId: z.uuid(),
   path: z.string().min(1).max(500),
   sha256: z.string().regex(/^[0-9a-f]{64}$/),
+  /** Start OCR and field extraction right away (same checks and quotas as the buttons). */
+  autoRead: z.boolean().default(false),
+  language: z.enum(["en-IN", "mr-IN"]).default("en-IN"),
 });
 
 /** Records a scan the browser already uploaded to storage (storage RLS checked the upload). */
-export async function recordUpload(input: z.infer<typeof UploadInput>): Promise<ActionResult> {
+export async function recordUpload(input: z.input<typeof UploadInput>): Promise<ActionResult> {
   const parsed = UploadInput.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid upload details." };
-  const { caseId, path, sha256 } = parsed.data;
+  const { caseId, path, sha256, autoRead, language } = parsed.data;
 
   const supabase = await createClient();
   if (!supabase) return { ok: false, error: "Database is not configured." };
@@ -60,11 +64,24 @@ export async function recordUpload(input: z.infer<typeof UploadInput>): Promise<
   if (!c) return { ok: false, error: "Case not found." };
   if (!path.startsWith(`${c.org_id}/${caseId}/scans/`)) return { ok: false, error: "Invalid storage path." };
 
-  const { error } = await supabase
+  const { data: doc, error } = await supabase
     .from("documents")
-    .insert({ org_id: c.org_id, case_id: caseId, storage_path: path, sha256, doc_type: "scan" });
-  if (error) return { ok: false, error: "You cannot add documents to this case." };
+    .insert({ org_id: c.org_id, case_id: caseId, storage_path: path, sha256, doc_type: "scan" })
+    .select("id")
+    .single();
+  if (error || !doc) return { ok: false, error: "You cannot add documents to this case." };
   await setCaseStatus(supabase, c, "docs_uploaded");
+
+  if (autoRead) {
+    // Extraction reads the scan itself, so both jobs start together; a refusal (quota, key)
+    // leaves the upload in place and the buttons stay available.
+    const [ocr, extract] = await Promise.all([startOcr({ documentId: doc.id, language }), startExtraction(doc.id)]);
+    revalidatePath(`/dashboard/cases/${caseId}`);
+    if (!ocr.ok || !extract.ok) {
+      return { ok: true, message: `Document uploaded. AI reading did not start: ${!ocr.ok ? ocr.error : !extract.ok ? extract.error : ""}` };
+    }
+    return { ok: true, message: "Document uploaded — AI is reading it now (about a minute). Values appear below for you to verify." };
+  }
 
   revalidatePath(`/dashboard/cases/${caseId}`);
   return { ok: true, message: "Document uploaded." };

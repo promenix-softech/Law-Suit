@@ -39,7 +39,7 @@ export default async function DocumentTextPage({ params }: PageProps<"/dashboard
         name={profile?.full_name}
         roles={(roles ?? []).map((r) => r.role as string)}
       />
-      <main className="mx-auto w-full max-w-6xl flex-1 space-y-5 px-4 pb-16 pt-8">
+      <main className="w-full flex-1 lg:px-6 space-y-5 px-4 pb-16 pt-8">
         <div className="fade-up">
           <Link href={`/dashboard/cases/${id}`} className="muted text-sm hover:underline">
             ← {caseNo}

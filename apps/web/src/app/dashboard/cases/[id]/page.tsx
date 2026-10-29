@@ -7,7 +7,8 @@ import type { T } from "@/lib/i18n";
 import { getT } from "@/lib/lang";
 import { createClient } from "@/lib/supabase/server";
 import { caseStatus, draftStatus, fmtDate, title } from "@/lib/ui";
-import { DecideDraft, GenerateDraft, MediationOutcome, MediationStart, NoticeForm, SubmitDraft, UploadScan } from "./case-actions";
+import { DecideDraft, GenerateAll, GenerateDraft, MediationOutcome, MediationStart, NoticeForm, SubmitAll, SubmitDraft, UploadScan } from "./case-actions";
+import type { DocKind } from "./actions";
 import { display, editable, FIELDS } from "@/lib/extract/fields";
 import { decodeField } from "@/lib/extract/stored";
 import { ExtractionReview, type ReviewRow } from "./extraction-review";
@@ -207,7 +208,8 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
 
   const roleNames = (roles ?? []).map((r) => r.role as string);
   if (roleNames.length > 0 && roleNames.every((r) => r === "field")) redirect("/dashboard/tasks");
-  const isApprover = roleNames.includes("approver");
+  // Admins may decide too; the database still refuses anyone who wrote or edited the draft.
+  const isApprover = roleNames.includes("approver") || roleNames.includes("admin");
   const canEdit = roleNames.includes("admin") || c.assigned_drafter === auth.user.id;
 
   const mediations = [...(c.mediations ?? [])];
@@ -242,6 +244,25 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
   const isDrt = forum?.forum === "drt";
   const [statusLabel, statusTone] = caseStatus(c.status, t);
   const parties = [...(c.parties ?? [])].sort((a, b) => a.position - b.position);
+  // The same papers the single buttons below offer, for "Generate all papers".
+  const suitSet: { kind: DocKind; label: string }[] = isDrt
+    ? [
+        { kind: "demand_notice", label: "Demand notice" },
+        { kind: "original_application", label: "DRT Original Application" },
+      ]
+    : [
+        { kind: "demand_notice", label: "Demand notice" },
+        { kind: "plaint", label: "Plaint" },
+        { kind: "list_of_documents", label: "List of documents" },
+        { kind: "vakalatnama", label: "Vakalatnama" },
+        { kind: "affidavit", label: c.is_commercial ? "Statement of truth" : "Affidavit" },
+        { kind: "address_memo", label: "Address memo" },
+        ...(c.suit_type === "summary_o37" ? [{ kind: "draft_decree" as const, label: "Draft decree" }] : []),
+        { kind: "bbe_certificate", label: "Bankers' Books certificate" },
+        { kind: "court_fee_letter", label: "Court-fee letter" },
+        { kind: "efiling_sheet", label: "E-filing data sheet" },
+        ...(c.is_commercial && c.urgent_interim_relief ? [{ kind: "interim_application" as const, label: "Interim application" }] : []),
+      ];
 
   return (
     <>
@@ -250,7 +271,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
         name={profile?.full_name}
         roles={roleNames}
       />
-      <main className="mx-auto w-full max-w-6xl flex-1 space-y-5 px-4 pb-16 pt-8">
+      <main className="w-full flex-1 lg:px-6 space-y-5 px-4 pb-16 pt-8">
         <div className="fade-up">
           <Link href="/dashboard" className="muted text-sm hover:underline">
             ← All cases
@@ -462,10 +483,15 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
           <ul className="mt-4 space-y-2">
             {docs?.map((d) => (
               <li key={d.id} className="row-hover flex flex-wrap items-center justify-between gap-3 rounded-xl px-3 py-2 text-sm">
-                <a className="min-w-0 flex-1 truncate hover:underline" href={signed.get(d.storage_path)} target="_blank" rel="noreferrer">
+                <a className="min-w-0 flex-1 truncate py-1 hover:underline" href={signed.get(d.storage_path)} target="_blank" rel="noreferrer">
                   📄 {d.storage_path.split("/").pop()?.replace(/^\d+-/, "")}{" "}
                   <span className="muted">· {fmtDate(d.created_at)}</span>
                 </a>
+                {signed.get(d.storage_path) && (
+                  <a className="btn px-3 py-1 text-xs" href={signed.get(d.storage_path)} target="_blank" rel="noreferrer">
+                    👁 {t("Open scan")}
+                  </a>
+                )}
                 <OcrControls
                   documentId={d.id}
                   caseId={c.id}
@@ -524,7 +550,17 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
 
         <Section title={t("Drafts")} subtitle="Generated from verified case data · approval enforced by the database" delay={340}>
           {canEdit && (
-            <div className="flex flex-wrap gap-3">
+            <div className="mb-4 flex flex-wrap items-start gap-3">
+              <GenerateAll caseId={c.id} kinds={suitSet} />
+              <SubmitAll
+                drafts={(drafts ?? []).filter((d) => d.status === "draft" || d.status === "returned").map((d) => ({ id: d.id, label: title(d.doc_kind) }))}
+              />
+            </div>
+          )}
+          {canEdit && (
+            <details className="group">
+              <summary className="muted cursor-pointer text-sm">{t("Or generate one paper at a time")}</summary>
+            <div className="mt-3 flex flex-wrap gap-3">
               <GenerateDraft caseId={c.id} kind="demand_notice" label="Generate demand notice" />
               {isDrt ? (
                 <GenerateDraft caseId={c.id} kind="original_application" label="Generate DRT Original Application" />
@@ -549,6 +585,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
                 </>
               )}
             </div>
+            </details>
           )}
           <div className="mt-5 grid gap-4 md:grid-cols-2">
             {drafts?.map((d) => {

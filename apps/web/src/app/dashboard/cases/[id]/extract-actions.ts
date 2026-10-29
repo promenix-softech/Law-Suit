@@ -102,6 +102,10 @@ export async function applyVerifiedFields(caseId: string): Promise<ActionResult>
   if (v.has("npa_date")) loanPatch.npa_date = v.get("npa_date");
   if (v.has("outstanding_amount")) loanPatch.outstanding_paise = Number(v.get("outstanding_amount"));
   if (v.has("outstanding_as_on")) loanPatch.interest_upto_date = v.get("outstanding_as_on");
+  // Suit particulars (also editable in the particulars form)
+  if (v.has("loan_purpose")) loanPatch.purpose = v.get("loan_purpose");
+  if (v.has("application_date")) loanPatch.application_date = v.get("application_date");
+  if (v.has("tenure_months")) loanPatch.tenure_months = Number(v.get("tenure_months"));
 
   const applied: string[] = [];
   const fail = (what: string): ActionResult => ({ ok: false, error: `Could not update ${what}.` });
@@ -129,11 +133,19 @@ export async function applyVerifiedFields(caseId: string): Promise<ActionResult>
   }
 
   const guarantor = v.get("guarantor_name");
-  if (guarantor && !(c.parties ?? []).some((p) => p.role === "guarantor" && p.name === guarantor)) {
+  const guarantorAddress = v.get("guarantor_address") ?? null;
+  const known = (c.parties ?? []).find((p) => p.role === "guarantor" && (!guarantor || p.name === guarantor));
+  if (guarantor && !known) {
     const position = Math.max(0, ...(c.parties ?? []).map((p) => p.position)) + 1;
-    const { error } = await supabase.from("parties").insert({ org_id: c.org_id, case_id: caseId, role: "guarantor", position, name: guarantor });
+    const { error } = await supabase
+      .from("parties")
+      .insert({ org_id: c.org_id, case_id: caseId, role: "guarantor", position, name: guarantor, address: guarantorAddress });
     if (error) return fail("the guarantor");
     applied.push("guarantor");
+  } else if (known && guarantorAddress) {
+    const { error } = await supabase.from("parties").update({ address: guarantorAddress }).eq("id", known.id);
+    if (error) return fail("the guarantor");
+    applied.push("guarantor address");
   }
 
   if (v.has("outstanding_amount")) {

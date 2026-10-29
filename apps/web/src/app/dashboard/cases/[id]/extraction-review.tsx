@@ -84,14 +84,44 @@ function Row({ r, caseId, canEdit }: { r: ReviewRow; caseId: string; canEdit: bo
   );
 }
 
+/** Only values the extractor was sure of (and code accepted) can be confirmed together. */
+const SURE = 0.95;
+
 export function ExtractionReview({ rows, caseId, canEdit }: { rows: ReviewRow[]; caseId: string; canEdit: boolean }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [checked, setChecked] = useState(false);
   const verified = rows.filter((r) => r.verified).length;
+  const sure = rows.filter((r) => !r.verified && !r.reason && r.confidence != null && r.confidence >= SURE);
+
+  // The drafter still confirms: the bulk button needs an explicit "I compared these" tick,
+  // and low-confidence or invalid values always stay for one-by-one checking.
+  const verifySure = () =>
+    start(async () => {
+      const failed: string[] = [];
+      for (const r of sure) {
+        const res = await verifyField({ caseId, fieldKey: r.key, value: r.initial });
+        if (!res.ok) failed.push(res.error);
+      }
+      setChecked(false);
+      setMsg(failed.length ? { ok: false, text: failed.join(" · ") } : { ok: true, text: `${sure.length} values verified. Check the rest one by one.` });
+      router.refresh();
+    });
 
   return (
     <div>
+      {canEdit && sure.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 px-4 py-3 text-sm">
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)} className="accent-emerald-600" />
+            I have compared the {sure.length} values marked ≥ {Math.round(SURE * 100)}% with the scan
+          </label>
+          <button disabled={!checked || pending} onClick={verifySure} className="btn btn-primary px-4 py-1.5 text-sm">
+            {pending ? "Verifying…" : `✓ Verify these ${sure.length}`}
+          </button>
+        </div>
+      )}
       <div className="overflow-x-auto">
         <table className="w-full min-w-[720px] text-left text-sm">
           <thead>
