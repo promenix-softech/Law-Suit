@@ -6,9 +6,10 @@ import { FirmCodeForm, LoginForm } from "./login-form";
 export const metadata = { title: "Sign in — Civil Suits" };
 
 /** Firm first (its subdomain or the code typed here), then that firm's people sign in. */
-export default async function LoginPage() {
+export default async function LoginPage({ searchParams }: PageProps<"/login">) {
+  const choosing = (await searchParams).firm === "choose";
   const supabase = await createClient();
-  const code = (await requestFirm())?.code ?? null;
+  const code = choosing ? null : ((await requestFirm())?.code ?? null);
   const firm = code && supabase ? await findFirm(supabase, code) : null;
 
   return (

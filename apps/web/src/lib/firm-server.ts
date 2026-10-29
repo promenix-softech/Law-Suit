@@ -12,13 +12,17 @@ export const FIRM_SUBDOMAINS = process.env.FIRM_SUBDOMAINS === "1";
 
 export type RequestFirm = { code: string; fromHost: boolean };
 
-/** The firm this request is for: its subdomain, else the remembered code. */
+/** While one firm uses the site, its code can be the default so nobody has to type it. */
+const DEFAULT_FIRM = normaliseFirmCode(process.env.DEFAULT_FIRM);
+
+/** The firm this request is for: its subdomain, else the remembered code, else the default firm. */
 export async function requestFirm(): Promise<RequestFirm | null> {
   const host = (await headers()).get("host");
   const fromHost = firmFromHost(host, ROOT_DOMAIN);
   if (fromHost) return { code: fromHost, fromHost: true };
   const remembered = normaliseFirmCode((await cookies()).get(FIRM_COOKIE)?.value);
-  return remembered ? { code: remembered, fromHost: false } : null;
+  if (remembered) return { code: remembered, fromHost: false };
+  return DEFAULT_FIRM ? { code: DEFAULT_FIRM, fromHost: false } : null;
 }
 
 export async function onRootHost(): Promise<boolean> {

@@ -30,8 +30,9 @@ export async function chooseFirm(_prev: LoginState, formData: FormData): Promise
 export async function changeFirm() {
   await forgetFirm();
   const firm = await requestFirm();
-  if (firm?.fromHost && ROOT_DOMAIN) redirect(`https://${ROOT_DOMAIN}/login`);
-  redirect("/login");
+  // ?firm=choose: show the firm-code form even when a default firm is configured.
+  if (firm?.fromHost && ROOT_DOMAIN) redirect(`https://${ROOT_DOMAIN}/login?firm=choose`);
+  redirect("/login?firm=choose");
 }
 
 /** Step 2: email and password, accepted only for an account of this firm. */
