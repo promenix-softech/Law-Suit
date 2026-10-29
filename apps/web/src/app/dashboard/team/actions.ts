@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { supabaseEnv } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
 import type { ActionResult } from "../cases/[id]/actions";
 
@@ -39,4 +40,45 @@ export async function setRole(input: z.infer<typeof Input>): Promise<ActionResul
 
   revalidatePath("/dashboard/team");
   return { ok: true, message: on ? `${role} role given.` : `${role} role removed.` };
+}
+
+const InviteInput = z.object({
+  email: z.email().transform((e) => e.trim().toLowerCase()),
+  fullName: z.string().trim().min(2).max(120),
+  roles: z.array(z.enum(["admin", "drafter", "approver", "field"])).min(1),
+});
+
+/**
+ * Admin invites a person into this office. The `invite-user` edge function holds the service key
+ * on Supabase's side and re-checks that the caller is an admin; the web app never sees that key.
+ */
+export async function inviteUser(input: z.input<typeof InviteInput>): Promise<ActionResult> {
+  const parsed = InviteInput.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Enter a name, a valid email and at least one role." };
+
+  const db = await createClient();
+  const env = supabaseEnv();
+  if (!db || !env) return { ok: false, error: "Database is not configured." };
+  const { data: auth } = await db.auth.getUser();
+  if (!auth.user) return { ok: false, error: "Sign in again." };
+  const { data: session } = await db.auth.getSession();
+  const token = session.session?.access_token;
+  if (!token) return { ok: false, error: "Sign in again." };
+
+  let res: Response;
+  try {
+    res = await fetch(`${env.url}/functions/v1/invite-user`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, apikey: env.key, "content-type": "application/json" },
+      body: JSON.stringify(parsed.data),
+      cache: "no-store",
+    });
+  } catch {
+    return { ok: false, error: "Invitation service is unreachable. Try again shortly." };
+  }
+  const body = (await res.json().catch(() => ({}))) as { message?: string; error?: string };
+  if (!res.ok) return { ok: false, error: body.error ?? "Could not send the invitation." };
+
+  revalidatePath("/dashboard/team");
+  return { ok: true, message: body.message ?? "Invitation sent." };
 }

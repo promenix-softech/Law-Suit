@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { TopBar } from "@/components/top-bar";
 import { getT } from "@/lib/lang";
 import { createClient } from "@/lib/supabase/server";
+import { InviteForm } from "./invite-form";
 import { RoleToggle } from "./role-toggle";
 
 export const metadata = { title: "Team & roles — Civil Suits" };
@@ -81,13 +82,26 @@ export default async function TeamPage() {
           </table>
         </section>
 
-        <section className="glass-card fade-up p-5 text-sm">
-          <h2 className="font-semibold">{t("Adding a new person")}</h2>
-          <p className="muted mt-1">
-            {t(
-              "New logins are created by Promenix for now (an invitation email lets the person set their own password). Once they sign in they appear here and you give them roles.",
-            )}
-          </p>
+        <section className="glass-card fade-up space-y-3 p-5">
+          <div>
+            <h2 className="text-lg font-semibold">{t("Invite a person")}</h2>
+            <p className="muted mt-1 text-sm">
+              {t("They get an email to set their own password and join this office with the roles you choose. Nobody else, including Promenix, sees the password.")}
+            </p>
+          </div>
+          <InviteForm
+            labels={{
+              name: t("Full name"),
+              email: t("Email"),
+              roles: t("Roles"),
+              send: t("Send invitation"),
+              sending: t("Sending…"),
+              admin: label.admin,
+              drafter: label.drafter,
+              approver: label.approver,
+              field: label.field,
+            }}
+          />
         </section>
       </main>
     </>
