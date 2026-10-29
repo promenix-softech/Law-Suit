@@ -104,6 +104,18 @@ const MR: Record<string, string> = {
   "Preview unavailable — download the DOCX instead.": "पूर्वावलोकन उपलब्ध नाही — DOCX डाउनलोड करा.",
   Close: "बंद करा",
   Download: "डाउनलोड",
+  // draft previewer
+  Book: "पुस्तक",
+  Scroll: "सलग",
+  Page: "पान",
+  "Previous page": "मागील पान",
+  "Next page": "पुढील पान",
+  "Zoom in": "मोठे करा",
+  "Zoom out": "लहान करा",
+  "Fit to screen": "स्क्रीनला बसवा",
+  "Full screen": "पूर्ण स्क्रीन",
+  "Exit full screen": "पूर्ण स्क्रीन बंद",
+  "Preparing pages": "पाने तयार होत आहेत",
   // navigation and dashboard (29 Oct)
   Work: "काम",
   Office: "कार्यालय",
