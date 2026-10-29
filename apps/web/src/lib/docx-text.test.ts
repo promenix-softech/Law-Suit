@@ -92,5 +92,6 @@ describe("hostile XML", () => {
   it("refuses a text run left open or a stray closing tag", () => {
     expect(() => docxParagraphs("<w:p><w:r><w:t>open</w:r></w:p>")).toThrow(/not valid/);
     expect(() => docxParagraphs("</w:p>")).toThrow(/not valid/);
+    expect(() => docxParagraphs('<w:p><w:r><w:t w:x="a>b">t</w:t></w:r></w:p>')).toThrow(/not valid/);
   });
 });

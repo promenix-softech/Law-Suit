@@ -29,6 +29,19 @@ describe("inspectDocx", () => {
     expect(inspectDocx(bomb)).toMatchObject({ ok: false, error: expect.stringMatching(/too large/) });
   });
 
+  it("refuses an entry that inflates past the size it declares (lying zip bomb)", async () => {
+    const zip = await zipOf({ "word/document.xml": "<w:p>".repeat(1_000_000) }); // 5 MB real
+    const bytes = new Uint8Array(zip);
+    const view = new DataView(bytes.buffer);
+    // Rewrite the declared uncompressed size to 1 KB in both the local header and the central directory.
+    for (let i = 0; i < bytes.length - 4; i++) {
+      const sig = view.getUint32(i, true);
+      if (sig === 0x04034b50) view.setUint32(i + 22, 1024, true);
+      if (sig === 0x02014b50) view.setUint32(i + 24, 1024, true);
+    }
+    expect(inspectDocx(bytes)).toMatchObject({ ok: false, error: expect.stringMatching(/damaged/) });
+  });
+
   it("refuses macros and embedded objects", async () => {
     const macro = await zipOf({ "word/document.xml": "<w:document/>", "word/vbaProject.bin": "x" });
     const ole = await zipOf({ "word/document.xml": "<w:document/>", "word/embeddings/oleObject1.bin": "x" });

@@ -1637,6 +1637,23 @@ exception when insufficient_privilege then raise notice 'ok - the plaint is lock
 end $$;
 rollback;
 
+-- a draft cannot be relabelled or moved (20261030040000)
+do $$
+begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', true);
+  set local role authenticated;
+  begin
+    update public.drafts set doc_kind = 'affidavit' where id = 'd0000000-0000-0000-0000-000000000001';
+    raise exception 'FAIL: relabelled a draft';
+  exception when insufficient_privilege then raise notice 'ok - a draft''s kind cannot change';
+  end;
+  begin
+    update public.drafts set case_id = 'c0000000-0000-0000-0000-000000000002' where id = 'd0000000-0000-0000-0000-000000000001';
+    raise exception 'FAIL: moved a draft to another case';
+  exception when insufficient_privilege then raise notice 'ok - a draft cannot move to another case';
+  end;
+end $$;
+
 -- only the uploader of a file may record it
 insert into storage.objects (bucket_id, name, owner) values
   ('case-files', '11111111-1111-1111-1111-111111111111/c0000000-0000-0000-0000-000000000001/drafts/fix.docx',

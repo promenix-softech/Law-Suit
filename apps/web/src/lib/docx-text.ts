@@ -21,6 +21,8 @@ const NOT_PLAIN = /<w:(?:tab|br|cr|fldChar|fldSimple|instrText|drawing|pict|obje
 
 export class DocxTextError extends Error {}
 
+const quotes = (s: string, q: string) => s.split(q).length - 1;
+
 function scan(xml: string): Para[] {
   const paras: Para[] = [];
   let depth = 0;
@@ -31,6 +33,8 @@ function scan(xml: string): Para[] {
     const start = m.index;
     const end = start + whole.length;
     const selfClosing = rest.endsWith("/");
+    // A ">" inside a quoted attribute would cut the tag short: refuse such a document.
+    if (quotes(rest, '"') % 2 || quotes(rest, "'") % 2) throw new DocxTextError("The document is not valid Word XML.");
     if (name === "p") {
       if (open) throw new DocxTextError("The document is not valid Word XML.");
       if (close) {
