@@ -13,10 +13,10 @@ export async function TopBar({ org, name, roles }: { org?: string | null; name?:
     .join("")
     .toUpperCase();
   return (
-    <header className="sticky top-3 z-20 mx-auto w-full max-w-6xl px-4">
+    <header className="sticky top-3 z-20 w-full px-4 lg:px-6">
       <nav className="nav-glass flex items-center justify-between gap-3 px-4 py-2.5">
         <Link href="/dashboard" className="flex items-center gap-2.5">
-          <span className="grid h-8 w-8 place-items-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 text-xs font-bold text-white shadow-lg shadow-violet-500/30">
+          <span className="grid h-8 w-8 place-items-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 text-xs font-bold text-white shadow-lg shadow-violet-500/30 lg:hidden">
             CS
           </span>
           <span className="hidden font-semibold sm:inline">{org ?? "Civil Suits"}</span>
@@ -24,23 +24,9 @@ export async function TopBar({ org, name, roles }: { org?: string | null; name?:
         <div className="flex items-center gap-3">
           <CommandPalette lang={lang} roles={roles} />
           {roles.includes("admin") && (
-            <div className="flex items-center gap-1.5">
-              <Link href="/dashboard/cases/new" className="btn btn-primary px-3 py-1.5 text-xs">
-                {t("+ New case")}
-              </Link>
-              <Link href="/dashboard/audit" className="btn hidden px-3 py-1.5 text-xs lg:inline-flex">
-                {t("Audit log")}
-              </Link>
-              <Link href="/dashboard/batches" className="btn hidden px-3 py-1.5 text-xs lg:inline-flex">
-                {t("Bulk upload")}
-              </Link>
-              <Link href="/dashboard/billing" className="btn hidden px-3 py-1.5 text-xs lg:inline-flex">
-                {t("Billing")}
-              </Link>
-              <Link href="/dashboard/settings" className="btn hidden px-3 py-1.5 text-xs lg:inline-flex">
-                {t("Office settings")}
-              </Link>
-            </div>
+            <Link href="/dashboard/cases/new" className="btn btn-primary px-3 py-1.5 text-xs">
+              {t("+ New case")}
+            </Link>
           )}
           <LangToggle lang={lang} />
           <div className="hidden text-right sm:block">

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { confidenceOf, display, editable, extractionSchema, FIELDS, normalise, parseAmountPaise, parseDate, parseRateBps } from "./fields";
+import { confidenceOf, display, editable, extractionSchema, FIELDS, normalise, parseAmountPaise, parseDate, parseMonths, parseRateBps } from "./fields";
 
 describe("parseDate (day-first, as in Indian documents)", () => {
   it.each([
@@ -40,11 +40,27 @@ describe("parseRateBps", () => {
     ["10.5 % p.a.", 1050],
     ["9", 900],
     ["12.25 per annum", 1225],
+    // one fixed rate with descriptive words, as printed in sanction letters
+    ["10.75% per annum, with monthly rests", 1075],
+    ["9.85% p.a. (compounded monthly)", 985],
+    ["Rate of interest: 11% per annum", 1100],
   ])("%s → %i bps", (raw, bps) => {
     expect(parseRateBps(raw)).toBe(bps);
   });
 
-  it.each(["0", "75%", "ten percent", "MCLR + 2"])("rejects %s", (raw) => {
+  it.each([
+    "0",
+    "75%",
+    "ten percent",
+    "MCLR + 2",
+    // floating or several rates: a person must decide
+    "MCLR + 2.5%",
+    "EBLR plus 2% p.a.",
+    "2% over the base rate",
+    "10.75% p.a., penal 2% p.a.",
+    "1Y MCLR 8.5% + 2.25%",
+    "10.75% for 12 months",
+  ])("rejects %s", (raw) => {
     expect(parseRateBps(raw)).toBeNull();
   });
 });
@@ -85,6 +101,47 @@ describe("display / editable", () => {
     for (const [kind, stored] of [["amount", "30550652"], ["rate", "1050"], ["date", "2025-03-31"]] as const) {
       expect(normalise(kind, editable(kind, stored))).toEqual({ ok: true, stored });
     }
+  });
+});
+
+describe("parseMonths (loan tenure)", () => {
+  it.each([
+    ["60", 60],
+    ["60 months", 60],
+    ["72 monthly instalments of Rs. 18,200/-", 72],
+    ["84 EMIs", 84],
+    ["36 equated monthly instalments", 36],
+  ])("%s → %i", (raw, n) => {
+    expect(parseMonths(raw)).toBe(n);
+  });
+
+  it.each([
+    "0",
+    "five years",
+    "Rs. 14,050 for 60 months",
+    "1000 months",
+    "60 days",
+    // not monthly: the count is not a number of months
+    "20 equated quarterly instalments",
+    "10 half-yearly instalments",
+    "5 yearly instalments",
+    "5 annual instalments",
+    "30 bi-monthly instalments",
+  ])("rejects %s", (raw) => {
+    expect(parseMonths(raw)).toBeNull();
+  });
+
+  it("normalises and displays months", () => {
+    expect(normalise("months", "60 monthly instalments")).toEqual({ ok: true, stored: "60" });
+    expect(display("months", "60")).toBe("60 months");
+    expect(editable("months", "60")).toBe("60");
+  });
+});
+
+describe("particulars fields", () => {
+  it("asks for the details the suit particulars need", () => {
+    const keys = FIELDS.map((f) => f.key);
+    for (const k of ["guarantor_address", "loan_purpose", "application_date", "tenure_months"]) expect(keys).toContain(k);
   });
 });
 

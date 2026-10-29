@@ -44,7 +44,8 @@ type Alert = {
 
 const daysText = (d: number, t: T) => (d < 0 ? `${-d} ${t("days overdue")}` : d === 0 ? t("today") : `${d} ${t("days left")}`);
 
-export default async function DashboardPage() {
+export default async function DashboardPage({ searchParams }: PageProps<"/dashboard">) {
+  const sp = await searchParams;
   const supabase = await createClient();
   if (!supabase) redirect("/login");
 
@@ -126,10 +127,25 @@ export default async function DashboardPage() {
   });
   alerts.sort((a, b) => (a.tone === b.tone ? a.daysLeft - b.daysLeft : a.tone === "red" ? -1 : 1));
 
+  const isAdmin = roleNames.includes("admin");
+  const approvalQueue = isApprover || isAdmin ? queue : [];
+  const VIEWS = {
+    all: t("All"),
+    action: t("Needs action"),
+    approval: t("In approval"),
+    done: t("Approved / filed"),
+  } as const;
+  const view = (Object.keys(VIEWS) as (keyof typeof VIEWS)[]).includes(sp.view as keyof typeof VIEWS) ? (sp.view as keyof typeof VIEWS) : "all";
+  const DONE = new Set(["approved", "notary_stamp", "efiling_ready", "filed", "listed", "disposed"]);
+  const alertCases = new Set(alerts.map((a) => a.caseId));
+  const shown = (cases ?? []).filter((c) =>
+    view === "all" ? true : view === "approval" ? c.status === "in_approval" : view === "done" ? DONE.has(c.status) : alertCases.has(c.id) || !DONE.has(c.status),
+  );
+
   return (
     <>
       <TopBar org={orgName} name={profile?.full_name} roles={roleNames} />
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-16 pt-8">
+      <main className="w-full flex-1 px-4 pb-16 pt-8 lg:px-6">
         <h1 className="fade-up text-3xl font-semibold tracking-tight">
           {t("Good day")}
           {firstName ? `, ${firstName}` : ""}
@@ -141,132 +157,185 @@ export default async function DashboardPage() {
           <Stat label={t("Commercial")} value={cases?.filter((c) => c.is_commercial).length ?? 0} hint={t("Sec 12A applies")} delay={120} />
           <Stat
             label={t("Awaiting approval")}
-            value={isApprover ? queue.length : (pending?.length ?? 0)}
-            hint={isApprover ? t("In your queue") : t("Across your cases")}
+            value={isApprover || isAdmin ? queue.length : (pending?.length ?? 0)}
+            hint={isApprover || isAdmin ? t("In your queue") : t("Across your cases")}
             delay={180}
           />
           <Stat label={t("My tasks")} value={tasks?.length ?? 0} hint={t("Assigned to you")} delay={240} />
         </section>
 
-        <section className="glass-card fade-up mt-8 p-5" style={{ animationDelay: "280ms" }}>
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-lg font-semibold">{t("Needs attention")}</h2>
-            {!!alerts.length && <span className="pill pill-amber">{alerts.length}</span>}
-          </div>
-          {alerts.length ? (
-            <ul className="mt-3 divide-y divide-current/5">
-              {alerts.slice(0, 12).map((a) => (
-                <li key={a.key}>
-                  <Link href={`/dashboard/cases/${a.caseId}`} className="row-hover flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl px-2 py-2.5">
-                    <span className={`pill ${a.tone === "red" ? "pill-red" : "pill-amber"}`}>{daysText(a.daysLeft, t)}</span>
-                    <span className="font-semibold">{a.caseNo}</span>
-                    <span className="text-sm">
-                      {t(DEADLINE_LABEL[a.kind])}
-                      {a.detail && <span className="muted"> · {a.detail}</span>}
-                    </span>
-                    <span className="muted ml-auto text-xs tabular-nums">{fmtDate(a.due)}</span>
+        <div className="mt-8 grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+          {/* Cases: every row opens the case */}
+          <section id="cases">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold">{t("Cases")}</h2>
+              <div className="flex flex-wrap gap-1.5">
+                {(Object.keys(VIEWS) as (keyof typeof VIEWS)[]).map((v) => (
+                  <Link key={v} href={v === "all" ? "/dashboard" : `/dashboard?view=${v}`} className={`btn px-3 py-1 text-xs ${view === v ? "btn-primary" : ""}`}>
+                    {VIEWS[v]}
                   </Link>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="muted mt-2 text-sm">{t("Nothing urgent. Limitation, 12A, notice and approval dates are all comfortable.")}</p>
-          )}
-          {alerts.some((a) => a.kind === "limitation") && (
-            <p className="muted mt-3 text-xs">
-              {t("Limitation watch = 3 years from NPA date − 90 days; advocate to confirm (acknowledgements extend it).")}
-            </p>
-          )}
-        </section>
-
-        {isApprover && (
-          <section className="mt-8">
-            <h2 className="text-lg font-semibold">{t("Awaiting my approval")}</h2>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {queue.map((d) => (
-                <Link key={d.id} href={`/dashboard/cases/${d.case_id}`} className="glass-card block p-4">
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold">{one(d.cases as Rel<{ case_no_internal: string }>)?.case_no_internal}</span>
-                    <span className="pill pill-amber">{t("Review")}</span>
-                  </div>
-                  <p className="muted mt-2 text-sm">{title(d.doc_kind)}</p>
-                </Link>
-              ))}
-              {!queue.length && <p className="muted text-sm">{t("Nothing waiting for approval.")}</p>}
+                ))}
+              </div>
             </div>
-          </section>
-        )}
-
-        <section className="mt-8">
-          <h2 className="text-lg font-semibold">{t("Cases")}</h2>
-          <div className="glass-card mt-3 overflow-x-auto p-2">
-            <table className="w-full min-w-[640px] text-left text-sm">
-              <thead>
-                <tr className="label">
-                  <th className="px-4 py-3 font-semibold">{t("Case")}</th>
-                  <th className="px-4 py-3 font-semibold">{t("Borrower")}</th>
-                  <th className="px-4 py-3 font-semibold">{t("Status")}</th>
-                  <th className="px-4 py-3 font-semibold">{t("Type")}</th>
-                  <th className="px-4 py-3 text-right font-semibold">{t("Claim")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {cases?.map((c) => {
-                  const [label, tone] = caseStatus(c.status, t);
-                  const borrower = [...(c.parties ?? [])].sort((a, b) => a.position - b.position)[0]?.name;
-                  return (
-                    <tr key={c.id} className="row-hover">
-                      <td className="rounded-l-xl px-4 py-3">
-                        <Link href={`/dashboard/cases/${c.id}`} className="font-semibold hover:underline">
-                          {c.case_no_internal}
-                        </Link>
-                      </td>
-                      <td className="px-4 py-3">{borrower ?? "—"}</td>
-                      <td className="px-4 py-3">
-                        <span className={`pill ${tone}`}>{label}</span>
-                      </td>
-                      <td className="muted px-4 py-3">
-                        {c.is_commercial ? t("Commercial") : c.suit_type === "summary_o37" ? t("Summary (O.37)") : t("Ordinary")}
-                      </td>
-                      <td className="rounded-r-xl px-4 py-3 text-right font-medium tabular-nums">
-                        {c.claim_amount_paise != null ? formatINR(Number(c.claim_amount_paise)) : "—"}
+            <div className="glass-card mt-3 overflow-x-auto p-2">
+              <table className="w-full min-w-[720px] text-left text-sm">
+                <thead>
+                  <tr className="label">
+                    <th className="px-4 py-3 font-semibold">{t("Case")}</th>
+                    <th className="px-4 py-3 font-semibold">{t("Borrower")}</th>
+                    <th className="px-4 py-3 font-semibold">{t("Status")}</th>
+                    <th className="px-4 py-3 font-semibold">{t("Type")}</th>
+                    <th className="px-4 py-3 text-right font-semibold">{t("Claim")}</th>
+                    <th className="px-4 py-3" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {shown.map((c) => {
+                    const [label, tone] = caseStatus(c.status, t);
+                    const borrower = [...(c.parties ?? [])].sort((a, b) => a.position - b.position)[0]?.name;
+                    const href = `/dashboard/cases/${c.id}`;
+                    // Each cell is a full-size link, so a click anywhere on the row opens the case.
+                    const cell = (content: React.ReactNode, cls = "") => (
+                      <Link href={href} tabIndex={-1} className={`block px-4 py-3 ${cls}`}>
+                        {content}
+                      </Link>
+                    );
+                    return (
+                      <tr key={c.id} className="row-hover row-link">
+                        <td className="rounded-l-xl p-0">
+                          <Link href={href} className="block px-4 py-3 font-semibold">
+                            {c.case_no_internal}
+                          </Link>
+                        </td>
+                        <td className="p-0">{cell(borrower ?? "—")}</td>
+                        <td className="p-0">{cell(<span className={`pill ${tone}`}>{label}</span>)}</td>
+                        <td className="p-0">
+                          {cell(c.is_commercial ? t("Commercial") : c.suit_type === "summary_o37" ? t("Summary (O.37)") : t("Ordinary"), "muted")}
+                        </td>
+                        <td className="p-0">
+                          {cell(c.claim_amount_paise != null ? formatINR(Number(c.claim_amount_paise)) : "—", "text-right font-medium tabular-nums")}
+                        </td>
+                        <td className="rounded-r-xl px-3 py-2 text-right">
+                          <Link href={href} className="btn px-3 py-1 text-xs">
+                            {t("Open")} →
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {!shown.length && (
+                    <tr>
+                      <td colSpan={6} className="muted px-4 py-8 text-center">
+                        {cases?.length ? t("No cases in this view.") : t("No cases visible to you.")}
                       </td>
                     </tr>
-                  );
-                })}
-                {!cases?.length && (
-                  <tr>
-                    <td colSpan={5} className="muted px-4 py-8 text-center">
-                      {t("No cases visible to you.")}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
 
-        <section className="mt-8">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">{t("My tasks")}</h2>
-            {!!tasks?.length && (
-              <Link href="/dashboard/tasks" className="btn px-3 py-1 text-xs">
-                {t("Open task view →")}
-              </Link>
+          {/* Right rail: what needs doing now */}
+          <aside className="space-y-5">
+            {isAdmin && (
+              <section className="glass-card fade-up p-5">
+                <h2 className="text-lg font-semibold">{t("Quick actions")}</h2>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <Link href="/dashboard/cases/new" className="btn btn-primary py-2.5 text-sm">
+                    ＋ {t("New case")}
+                  </Link>
+                  <Link href="/dashboard/batches" className="btn py-2.5 text-sm">
+                    ⇪ {t("Bulk upload")}
+                  </Link>
+                  <Link href="/dashboard/masters" className="btn py-2.5 text-sm">
+                    🏛 {t("Banks & courts")}
+                  </Link>
+                  <Link href="/dashboard/team" className="btn py-2.5 text-sm">
+                    👥 {t("Team & roles")}
+                  </Link>
+                </div>
+              </section>
             )}
-          </div>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {tasks?.map((tk) => (
-              <Link key={tk.id} href={fieldOnly ? "/dashboard/tasks" : `/dashboard/cases/${tk.case_id}`} className="glass-card block p-4">
-                <p className="font-semibold">{title(tk.kind)}</p>
-                <p className="muted mt-1 text-sm">
-                  {one(tk.cases as Rel<{ case_no_internal: string }>)?.case_no_internal} · {title(tk.status)}
+
+            <section className="glass-card fade-up p-5" style={{ animationDelay: "120ms" }}>
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="text-lg font-semibold">{t("Needs attention")}</h2>
+                {!!alerts.length && <span className="pill pill-amber">{alerts.length}</span>}
+              </div>
+              {alerts.length ? (
+                <ul className="mt-3 divide-y divide-current/5">
+                  {alerts.slice(0, 12).map((a) => (
+                    <li key={a.key}>
+                      <Link href={`/dashboard/cases/${a.caseId}`} className="row-hover flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl px-2 py-2.5">
+                        <span className={`pill ${a.tone === "red" ? "pill-red" : "pill-amber"}`}>{daysText(a.daysLeft, t)}</span>
+                        <span className="font-semibold">{a.caseNo}</span>
+                        <span className="text-sm">
+                          {t(DEADLINE_LABEL[a.kind])}
+                          {a.detail && <span className="muted"> · {a.detail}</span>}
+                        </span>
+                        <span className="muted ml-auto text-xs tabular-nums">{fmtDate(a.due)}</span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="muted mt-2 text-sm">{t("Nothing urgent. Limitation, 12A, notice and approval dates are all comfortable.")}</p>
+              )}
+              {alerts.some((a) => a.kind === "limitation") && (
+                <p className="muted mt-3 text-xs">
+                  {t("Limitation watch = 3 years from NPA date − 90 days; advocate to confirm (acknowledgements extend it).")}
                 </p>
-              </Link>
-            ))}
-            {!tasks?.length && <p className="muted text-sm">{t("No tasks assigned.")}</p>}
-          </div>
-        </section>
+              )}
+            </section>
+
+            {(isApprover || isAdmin) && (
+              <section id="approvals" className="glass-card fade-up scroll-mt-24 p-5" style={{ animationDelay: "180ms" }}>
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="text-lg font-semibold">{t("Awaiting my approval")}</h2>
+                  {!!approvalQueue.length && <span className="pill pill-amber">{approvalQueue.length}</span>}
+                </div>
+                <div className="mt-3 space-y-2">
+                  {approvalQueue.map((d) => (
+                    <Link key={d.id} href={`/dashboard/cases/${d.case_id}`} className="row-hover flex items-center justify-between gap-2 rounded-xl px-2 py-2.5">
+                      <span>
+                        <span className="font-semibold">{one(d.cases as Rel<{ case_no_internal: string }>)?.case_no_internal}</span>
+                        <span className="muted text-sm"> · {title(d.doc_kind)}</span>
+                      </span>
+                      <span className="btn btn-primary px-3 py-1 text-xs">{t("Review")} →</span>
+                    </Link>
+                  ))}
+                  {!approvalQueue.length && <p className="muted text-sm">{t("Nothing waiting for approval.")}</p>}
+                </div>
+              </section>
+            )}
+
+            <section className="glass-card fade-up p-5" style={{ animationDelay: "240ms" }}>
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold">{t("My tasks")}</h2>
+                {!!tasks?.length && (
+                  <Link href="/dashboard/tasks" className="btn px-3 py-1 text-xs">
+                    {t("Open task view →")}
+                  </Link>
+                )}
+              </div>
+              <div className="mt-3 space-y-2">
+                {tasks?.map((tk) => (
+                  <Link
+                    key={tk.id}
+                    href={fieldOnly ? "/dashboard/tasks" : `/dashboard/cases/${tk.case_id}`}
+                    className="row-hover flex items-center justify-between gap-2 rounded-xl px-2 py-2.5"
+                  >
+                    <span className="font-semibold">{title(tk.kind)}</span>
+                    <span className="muted text-sm">
+                      {one(tk.cases as Rel<{ case_no_internal: string }>)?.case_no_internal} · {title(tk.status)}
+                    </span>
+                  </Link>
+                ))}
+                {!tasks?.length && <p className="muted text-sm">{t("No tasks assigned.")}</p>}
+              </div>
+            </section>
+          </aside>
+        </div>
       </main>
     </>
   );

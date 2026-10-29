@@ -40,7 +40,7 @@ export default async function BatchesPage() {
   return (
     <>
       <TopBar org={one(profile.organizations as Rel<{ name: string }>)?.name} name={profile.full_name} roles={roleNames} />
-      <main className="mx-auto w-full max-w-6xl flex-1 space-y-5 px-4 pb-16 pt-8">
+      <main className="w-full flex-1 lg:px-6 space-y-5 px-4 pb-16 pt-8">
         <div className="fade-up">
           <Link href="/dashboard" className="muted text-sm hover:underline">
             ← Dashboard

@@ -54,6 +54,8 @@ export function UploadScan({ orgId, caseId }: { orgId: string; caseId: string })
   const [busy, setBusy] = useState(false);
   const [name, setName] = useState<string | null>(null);
   const [result, setResult] = useState<ActionResult | null>(null);
+  const [autoRead, setAutoRead] = useState(true);
+  const [language, setLanguage] = useState<"en-IN" | "mr-IN">("en-IN");
 
   async function onUpload() {
     const file = input.current?.files?.[0];
@@ -64,7 +66,7 @@ export function UploadScan({ orgId, caseId }: { orgId: string; caseId: string })
     try {
       const path = await uploadToCase(orgId, caseId, "scans", file);
       if (!path) return setResult({ ok: false, error: "Upload not allowed for this case." });
-      setResult(await recordUpload({ caseId, path, sha256: await sha256Hex(file) }));
+      setResult(await recordUpload({ caseId, path, sha256: await sha256Hex(file), autoRead, language }));
       if (input.current) input.current.value = "";
       setName(null);
       router.refresh();
@@ -87,8 +89,18 @@ export function UploadScan({ orgId, caseId }: { orgId: string; caseId: string })
           {name ? `📄 ${name.slice(0, 28)}` : "Choose scan…"}
         </label>
         <button onClick={onUpload} disabled={busy || !name} className="btn btn-primary">
-          {busy ? "Uploading…" : "Upload"}
+          {busy ? (autoRead ? "Uploading and starting AI…" : "Uploading…") : autoRead ? "✦ Upload & read with AI" : "Upload"}
         </button>
+        <label className="flex items-center gap-1.5 text-sm">
+          <input type="checkbox" checked={autoRead} onChange={(e) => setAutoRead(e.target.checked)} className="accent-violet-500" />
+          AI reads it automatically
+        </label>
+        {autoRead && (
+          <select value={language} onChange={(e) => setLanguage(e.target.value as typeof language)} className="input-glass w-auto px-2 py-1 text-xs" aria-label="Scan language">
+            <option value="en-IN">English scan</option>
+            <option value="mr-IN">Marathi scan</option>
+          </select>
+        )}
       </div>
       <Status result={result} />
     </div>
@@ -110,6 +122,61 @@ export function GenerateDraft({
     <div className="space-y-1">
       <button onClick={() => start(async () => setResult(await generateDraft(caseId, kind)))} disabled={pending} className="btn btn-primary">
         {pending ? "Generating…" : `✦ ${label}`}
+      </button>
+      <Status result={result} />
+    </div>
+  );
+}
+
+/** Runs a list of server actions one after another, with progress, then refreshes the page. */
+function useBatch() {
+  const router = useRouter();
+  const [progress, setProgress] = useState<string | null>(null);
+  const [result, setResult] = useState<ActionResult | null>(null);
+  const run = async (steps: { label: string; go: () => Promise<ActionResult> }[], done: string) => {
+    setResult(null);
+    const failed: string[] = [];
+    for (const [i, s] of steps.entries()) {
+      setProgress(`${i + 1}/${steps.length} · ${s.label}`);
+      const r = await s.go();
+      if (!r.ok) failed.push(`${s.label}: ${r.error}`);
+    }
+    setProgress(null);
+    setResult(failed.length ? { ok: false, error: failed.join(" · ") } : { ok: true, message: done });
+    router.refresh();
+  };
+  return { progress, result, run };
+}
+
+/** One click for the whole suit set, each paper exactly as its own button would make it. */
+export function GenerateAll({ caseId, kinds }: { caseId: string; kinds: { kind: DocKind; label: string }[] }) {
+  const { progress, result, run } = useBatch();
+  return (
+    <div className="space-y-1">
+      <button
+        disabled={!!progress}
+        className="btn btn-primary px-5 py-3 text-base"
+        onClick={() => run(kinds.map((k) => ({ label: k.label, go: () => generateDraft(caseId, k.kind) })), `All ${kinds.length} papers generated.`)}
+      >
+        {progress ? `Generating ${progress}…` : `✦ Generate all papers (${kinds.length})`}
+      </button>
+      <Status result={result} />
+    </div>
+  );
+}
+
+/** Sends every draft that is ready to the approver in one go. */
+export function SubmitAll({ drafts }: { drafts: { id: string; label: string }[] }) {
+  const { progress, result, run } = useBatch();
+  if (!drafts.length) return null;
+  return (
+    <div className="space-y-1">
+      <button
+        disabled={!!progress}
+        className="btn px-5 py-3 text-base"
+        onClick={() => run(drafts.map((d) => ({ label: d.label, go: () => submitForApproval(d.id) })), `${drafts.length} drafts sent for approval.`)}
+      >
+        {progress ? `Sending ${progress}…` : `Submit all for approval (${drafts.length}) →`}
       </button>
       <Status result={result} />
     </div>

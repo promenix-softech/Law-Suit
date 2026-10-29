@@ -7,13 +7,15 @@ import { checkModelOutput, formatINR, rupees, stripInvisible } from "@civil-suit
  * Normalised storage (before encryption): date → YYYY-MM-DD, amount → integer paise,
  * rate → integer basis points, account → digits only, text → trimmed.
  */
-export type FieldKind = "text" | "date" | "amount" | "rate" | "ifsc" | "account";
+export type FieldKind = "text" | "date" | "amount" | "rate" | "ifsc" | "account" | "months";
 
 export interface FieldDef {
   key: string;
   label: string;
   kind: FieldKind;
   description: string;
+  /** Tighter limit than the kind's own, to match the column it is applied to. */
+  maxLength?: number;
 }
 
 export const FIELDS: FieldDef[] = [
@@ -31,6 +33,11 @@ export const FIELDS: FieldDef[] = [
   { key: "npa_date", label: "NPA date", kind: "date", description: "Date the account was classified as a Non-Performing Asset" },
   { key: "outstanding_amount", label: "Outstanding", kind: "amount", description: "Total amount outstanding as per the statement of account, in Indian rupees" },
   { key: "outstanding_as_on", label: "Outstanding as on", kind: "date", description: "Date as on which the outstanding amount is stated" },
+  // Suit particulars the plaint prints; the drafter still verifies each one.
+  { key: "guarantor_address", label: "Guarantor address", kind: "text", description: "Residential address of the guarantor, if any" },
+  { key: "loan_purpose", label: "Loan purpose", kind: "text", description: "Purpose for which the loan was sanctioned, as written in the sanction letter or agreement", maxLength: 200 },
+  { key: "application_date", label: "Loan application date", kind: "date", description: "Date of the borrower's loan application, if stated" },
+  { key: "tenure_months", label: "Tenure (months)", kind: "months", description: "Repayment period in months, or the number of monthly instalments" },
 ];
 
 export const FIELD_BY_KEY = new Map(FIELDS.map((f) => [f.key, f]));
@@ -86,12 +93,43 @@ export function parseAmountPaise(raw: string): number | null {
   return Number.isSafeInteger(paise) ? paise : null;
 }
 
-/** "10.50%", "10.5 % p.a." → 1050 basis points (0–50%). */
+/** Words a sanction letter may print around one fixed rate without changing it. */
+const RATE_WORDS = new Set([
+  "rate", "of", "interest", "roi", "per", "annum", "p", "a", "pa", "with", "monthly", "quarterly",
+  "rests", "rest", "compounded", "compounding", "fixed", "simple", "payable", "at", "the",
+]);
+
+/**
+ * "10.50%", "10.5 % p.a.", "10.75% per annum, with monthly rests" → basis points (0–50%).
+ * Only one fixed rate is accepted: a second number or any other word ("MCLR", "plus", "over",
+ * "penal", "for 12 months") means a floating or split rate, and a person must decide.
+ */
 export function parseRateBps(raw: string): number | null {
-  const m = /^(\d{1,2}(?:\.\d{1,2})?)\s*%?\s*(p\.?\s*a\.?|per annum)?$/i.exec(raw.trim());
-  if (!m) return null;
-  const bps = Math.round(Number(m[1]) * 100);
+  const s = raw.trim();
+  const plain = /^(\d{1,2}(?:\.\d{1,2})?)\s*%?\s*(p\.?\s*a\.?|per annum)?$/i.exec(s);
+  let value = plain?.[1];
+  if (!value) {
+    const pct = [...s.matchAll(/(\d{1,2}(?:\.\d{1,2})?)\s*%/g)];
+    if (pct.length !== 1) return null;
+    const rest = s.replace(pct[0]![0], " ");
+    if (/\d/.test(rest)) return null;
+    const words = rest.toLowerCase().split(/[^a-z]+/).filter(Boolean);
+    if (!words.every((w) => RATE_WORDS.has(w))) return null;
+    value = pct[0]![1];
+  }
+  const bps = Math.round(Number(value) * 100);
   return bps > 0 && bps <= 5000 ? bps : null;
+}
+
+/** "60", "60 months", "72 monthly instalments of Rs. 18,200/-", "84 EMIs" → months (1–480). */
+export function parseMonths(raw: string): number | null {
+  const s = raw.trim();
+  // Quarterly, half-yearly, yearly or bi-monthly instalments are not a count of months.
+  if (/quarter|half|year|annual|bi-?month/i.test(s)) return null;
+  const m = /^(\d{1,3})(?:\s+(?:months?|monthly\b.*|equated\b.*|emis?|instal(?:l)?ments?\b.*))?$/i.exec(s);
+  if (!m) return null;
+  const n = Number(m[1]);
+  return n >= 1 && n <= 480 ? n : null;
 }
 
 export function normalise(kind: FieldKind, raw: string): Normalised {
@@ -124,6 +162,10 @@ export function normalise(kind: FieldKind, raw: string): Normalised {
       const v = s.replace(/[\s-]/g, "");
       return /^[0-9A-Z]{6,20}$/i.test(v) ? { ok: true, stored: v.toUpperCase() } : { ok: false, reason: "Not a valid account number" };
     }
+    case "months": {
+      const n = parseMonths(s);
+      return n != null ? { ok: true, stored: String(n) } : { ok: false, reason: "Not a number of months" };
+    }
   }
 }
 
@@ -140,6 +182,8 @@ export function display(kind: FieldKind, stored: string): string {
     }
     case "account":
       return `XXXXXX${stored.slice(-4)}`;
+    case "months":
+      return `${stored} months`;
     default:
       return stored;
   }
