@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { FieldKind } from "@/lib/extract/fields";
+import { BULK_KINDS, type FieldKind } from "@/lib/extract/fields";
 import { translator, type Lang } from "@/lib/i18n";
 import { applyVerifiedFields, verifyField } from "./extract-actions";
 
@@ -18,6 +18,8 @@ export type ReviewRow = {
   reason: string | null;
   confidence: number | null;
   verified: boolean;
+  /** How it was confirmed (null: unverified, or verified before methods were recorded). */
+  verifiedMethod: "single" | "bulk" | null;
   documentId: string | null;
 };
 
@@ -63,7 +65,9 @@ function Row({ r, caseId, canEdit, value, setValue }: { r: ReviewRow; caseId: st
       </td>
       <td className="px-3 py-3 text-right">
         {r.verified && value === r.initial ? (
-          <span className="pill pill-green">Verified</span>
+          <span className="pill pill-green" title={r.verifiedMethod === "bulk" ? "Confirmed with the bulk “compared with the scan” button" : undefined}>
+            Verified{r.verifiedMethod === "bulk" ? " (bulk)" : ""}
+          </span>
         ) : canEdit ? (
           <button
             disabled={pending}
@@ -88,12 +92,6 @@ function Row({ r, caseId, canEdit, value, setValue }: { r: ReviewRow; caseId: st
 
 /** Only values the extractor was sure of (and code accepted) can be confirmed together. */
 const SURE = 0.95;
-/**
- * The extractor's confidence is model output over an untrusted scan, so bulk confirmation is
- * limited to names, addresses and IFSC. Amounts, rates, account numbers, tenure and dates
- * (claim and limitation) are always verified one by one.
- */
-const BULK_KINDS: FieldKind[] = ["text", "ifsc"];
 
 export function ExtractionReview({ rows, caseId, canEdit, lang }: { rows: ReviewRow[]; caseId: string; canEdit: boolean; lang: Lang }) {
   const t = translator(lang);
@@ -115,7 +113,7 @@ export function ExtractionReview({ rows, caseId, canEdit, lang }: { rows: Review
     start(async () => {
       const failed: string[] = [];
       for (const r of sure) {
-        const res = await verifyField({ caseId, fieldKey: r.key, value: r.initial });
+        const res = await verifyField({ caseId, fieldKey: r.key, value: r.initial, method: "bulk" });
         if (!res.ok) failed.push(res.error);
       }
       setChecked(false);

@@ -167,6 +167,7 @@ async function saveExtraction(supabase: Supabase, job: { org_id: string; documen
         document_id: job.document_id,
         verified_by: null,
         verified_at: null,
+        verified_method: null,
       },
     ];
   });

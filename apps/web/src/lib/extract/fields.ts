@@ -267,6 +267,13 @@ export function editable(kind: FieldKind, stored: string): string {
   return kind === "date" ? display(kind, stored) : stored;
 }
 
+/**
+ * Kinds a drafter may confirm with the bulk "I compared these with the scan" button. The
+ * extractor's confidence is model output over an untrusted scan, so amounts, rates, account
+ * numbers, tenure, dates and document lists are always verified one by one (checked on the server too).
+ */
+export const BULK_KINDS: readonly FieldKind[] = ["text", "ifsc"];
+
 /** Below this, the drafter must look closely. */
 export const LOW_CONFIDENCE = 0.85;
 

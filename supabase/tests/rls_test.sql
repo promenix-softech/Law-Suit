@@ -1463,6 +1463,30 @@ select pg_temp.expect(
   'admin can approve a draft written by someone else');
 rollback;
 
+-- how a value was verified is recorded, and only together with a verification (20261029010000)
+begin;
+do $$
+begin
+  insert into public.extracted_fields (org_id, case_id, field_key, verified_by, verified_at, verified_method)
+  values ('11111111-1111-1111-1111-111111111111', 'c0000000-0000-0000-0000-000000000001', 'borrower_name',
+          '00000000-0000-0000-0000-0000000000d1', now(), 'bulk');
+  raise notice 'ok - bulk verification is recorded';
+  begin
+    insert into public.extracted_fields (org_id, case_id, field_key, verified_method)
+    values ('11111111-1111-1111-1111-111111111111', 'c0000000-0000-0000-0000-000000000001', 'ifsc', 'single');
+    raise exception 'FAIL: verification method without a verification';
+  exception when check_violation then raise notice 'ok - method needs a verification';
+  end;
+  begin
+    insert into public.extracted_fields (org_id, case_id, field_key, verified_by, verified_at, verified_method)
+    values ('11111111-1111-1111-1111-111111111111', 'c0000000-0000-0000-0000-000000000001', 'facility_type',
+            '00000000-0000-0000-0000-0000000000d1', now(), 'auto');
+    raise exception 'FAIL: unknown verification method accepted';
+  exception when check_violation then raise notice 'ok - only single or bulk';
+  end;
+end $$;
+rollback;
+
 select pg_temp.expect(
   not exists (select 1 from pg_tables where schemaname = 'public' and not rowsecurity),
   'RLS enabled on every public table');

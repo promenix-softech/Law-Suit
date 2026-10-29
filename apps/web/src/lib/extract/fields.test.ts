@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { confidenceOf, display, editable, extractionSchema, FIELDS, normalise, parseAmountPaise, parseDate, parseDocList, parseMonths, parseRateBps, rawText } from "./fields";
+import { BULK_KINDS, confidenceOf, display, editable, extractionSchema, FIELDS, normalise, parseAmountPaise, parseDate, parseDocList, parseMonths, parseRateBps, rawText } from "./fields";
 
 describe("parseDate (day-first, as in Indian documents)", () => {
   it.each([
@@ -189,6 +189,13 @@ describe("extractionSchema", () => {
       if (f.kind === "doclist") expect(p).toMatchObject({ type: "array", items: { type: "string" } });
       else expect(p.type).toBe("string");
     }
+  });
+});
+
+describe("BULK_KINDS", () => {
+  it("never lets claim, limitation or account values be confirmed in bulk", () => {
+    for (const k of ["amount", "rate", "date", "account", "months", "doclist"] as const) expect(BULK_KINDS).not.toContain(k);
+    expect([...BULK_KINDS].sort()).toEqual(["ifsc", "text"]);
   });
 });
 
