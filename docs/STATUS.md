@@ -151,6 +151,13 @@
 - [x] Demo dry run (28 Oct, local app on the demo DB, throwaway QA users): all papers generate; penal pending blocks the decree and plaint approval; maker-checker approval works. Talk track: `docs/demo-script.md`
 - [ ] Owner: answer `docs/open-questions.md` #14–19, #24 (full account numbers, BBE Act, sale prayer, PAN / fee account …)
 
+## Demo kit (29 Oct)
+- [x] `docs/demo-kit/`: two synthetic scanned loan files (Case A Term Loan with guarantor, 6 pages; Case B Vehicle Loan, 5 pages; image-only 300 DPI) + `manifest.json` with the values extraction should find; generator `scripts/demo-kit-scans.mjs`
+- [x] Marathi process guide `docs/demo-kit/demo-process-guide-mr.pdf` (flow chart, manual / automatic / AI per step, live screenshots; source in `docs/demo-kit/guide/`). Dashboard screenshots cropped above the case list
+- [x] Live run on civilsuits.promenix.in: admin opened DEMO-2026-0011 (Case A, drafter1 / approver), drafter1 uploaded the scan — works
+- [ ] **Blocker — OCR/extraction on the live site:** Sarvam answers 401/403 ("Sarvam API key is missing or invalid."). `SARVAM_API_KEY` exists in Vercel (production + preview) but is rejected. Owner: put a valid key in Vercel and redeploy, then re-run OCR on DEMO-2026-0011 and add the extraction-review screenshot to the guide
+- [ ] Demo DB: CS-2026-0011 and CS-2026-0015 carry names that do not follow the synthetic pattern (no Demo/Test/Sample/Fake) — owner to confirm they are not real people, else delete
+
 ## Next (Phase 1)
 - [ ] Owner: VPS for the worker (Docker), service-role key there only; run converters without network before real data
 - [ ] TOTP MFA for admin and approver (plan C4) — on hold at owner's request

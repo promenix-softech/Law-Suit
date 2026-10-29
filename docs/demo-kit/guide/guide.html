@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="mr">
+<head>
+<meta charset="utf-8">
+<title>Civil Suits — Demo process guide</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;600;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  @page { size: A4; margin: 14mm 13mm 16mm; }
+  :root { --ink:#1d1b2e; --muted:#5b5872; --line:#dcd9ea; --violet:#6d4aff; --man:#b45309; --manbg:#fff4e0; --auto:#047857; --autobg:#e3f8ef; --ai:#6d28d9; --aibg:#efe8ff; --off:#6b7280; --offbg:#eef0f3; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: "Inter","Noto Sans Devanagari",sans-serif; color:var(--ink); font-size:11.5pt; line-height:1.55; }
+  .mr { font-family: "Noto Sans Devanagari","Inter",sans-serif; }
+  h1 { font-size:26pt; margin:0 0 6px; letter-spacing:-.5px; }
+  h2 { font-size:16pt; margin:0 0 10px; padding-bottom:6px; border-bottom:2px solid var(--violet); }
+  h3 { font-size:12.5pt; margin:14px 0 6px; }
+  p { margin:5px 0; }
+  .page { page-break-after: always; }
+  .page:last-child { page-break-after: auto; }
+  .muted { color:var(--muted); }
+  .cover { height: 255mm; display:flex; flex-direction:column; justify-content:center; }
+  .cover .tag { display:inline-block; background:var(--violet); color:#fff; border-radius:999px; padding:3px 12px; font-size:10pt; font-weight:600; }
+  .box { border:1px solid var(--line); border-radius:10px; padding:10px 14px; margin:10px 0; background:#fbfaff; }
+  .warn { border-color:#f2b8b5; background:#fff4f3; }
+  .warn b.t { color:#b42318; }
+  table { border-collapse:collapse; width:100%; margin:8px 0; font-size:10.3pt; }
+  th, td { border:1px solid var(--line); padding:5px 8px; text-align:left; vertical-align:top; }
+  th { background:#f3f1fb; }
+  code { font-family: "DejaVu Sans Mono", monospace; font-size:9.5pt; background:#f3f1fb; padding:1px 4px; border-radius:4px; }
+  .chip { display:inline-block; border-radius:999px; padding:1px 9px; font-size:9pt; font-weight:600; white-space:nowrap; }
+  .m { background:var(--manbg); color:var(--man); }
+  .a { background:var(--autobg); color:var(--auto); }
+  .i { background:var(--aibg); color:var(--ai); }
+  .o { background:var(--offbg); color:var(--off); }
+  .role { background:#f1f1f6; color:#3b3950; }
+  /* flow chart */
+  .flow { display:grid; grid-template-columns: 1fr 1fr; gap: 0 18px; }
+  .col { display:flex; flex-direction:column; }
+  .node { border:1.5px solid var(--line); border-left-width:6px; border-radius:9px; padding:6px 10px; background:#fff; font-size:9.8pt; line-height:1.4; }
+  .node b { font-size:10.3pt; }
+  .node.m { border-left-color:var(--man); background:#fffaf1; color:inherit; }
+  .node.a { border-left-color:var(--auto); background:#f4fcf8; color:inherit; }
+  .node.i { border-left-color:var(--ai); background:#f8f5ff; color:inherit; }
+  .node.o { border-left-color:var(--off); background:#f6f7f9; color:inherit; }
+  .arrow { text-align:center; color:#a6a2c2; font-size:12pt; line-height:1; margin:2px 0; }
+  .legend span { margin-right:10px; }
+  /* steps */
+  .step { margin: 0 0 12px; page-break-inside: avoid; }
+  .step .hd { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:4px; }
+  .step .n { width:26px; height:26px; border-radius:50%; background:var(--violet); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:10.5pt; }
+  .step .ttl { font-weight:700; font-size:12.5pt; }
+  .shot { width:100%; border:1px solid var(--line); border-radius:8px; margin:6px 0 2px; }
+  .shot.half { width:62%; }
+  .cap { font-size:9pt; color:var(--muted); }
+  ul { margin:4px 0 4px 18px; padding:0; }
+  li { margin:2px 0; }
+  .two { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+  .tight table { font-size:8.9pt; margin:4px 0; line-height:1.35; }
+  .tight th, .tight td { padding:2px 6px; }
+  .tight h2 { margin-bottom:6px; }
+  .tight h3 { margin:9px 0 4px; }
+  .tight p { margin:3px 0; font-size:10.5pt; }
+</style>
+</head>
+<body class="mr">
+
+<!-- 1. Cover -->
+<section class="page cover">
+  <span class="tag">DEMO · फक्त काल्पनिक (synthetic) डेटा</span>
+  <h1 style="margin-top:16px">Civil Suits — Demo Process Guide</h1>
+  <p style="font-size:15pt">बँक वसुली दावा: scan upload पासून approval पर्यंत, टप्प्याटप्प्याने</p>
+  <p class="muted">Live: <b>https://civilsuits.promenix.in</b> · Office: Nirmal Nyay Associates (Demo) · 29 Oct 2026</p>
+  <div class="box" style="margin-top:22px">
+    <p><b>या PDF मध्ये:</b></p>
+    <ul>
+      <li>पूर्ण process चा flow chart (कोण, काय, automatic की manual)</li>
+      <li>Demo login accounts आणि दोन demo cases च्या bank scan files</li>
+      <li>प्रत्येक टप्पा live website च्या screenshot सह</li>
+      <li>Automatic / manual यादी, demo checklist आणि सध्याच्या अडचणी</li>
+    </ul>
+  </div>
+  <div class="box warn">
+    <p><b class="t">महत्त्वाचे:</b> demo site वर खऱ्या client ची कोणतीही file upload करू नका. सर्व नावे, खाते क्रमांक, रकमा आणि तारखा काल्पनिक आहेत.</p>
+  </div>
+  <p class="legend" style="margin-top:18px">
+    <span class="chip m">Manual — माणसाने करायचे</span>
+    <span class="chip a">Automatic — system करते</span>
+    <span class="chip i">AI — Sarvam वाचते, माणूस तपासतो</span>
+    <span class="chip o">अजून live नाही</span>
+  </p>
+</section>
+
+<!-- 2. Flow chart -->
+<section class="page">
+  <h2>1. Process flow chart</h2>
+  <p class="legend"><span class="chip m">Manual</span><span class="chip a">Automatic</span><span class="chip i">AI + माणसाची तपासणी</span><span class="chip o">अजून live नाही</span></p>
+  <div class="flow">
+    <div class="col">
+      <div class="node m"><b>① Login</b> <span class="chip role">सर्व</span><br>Email + password. प्रत्येकाला फक्त त्याच्या role चे पान दिसते.</div>
+      <div class="arrow">▼</div>
+      <div class="node m"><b>② नवीन case उघडा</b> <span class="chip role">Admin</span><br>Case no., बँक शाखा, court, कर्जदार, drafter आणि approver निवडा.</div>
+      <div class="arrow">▼</div>
+      <div class="node a"><b>③ Case तयार</b><br>Status "Case created"; फक्त नेमलेले drafter/approver यांना case दिसतो (database RLS).</div>
+      <div class="arrow">▼</div>
+      <div class="node m"><b>④ Bank scan upload</b> <span class="chip role">Drafter</span><br>Sanction letter, agreement, SOA, NPA letter ची PDF. खाजगी storage → "Docs uploaded".</div>
+      <div class="arrow">▼</div>
+      <div class="node i"><b>⑤ Run OCR</b> <span class="chip role">Drafter क्लिक</span><br>Sarvam AI पाने वाचते; text encrypted साठवला जातो → "Extraction review".</div>
+      <div class="arrow">▼</div>
+      <div class="node i"><b>⑥ Extract fields</b><br>AI 14 माहिती शोधते: कर्जदार, खाते, रक्कम, व्याजदर, NPA तारीख, थकबाकी इ. (confidence सह).</div>
+      <div class="arrow">▼</div>
+      <div class="node m"><b>⑦ तपासा → Verify → Apply</b> <span class="chip role">Drafter</span><br>प्रत्येक value scan शी जुळवून Verify. फक्त verified values case मध्ये जातात.</div>
+      <div class="arrow">▼</div>
+      <div class="node a"><b>⑧ हिशोब (code मध्ये, AI नाही)</b><br>व्याजासह दावा रक्कम, court fee, suit type (O.37 / commercial / DRT), Sec 12A लागू की नाही.</div>
+    </div>
+    <div class="col">
+      <div class="node a"><b>⑨ Demand notice तयार</b> <span class="chip role">Drafter क्लिक</span><br>Office format मधील DOCX आपोआप.</div>
+      <div class="arrow">▼</div>
+      <div class="node m"><b>⑩ Notice पाठवल्याची नोंद</b><br>RPAD / courier, tracking no., तारीख → "Notice sent".</div>
+      <div class="arrow">▼</div>
+      <div class="node m"><b>⑪ Sec 12A mediation</b> <span class="chip role">फक्त commercial</span><br>अर्ज, निकाल, mediator report upload. पूर्ण होईपर्यंत system plaint पुढे जाऊ देत नाही.</div>
+      <div class="arrow">▼</div>
+      <div class="node m"><b>⑫ Suit particulars</b><br>बँक अधिकारी, penal interest (B), खर्च (C), executed documents.</div>
+      <div class="arrow">▼</div>
+      <div class="node a"><b>⑬ पूर्ण दावा-संच तयार</b><br>Plaint, list of documents, vakalatnama, affidavit / SOT, address memo, draft decree, BBE certificate, court-fee letter, e-filing sheet.</div>
+      <div class="arrow">▼</div>
+      <div class="node m"><b>⑭ Advocate तपासणी → Submit</b> <span class="chip role">Drafter</span><br>[[LEGAL_REVIEW]] परिच्छेद तपासा; "Submit for approval".</div>
+      <div class="arrow">▼</div>
+      <div class="node m"><b>⑮ Approve / Return</b> <span class="chip role">Approver</span><br>Drafter स्वतःचा draft approve करू शकत नाही: हा नियम database मध्येच लागू आहे.</div>
+      <div class="arrow">▼</div>
+      <div class="node m"><b>⑯ Notary, stamp, filing</b> <span class="chip role">Field</span><br>Phone वर task; "Mark done" + पावती photo.</div>
+      <div class="arrow">▼</div>
+      <div class="node o"><b>⑰ E-filing PDF/A bundle</b><br>Worker server (VPS) सुरू झाल्यावर. सध्या फक्त "queued".</div>
+    </div>
+  </div>
+  <div class="box" style="margin-top:10px"><b>सतत चालू (automatic):</b> प्रत्येक क्रियेची audit log मध्ये hash-chain नोंद · deadline alerts (limitation, 12A, notice) · प्रत्येक office चा डेटा वेगळा.</div>
+</section>
+
+<!-- 3. Logins + files -->
+<section class="page tight">
+  <h2>2. Demo accounts आणि demo files</h2>
+  <h3>Login accounts (Maharashtra demo office)</h3>
+  <table>
+    <tr><th>Role</th><th>Email</th><th>Demo मध्ये काय दाखवायचे</th></tr>
+    <tr><td>Admin</td><td><code>admin@demo.civilsuits.test</code></td><td>Dashboard, नवीन case, office settings, audit log</td></tr>
+    <tr><td>Drafter 1</td><td><code>drafter1@demo.civilsuits.test</code></td><td>Case A (DEMO-2026-0011) — Deepak Demo Drafter</td></tr>
+    <tr><td>Drafter 2</td><td><code>drafter2@demo.civilsuits.test</code></td><td>Case B (live demo मध्ये नवीन) — Dipti Demo Drafter</td></tr>
+    <tr><td>Approver</td><td><code>approver@demo.civilsuits.test</code></td><td>Approve / Return — Anil Demo Approver</td></tr>
+    <tr><td>Field</td><td><code>field@demo.civilsuits.test</code></td><td>Phone task list — Farhan Demo Field</td></tr>
+  </table>
+  <p class="muted">Password सर्वांसाठी एकच: तो chat मध्ये दिला आहे, या PDF मध्ये मुद्दाम छापलेला नाही. दोन browser वापरा (एक normal + एक private window): drafter डावीकडे, approver उजवीकडे.</p>
+
+  <h3>Bank scan files (upload करण्यासाठी)</h3>
+  <p>Repo मध्ये <code>docs/demo-kit/</code>. दोन्ही image-only PDF (300 DPI, थोडे तिरके, noise सह), म्हणजे खऱ्या scanner सारखे.</p>
+  <table>
+    <tr><th></th><th>Case A — <code>DEMO-CASE-A-bank-scans.pdf</code> (6 पाने)</th><th>Case B — <code>DEMO-CASE-B-bank-scans.pdf</code> (5 पाने)</th></tr>
+    <tr><td>पानं</td><td>Sanction letter, loan agreement, deed of guarantee, statement of account, NPA letter, balance confirmation</td><td>Sanction letter, loan agreement, deed of hypothecation (vehicle), statement of account, NPA letter</td></tr>
+    <tr><td>कर्जदार</td><td>Rohit Demo Joshi</td><td>Ganesh Fake Wagh</td></tr>
+    <tr><td>पत्ता</td><td>Flat 7, Sample Heights, Test Lane, Kothrud, Pune 411038</td><td>House 21, Synthetic Colony, Hadapsar, Pune 411028</td></tr>
+    <tr><td>जामीनदार</td><td>Swati Test Joshi</td><td>— (नाही)</td></tr>
+    <tr><td>बँक / शाखा / IFSC</td><td colspan="2">State Bank of India · Demo Branch, Pune · SBIN0DEMO01</td></tr>
+    <tr><td>खाते क्र.</td><td>DEMO40217731</td><td>DEMO40388902</td></tr>
+    <tr><td>Facility</td><td>Term Loan</td><td>Vehicle Loan</td></tr>
+    <tr><td>Sanction तारीख</td><td>12/03/2023</td><td>05/08/2022</td></tr>
+    <tr><td>मंजूर रक्कम</td><td>Rs. 6,50,000/-</td><td>Rs. 12,40,000/-</td></tr>
+    <tr><td>व्याजदर</td><td>10.75% p.a.</td><td>9.85% p.a.</td></tr>
+    <tr><td>NPA तारीख</td><td>30/06/2025</td><td>31/03/2025</td></tr>
+    <tr><td>थकबाकी</td><td>Rs. 5,58,812/- as on 30/09/2026</td><td>Rs. 10,45,485/- as on 30/09/2026</td></tr>
+  </table>
+  <p class="muted">ही "expected" यादी आहे: step ⑦ मध्ये AI ने काढलेल्या values यांच्याशी जुळवून दाखवा.</p>
+
+  <h3>नवीन case फॉर्ममध्ये भरायचे (Case B)</h3>
+  <table>
+    <tr><td>Internal case no.</td><td><code>DEMO-2026-0012</code></td><td>Bank branch</td><td>SBI — Demo Branch, Pune</td></tr>
+    <tr><td>Court</td><td>Civil Judge Senior Division, Pune (Demo)</td><td>Borrower</td><td>Ganesh Fake Wagh</td></tr>
+    <tr><td>Facility</td><td>Vehicle Loan</td><td>Drafter / Approver</td><td>Dipti Demo Drafter / Anil Demo Approver</td></tr>
+  </table>
+</section>
+
+<!-- 4. Steps -->
+<section class="page">
+  <h2>3. टप्प्याटप्प्याने (screenshots सह)</h2>
+
+  <div class="step">
+    <div class="hd"><span class="n">1</span><span class="ttl">Login</span><span class="chip m">Manual</span><span class="chip role">सर्व</span></div>
+    <p>Email आणि password टाकून <b>Sign in</b>. Role प्रमाणे menu बदलतो: admin ला "New case, Audit log, Bulk upload, Office settings" दिसतात, drafter/approver ला नाही.</p>
+    <img class="shot half" src="img/login.jpg">
+  </div>
+
+  <div class="step">
+    <div class="hd"><span class="n">2</span><span class="ttl">Admin dashboard</span><span class="chip a">Automatic</span><span class="chip role">Admin</span></div>
+    <p>एकूण cases, commercial (12A) cases, approval साठी थांबलेले, आणि "Needs attention" (limitation / 12A / notice deadlines) हे सर्व आपोआप मोजले जाते. वरच्या पट्टीत <b>मराठी</b> दाबून पूर्ण screen मराठीत होते; <b>Ctrl+K</b> ने कोणताही case शोधा.</p>
+    <img class="shot" src="img/admin-dash.jpg">
+  </div>
+</section>
+
+<section class="page">
+  <div class="step">
+    <div class="hd"><span class="n">3</span><span class="ttl">नवीन case उघडा</span><span class="chip m">Manual</span><span class="chip role">Admin</span></div>
+    <p><b>+ New case</b> → case no. (system पुढचा क्रमांक सुचवते), बँक शाखा, court, कर्जदाराचे नाव, facility, पत्ता, drafter आणि approver निवडा → <b>Open case</b>. Loan ची बाकी माहिती scan मधून नंतर येते: इथे टाइप करायची गरज नाही.</p>
+    <img class="shot" src="img/new-case.jpg">
+  </div>
+
+  <div class="step">
+    <div class="hd"><span class="n">4</span><span class="ttl">Case page तयार</span><span class="chip a">Automatic</span></div>
+    <p>वर case ची status timeline दिसते (Case created → Docs uploaded → Extraction review → … → Filed). Claim आणि loan cards अजून रिकामी आहेत, कारण scan अजून वाचायचा आहे.</p>
+    <img class="shot" src="img/case-created.jpg">
+  </div>
+
+  <div class="step">
+    <div class="hd"><span class="n">5</span><span class="ttl">Bank scan upload</span><span class="chip m">Manual</span><span class="chip role">Drafter</span></div>
+    <p>Drafter म्हणून login → case उघडा → <b>Documents</b> मध्ये <b>Choose scan…</b> → <code>DEMO-CASE-A-bank-scans.pdf</code> → <b>Upload</b>. File खाजगी storage मध्ये जाते (link 5 मिनिटांत expire); status आपोआप "Docs uploaded".</p>
+    <img class="shot" src="img/uploaded.jpg">
+  </div>
+</section>
+
+<section class="page">
+  <div class="step">
+    <div class="hd"><span class="n">6</span><span class="ttl">Run OCR → Extract fields</span><span class="chip i">AI</span><span class="chip role">Drafter क्लिक करतो</span></div>
+    <p>भाषा (English / Marathi) निवडा → <b>Run OCR</b>. Sarvam AI प्रत्येक पान वाचते (≤ 10 पाने प्रति job). मग <b>✦ Extract fields</b>: AI 14 माहिती शोधते आणि प्रत्येकासोबत confidence दाखवते. AI ला फक्त scan चा text मिळतो, कोणतीही "action" करण्याची परवानगी नाही. Text आणि values encrypted साठवले जातात.</p>
+    <div class="box warn">
+      <p><b class="t">आज live वर अडचण:</b> हे बटण दाबल्यावर <i>"Sarvam API key is missing or invalid."</i> असा error येतो (खाली screenshot). Vercel मध्ये <code>SARVAM_API_KEY</code> नावाची नोंद आहे, पण Sarvam ती key नाकारतो (401/403). शेवटच्या पानावरचे उपाय पाहा. Key दुरुस्त झाल्यावर हा टप्पा आणि पुढचा टप्पा 7 live चालतील.</p>
+    </div>
+    <img class="shot" src="img/ocr-error.jpg">
+  </div>
+
+  <div class="step">
+    <div class="hd"><span class="n">7</span><span class="ttl">Extracted data — तपासा, Verify, Apply</span><span class="chip m">Manual (बंधनकारक)</span><span class="chip role">Drafter</span></div>
+    <ul>
+      <li>प्रत्येक field समोर AI ची value आणि confidence; scan चे पान उघडून जुळवा.</li>
+      <li>बरोबर असेल तर <b>Verify</b>; चूक असेल तर दुरुस्त करून Verify. Value पुन्हा code मध्ये तपासली जाते (तारीख, रक्कम paise मध्ये, IFSC, खाते क्र.).</li>
+      <li><b>Apply verified values to case</b>: फक्त verified values case मध्ये जातात. AI ने काढलेली value माणसाने verify केल्याशिवाय कधीच वापरली जात नाही.</li>
+      <li>पुन्हा extract केले तरी माणसाने verify केलेल्या values बदलत नाहीत.</li>
+    </ul>
+    <p class="muted">(Sarvam key दुरुस्त झाल्यावर या पानाचा screenshot जोडता येईल.)</p>
+  </div>
+</section>
+
+<section class="page">
+  <div class="step">
+    <div class="hd"><span class="n">8</span><span class="ttl">दावा रक्कम, court fee, suit type</span><span class="chip a">Automatic — code, AI नाही</span></div>
+    <p>Apply झाल्यावर लगेच: व्याजासह दावा रक्कम, court fee (Maharashtra Court-fees Act slabs), suit type (Summary O.37 / Commercial / DRT ≥ ₹20 लाख), Sec 12A लागू आहे की नाही. हे सर्व tested code मध्ये मोजले जाते, LLM कधीच नाही. (उदाहरण: DEMO-2026-0002)</p>
+    <img class="shot" src="img/claim.jpg">
+  </div>
+
+  <div class="step">
+    <div class="hd"><span class="n">9</span><span class="ttl">Demand notice → पाठवल्याची नोंद</span><span class="chip a">Notice: Automatic</span><span class="chip m">नोंद: Manual</span></div>
+    <p><b>✦ Generate demand notice</b> → office format मधील DOCX तयार. नोटीस पाठवल्यावर mode (RPAD / courier / hand), tracking no., तारीख → <b>Record dispatch</b> → status "Notice sent". Plaint मध्ये ही तारीख आपोआप येते.</p>
+    <img class="shot half" src="img/dispatch.jpg">
+  </div>
+</section>
+
+<section class="page">
+  <div class="step">
+    <div class="hd"><span class="n">10</span><span class="ttl">Sec 12A pre-institution mediation (फक्त commercial)</span><span class="chip m">Manual</span><span class="chip a">नियम: Automatic</span></div>
+    <p>Authority + अर्जाची तारीख नोंदवा → निकाल (settled / failed / non-starter), report date आणि mediator चा report upload → <b>Record outcome</b>. 12A लागू असलेल्या case मध्ये mediation वगळून plaint कडे जाता येत नाही; हा नियम system लागू करते. (उदाहरण: DEMO-2026-0007)</p>
+    <img class="shot half" src="img/mediation.jpg">
+  </div>
+
+  <div class="step">
+    <div class="hd"><span class="n">11</span><span class="ttl">Suit particulars</span><span class="chip m">Manual</span><span class="chip role">Drafter</span></div>
+    <p>Scan मध्ये सहसा नसलेली माहिती: सही करणारा बँक अधिकारी (नाव, पद, वय), <b>B — penal interest</b> (रिकामे = नंतर ठरवायचे, 0 = NIL), <b>C — खर्च</b>, firm असल्यास "Through its Proprietor…", loan application date, purpose, tenure, executed documents (एका ओळीत एक: <code>Title | DD.MM.YYYY</code>). → <b>Save particulars</b>; रक्कम आणि court fee पुन्हा मोजले जातात.</p>
+    <img class="shot" src="img/particulars.jpg">
+  </div>
+</section>
+
+<section class="page">
+  <div class="step">
+    <div class="hd"><span class="n">12</span><span class="ttl">पूर्ण दावा-संच तयार करा</span><span class="chip a">Automatic</span><span class="chip role">Drafter क्लिक करतो</span></div>
+    <p>प्रत्येक <b>✦ Generate …</b> बटण office च्या format मध्ये (caption, परिच्छेदांचा क्रम, Rs. x/- आणि अक्षरी रक्कम, header/footer) DOCX तयार करते: plaint, list of documents, vakalatnama, affidavit / statement of truth, address memo, draft decree (O.37), Bankers' Books certificate, court-fee letter, e-filing data sheet. <b>Preview</b> ने screen वर पाहा, <b>DOCX</b> download करा. नवीन version बनवला की तो पुन्हा "Draft" होतो.</p>
+    <img class="shot" src="img/drafts.jpg" style="width:82%">
+    <div class="two">
+      <img class="shot" src="img/plaint-page.jpg">
+      <div>
+        <p class="cap" style="margin-top:10px">Sample plaint चे पहिले पान (synthetic): court caption, SPECIAL SUMMARY SUIT, Order XXXVII, पक्षकार, जामीनदार.</p>
+        <div class="box"><b>Advocate ने तपासायचे (Manual):</b> <code>[[LEGAL_REVIEW]]</code> असे चिन्हांकित परिच्छेद DOCX मध्ये highlight केलेले असतात. त्यात BBE Act certificate wording, ₹1 लाखाखालील court-fee slabs आणि welfare stamp येतात. System कायद्याचा मजकूर कधीच स्वतः तयार करत नाही.</div>
+        <div class="box"><b>Penal interest (B) रिकामे असेल तर:</b> plaint मध्ये "To be determined" छापले जाते, draft decree आणि submit for approval नाकारले जातात.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="page">
+  <div class="step">
+    <div class="hd"><span class="n">13</span><span class="ttl">Submit for approval → Approve / Return</span><span class="chip m">Manual</span><span class="chip role">Drafter → Approver</span></div>
+    <p>Drafter प्रत्येक draft वर <b>Submit for approval →</b> दाबतो. Approver च्या dashboard वर <b>"Awaiting my approval"</b> मध्ये तो येतो. Approver case उघडून <b>Approve</b> करतो, किंवा comment लिहून <b>Return to drafter</b>. Plaint approve झाला की case "Approved" होतो, return झाला की परत "Drafting".</p>
+    <div class="box"><b>Maker-checker:</b> ज्याने draft बनवला तो तो approve करू शकत नाही. हे फक्त screen वर नाही, database मध्येच नाकारले जाते.</div>
+    <img class="shot" src="img/approver-dash.jpg">
+  </div>
+
+  <div class="step">
+    <div class="hd"><span class="n">14</span><span class="ttl">Field tasks (phone)</span><span class="chip m">Manual</span><span class="chip role">Field staff</span></div>
+    <p>Admin case मधून task देतो (documents गोळा करणे, notary / stamp, e-filing, dispatch). Field staff phone वर <b>Start</b> → note + पावतीचा photo → <b>Mark done</b>. उशीर झालेले tasks लाल दिसतात.</p>
+    <img class="shot half" src="img/field.jpg">
+  </div>
+</section>
+
+<section class="page">
+  <div class="step">
+    <div class="hd"><span class="n">15</span><span class="ttl">Audit log</span><span class="chip a">Automatic</span><span class="chip role">Admin</span></div>
+    <p>प्रत्येक create / generate / submit / approve ची नोंद कोण, कधी (IST), काय अशी होते. प्रत्येक नोंद आधीच्या नोंदीशी SHA-256 hash ने जोडलेली असते. "Chain integrity — Intact" म्हणजे कोणी नोंद बदललेली नाही. ही नोंद कोणीही बदलू किंवा पुसू शकत नाही.</p>
+    <img class="shot" src="img/audit.jpg">
+  </div>
+
+  <div class="step">
+    <div class="hd"><span class="n">16</span><span class="ttl">Bulk upload आणि e-filing bundle</span><span class="chip o">अजून live नाही</span></div>
+    <p>एका PDF मध्ये अनेक कर्ज files (≤ 300 पाने) upload करायच्या, system पाने खाते क्रमांकानुसार वेगळी करते, admin split तपासून confirm करतो, आणि मग cases तयार होतात. E-filing साठी PDF/A bundle (index → plaint → annexures → vakalatnama → affidavit). दोन्हींसाठी document worker server (VPS) लागतो; तो अजून सुरू नाही. Demo मध्ये हे "पुढचा टप्पा" म्हणून सांगा.</p>
+    <img class="shot" src="img/bulk.jpg">
+  </div>
+</section>
+
+<!-- 5. Summary + checklist -->
+<section class="page">
+  <h2>4. काय automatic, काय manual — एका नजरेत</h2>
+  <table>
+    <tr><th style="width:34%">Automatic (system)</th><th style="width:33%">AI (Sarvam) — माणूस तपासतो</th><th>Manual (माणूस)</th></tr>
+    <tr>
+      <td><ul>
+        <li>पुढचा case क्रमांक सुचवणे</li>
+        <li>Status timeline पुढे नेणे</li>
+        <li>व्याजासह दावा रक्कम, court fee, suit type, forum, 12A</li>
+        <li>सर्व drafts office format मध्ये</li>
+        <li>रक्कम अक्षरी, Rs. x/- format</li>
+        <li>Deadline alerts</li>
+        <li>Audit log (hash chain)</li>
+        <li>कोणाला काय दिसते (role + office)</li>
+        <li>Maker-checker आणि 12A चे नियम</li>
+      </ul></td>
+      <td><ul>
+        <li>Scan वाचणे (OCR)</li>
+        <li>14 loan fields शोधणे, confidence सह</li>
+        <li>संशयास्पद मजकूर (instructions / links) असलेली value कधीच आपोआप accept होत नाही</li>
+      </ul></td>
+      <td><ul>
+        <li>Case उघडणे, team नेमणे</li>
+        <li>Scan upload</li>
+        <li>प्रत्येक value Verify + Apply</li>
+        <li>Notice पाठवणे आणि नोंद</li>
+        <li>12A अर्ज / निकाल / report</li>
+        <li>Suit particulars (B, C, अधिकारी)</li>
+        <li>[[LEGAL_REVIEW]] तपासणी</li>
+        <li>Submit, Approve / Return</li>
+        <li>Notary, stamp, filing (field)</li>
+      </ul></td>
+    </tr>
+  </table>
+
+  <h2 style="margin-top:18px">5. Demo checklist (आज)</h2>
+  <div class="box warn">
+    <p><b class="t">1. Sarvam key दुरुस्त करा (OCR साठी आवश्यक):</b></p>
+    <ul>
+      <li>dashboard.sarvam.ai मध्ये login → API key valid आहे आणि credits शिल्लक आहेत का ते पाहा (नसल्यास नवीन key बनवा).</li>
+      <li>Vercel → project <b>civil-suits</b> → Settings → Environment Variables → <code>SARVAM_API_KEY</code> → Edit → नवीन key paste → Save.</li>
+      <li>Deployments → शेवटचे production deployment → <b>Redeploy</b> (env बदल redeploy नंतरच लागू होतो).</li>
+      <li>मग Case A (DEMO-2026-0011) उघडून <b>Run OCR</b> करून पाहा.</li>
+    </ul>
+  </div>
+  <ul>
+    <li>Demo च्या आधी प्रत्येक account ने एकदा login करा.</li>
+    <li>Supabase → Authentication → sign-ups बंद आहेत ना ते पाहा.</li>
+    <li><b>Case A</b> (DEMO-2026-0011) उघडलेला आहे आणि scan upload झालेला आहे: Run OCR पासून पुढे दाखवा.</li>
+    <li><b>Case B</b>: client समोर अगदी सुरुवातीपासून (step 3) करा, म्हणजे "नवीन case → upload → AI → drafts" पूर्ण दिसेल.</li>
+    <li>Sarvam चालत नसेल तर पर्याय: DEMO-2026-0002 (Drafting) वर claim card, suit particulars आणि Generate plaint दाखवा; OCR "पुढचा टप्पा" म्हणून सांगा.</li>
+    <li>DEMO-2026-0007 (commercial) वर <b>Save particulars</b> दाबू नका: office forum "Special Summary Suit" असल्यामुळे case summary suit कडे वळतो.</li>
+  </ul>
+  <p class="muted" style="margin-top:14px">Promenix Softech LLP · Civil Suits · हा guide आणि सर्व screenshots synthetic demo data वरून तयार केले आहेत.</p>
+</section>
+
+</body>
+</html>

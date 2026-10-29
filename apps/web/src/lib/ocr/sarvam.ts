@@ -61,8 +61,12 @@ export async function jobStatus(jobId: string) {
   };
 }
 
+/**
+ * JSON, not Markdown: the live API answers 400 "job produced html, cannot serve md" for
+ * digitise jobs, while JSON carries every page as layout blocks.
+ */
 export async function jobPages(jobId: string) {
-  const res = await client().docAi.getResults(jobId, { format: "md" });
+  const res = await client().docAi.getResults(jobId, { format: "json" });
   return pagesFromResults(res);
 }
 
@@ -71,14 +75,33 @@ export function normaliseStatus(s: string): OcrStatus {
   return (TERMINAL as readonly string[]).includes(v) ? (v as OcrStatus) : "running";
 }
 
+type ResultPage = {
+  page_number?: number;
+  page_num?: number;
+  content?: string;
+  blocks?: { text?: string; reading_order?: number }[];
+};
+
 /**
  * Per-page text from digitise results. We submit one file per job, so the first document's
- * page numbers are used; missing numbers fall back to position.
+ * pages are used; missing numbers fall back to position. The JSON format gives layout blocks
+ * (`page_num`, `blocks[].text` in `reading_order`); older responses give `content` directly.
  */
 export function pagesFromResults(results: unknown): { pageNo: number; text: string }[] {
-  const docs = (results as { documents?: { pages?: { page_number?: number; content?: string }[] }[] })?.documents ?? [];
-  const pages = (docs[0]?.pages ?? []).map((p, i) => ({ pageNo: p.page_number ?? i + 1, text: (p.content ?? "").trim() }));
+  const docs = (results as { documents?: { pages?: ResultPage[] }[] })?.documents ?? [];
+  const pages = (docs[0]?.pages ?? []).map((p, i) => ({
+    pageNo: p.page_number ?? p.page_num ?? i + 1,
+    text: (p.content ?? blocksText(p.blocks)).trim(),
+  }));
   return pages.sort((a, b) => a.pageNo - b.pageNo);
+}
+
+function blocksText(blocks: ResultPage["blocks"]): string {
+  return [...(blocks ?? [])]
+    .sort((a, b) => (a.reading_order ?? 0) - (b.reading_order ?? 0))
+    .map((b) => (b.text ?? "").trim())
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 /** Turns SDK/HTTP errors into a message safe to show the user (no keys, no payloads). */
