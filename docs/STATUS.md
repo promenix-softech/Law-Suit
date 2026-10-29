@@ -178,7 +178,7 @@
 - [x] Marathi for the banks & courts forms, team page, invite form and the new case-page controls
 - [x] `extracted_fields.verified_method` (`single` | `bulk`, migration `20261029010000_verified_method`): part of the hashed audit record, shown as "Verified (bulk)"; the server refuses bulk for anything but text / IFSC; RLS tests added
 - [x] Security review (FAIL → fixed): profile and roles written as the inviting admin (RLS + audit actor), service key only for the invitation e-mail and the user lookup; one answer for every refusal (no cross-office e-mail probing); every attempt counted in new `invite_attempts` (hashed e-mail, admin-read only, migration `20261029020000`, RLS tests); a failed profile removes the new login; set-password needs a link (no change from a bare session), shows whose password it is with "Not you? Sign out", signs out other sessions
-- [ ] Owner, to make invitations work live: deploy the edge function (`supabase functions deploy invite-user`, secret `APP_URL=https://civilsuits.promenix.in`); Supabase → Authentication → URL configuration: add `https://civilsuits.promenix.in/auth/set-password` to redirect URLs; custom SMTP (the built-in sender only reaches the project team and is rate-limited)
+- [x] Invitations live (29 Oct): edge function `invite-user` deployed, `APP_URL` secret, redirect URL `/auth/set-password`, custom SMTP (Brevo, sender `noreply@promenix.in`, domain authenticated). The owner sent a test invitation end to end: email received, password set, dashboard opened
 
 ## Next (Phase 1)
 - [ ] Owner: VPS for the worker (Docker), service-role key there only; run converters without network before real data
