@@ -50,6 +50,12 @@ Use two browsers (or one normal + one private window): drafter on the left, appr
 - **Marathi demand notice** — after the Marathi legal terms are confirmed. The screens are already bilingual.
 - **OTP login (MFA)** for admin and approver — on hold at the owner's request.
 
+## Upload demo (new case from scans)
+Files and a step-by-step Marathi guide with screenshots: `docs/demo-kit/` (`demo-process-guide-mr.pdf`).
+Case A is open as DEMO-2026-0011 (drafter1) with its scan uploaded — continue from **Run OCR**.
+Case B (`DEMO-CASE-B-bank-scans.pdf`) is for opening a case live from step one.
+Run OCR / Extract fields need a valid `SARVAM_API_KEY` in Vercel — on 29 Oct the live site got 401/403.
+
 ## Before the demo
 - Owner: Supabase → Authentication → sign-ups off; demo passwords at hand.
 - Log in once with each account the morning of the demo (sessions stay warm).

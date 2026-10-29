@@ -1,0 +1,42 @@
+[
+  {
+    "file": "DEMO-CASE-A-bank-scans.pdf",
+    "pages": 6,
+    "expected": {
+      "borrower_name": "Rohit Demo Joshi",
+      "borrower_address": "Flat 7, Sample Heights, Test Lane, Kothrud, Pune 411038",
+      "guarantor_name": "Swati Test Joshi",
+      "bank_name": "State Bank of India",
+      "branch_name": "Demo Branch, Pune",
+      "ifsc": "SBIN0DEMO01",
+      "loan_account_number": "DEMO40217731",
+      "facility_type": "Term Loan",
+      "sanction_date": "12/03/2023",
+      "sanction_amount": "Rs. 6,50,000/-",
+      "interest_rate": "10.75%",
+      "npa_date": "30/06/2025",
+      "outstanding_amount": "Rs. 5,58,812/-",
+      "outstanding_as_on": "30/09/2026"
+    }
+  },
+  {
+    "file": "DEMO-CASE-B-bank-scans.pdf",
+    "pages": 5,
+    "expected": {
+      "borrower_name": "Ganesh Fake Wagh",
+      "borrower_address": "House 21, Synthetic Colony, Hadapsar, Pune 411028",
+      "guarantor_name": null,
+      "bank_name": "State Bank of India",
+      "branch_name": "Demo Branch, Pune",
+      "ifsc": "SBIN0DEMO01",
+      "loan_account_number": "DEMO40388902",
+      "facility_type": "Vehicle Loan",
+      "sanction_date": "05/08/2022",
+      "sanction_amount": "Rs. 12,40,000/-",
+      "interest_rate": "9.85%",
+      "npa_date": "31/03/2025",
+      "outstanding_amount": "Rs. 10,45,485/-",
+      "outstanding_as_on": "30/09/2026"
+    }
+  }
+]
