@@ -43,6 +43,30 @@ describe("pagesFromResults", () => {
     ]);
   });
 
+  it("joins JSON layout blocks in reading order", () => {
+    const res = {
+      documents: [
+        {
+          pages: [
+            { page_num: 2, blocks: [{ text: "Total outstanding", reading_order: 1 }] },
+            {
+              page_num: 1,
+              blocks: [
+                { text: "SANCTION LETTER", reading_order: 2 },
+                { text: " STATE BANK OF INDIA\nDemo Branch ", reading_order: 1 },
+                { text: "", reading_order: 3 },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    expect(pagesFromResults(res)).toEqual([
+      { pageNo: 1, text: "STATE BANK OF INDIA\nDemo Branch\n\nSANCTION LETTER" },
+      { pageNo: 2, text: "Total outstanding" },
+    ]);
+  });
+
   it("falls back to position and tolerates empty results", () => {
     expect(pagesFromResults({ documents: [{ pages: [{ content: "x" }] }] })).toEqual([{ pageNo: 1, text: "x" }]);
     expect(pagesFromResults({})).toEqual([]);

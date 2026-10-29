@@ -48,7 +48,16 @@ beforeAll(async () => {
             type: "digitise",
             status: "completed",
             usage: {},
-            documents: [{ file_name: "scan.pdf", pages: [{ page_number: 1, content: "SANCTION LETTER" }, { page_number: 2, content: "Amount ₹2,60,000" }] }],
+            // Shape of the live JSON results (29 Oct 2026): pages carry layout blocks.
+            documents: [
+              {
+                filename: "scan.pdf",
+                pages: [
+                  { page_num: 1, blocks: [{ block_id: "p1-b1", text: "SANCTION LETTER", reading_order: 1 }] },
+                  { page_num: 2, blocks: [{ block_id: "p2-b1", text: "Amount ₹2,60,000", reading_order: 1 }] },
+                ],
+              },
+            ],
           }),
         );
       res.statusCode = 404;
@@ -87,7 +96,7 @@ describe("Sarvam client wiring (mock server)", () => {
       { pageNo: 1, text: "SANCTION LETTER" },
       { pageNo: 2, text: "Amount ₹2,60,000" },
     ]);
-    expect(seen.some((s) => s.url === "/doc-ai/v1/job/job-123/results?format=md")).toBe(true);
+    expect(seen.some((s) => s.url === "/doc-ai/v1/job/job-123/results?format=json")).toBe(true);
   });
 
   it("starts an extract job with the schema and reads result + annotations", async () => {
