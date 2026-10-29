@@ -180,6 +180,11 @@
 - [x] Security review (FAIL → fixed): profile and roles written as the inviting admin (RLS + audit actor), service key only for the invitation e-mail and the user lookup; one answer for every refusal (no cross-office e-mail probing); every attempt counted in new `invite_attempts` (hashed e-mail, admin-read only, migration `20261029020000`, RLS tests); a failed profile removes the new login; set-password needs a link (no change from a bare session), shows whose password it is with "Not you? Sign out", signs out other sessions
 - [x] Invitations live (29 Oct): edge function `invite-user` deployed, `APP_URL` secret, redirect URL `/auth/set-password`, custom SMTP (Brevo, sender `noreply@promenix.in`, domain authenticated). The owner sent a test invitation end to end: email received, password set, dashboard opened
 
+## Draft previewer (29 Oct)
+- [x] Root cause of the "glitching" preview: the dialog was rendered inside a draft card whose glass effect (`backdrop-filter`) made the card the containing block of `position: fixed`, so it was clipped to the card and other cards painted over it. The viewer is now portalled to `<body>`
+- [x] Full-screen reader (`components/draft-preview.tsx`): book view with two pages side by side (one on phones) and a 3D page turn, scroll view, zoom 50–300 %, full screen, page slider, keyboard (← → Home End + − 0 Esc), swipe, focus kept inside the dialog, reduced-motion respected; Marathi labels
+- [x] A4 pagination in the browser (`lib/preview/paginate.ts`): docx-preview only breaks at explicit page breaks, so generated papers came as one long page; blocks are measured and dealt onto pages, tables break between rows, a lead-in line ending in ":" stays with what follows, "Page N of M" filled in. Layout maths and pagination planning unit-tested (`lib/preview/*.test.ts`); checked in a browser on all ten sample papers (plaint 6 pages, decree 5, the rest 1–2). The uploaded DOCX is still sanitised before it touches the page
+
 ## Next (Phase 1)
 - [ ] Owner: VPS for the worker (Docker), service-role key there only; run converters without network before real data
 - [ ] TOTP MFA for admin and approver (plan C4) — on hold at owner's request

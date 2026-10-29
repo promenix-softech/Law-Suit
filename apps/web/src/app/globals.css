@@ -322,17 +322,112 @@ body {
 }
 
 /* ---------------------------------------------------------- draft preview */
-.draft-preview .docx-wrapper {
-  background: transparent;
-  padding: 8px 0 32px;
+/* components/draft-preview.tsx: full-screen reader with a book view (3D page turn) and a scroll view */
+.pv-root { animation: pv-in 0.22s ease-out; }
+@keyframes pv-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
-.draft-preview .docx-wrapper > section.docx {
-  color: #000; /* pages stay paper-white in both themes */
-  box-shadow: 0 12px 40px -12px rgba(0, 0, 0, 0.6);
-  margin-bottom: 24px;
+.pv-stage {
+  display: flex;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.pv-book {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  margin: auto; /* centres when it fits, scrolls from the edge when zoomed in */
+  perspective: 2600px;
+}
+.pv-half { display: flex; }
+.pv-half.left { justify-content: flex-end; }
+.pv-half.right { justify-content: flex-start; }
+.pv-book.one .pv-half.left { justify-content: center; }
+.pv-page {
+  position: relative;
+  flex-shrink: 0;
+  overflow: hidden;
+  background: #fff;
+  color: #000; /* paper stays white in both themes */
+  border-radius: 3px;
+  box-shadow: 0 22px 60px -20px rgba(0, 0, 0, 0.75), 0 2px 6px rgba(0, 0, 0, 0.25);
+  scroll-margin-top: 24px;
+}
+.pv-page section.docx {
+  margin: 0;
+  box-shadow: none;
+}
+.pv-book.two .pv-half.left .pv-page { border-radius: 3px 0 0 3px; }
+.pv-book.two .pv-half.right .pv-page { border-radius: 0 3px 3px 0; }
+.pv-spine {
+  position: absolute;
+  inset: 0 auto 0 50%;
+  z-index: 2;
+  width: 72px;
+  transform: translateX(-50%);
+  pointer-events: none;
+  background: linear-gradient(to right, transparent, rgba(0, 0, 0, 0.1) 40%, rgba(0, 0, 0, 0.24) 50%, rgba(0, 0, 0, 0.1) 60%, transparent);
+}
+.pv-leaf {
+  position: absolute;
+  top: 0;
+  z-index: 3;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+.pv-face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.pv-face.back { transform: rotateY(180deg); }
+.pv-shade {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  opacity: 0;
+  pointer-events: none;
+  background: linear-gradient(to right, rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0.08) 70%, rgba(0, 0, 0, 0.2));
+}
+.pv-edge {
+  position: absolute;
+  top: 50%;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  height: 5.5rem;
+  transform: translateY(-50%);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  font-size: 2.25rem;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.2s ease, background 0.2s ease;
+}
+.pv-root:hover .pv-edge,
+.pv-edge:focus-visible { opacity: 0.85; }
+.pv-edge:hover { background: rgba(0, 0, 0, 0.6); }
+.pv-edge:disabled { display: none; }
+@media (hover: none) {
+  .pv-edge { opacity: 0.55; }
+}
+.pv-slider { accent-color: #fff; }
+.pv-skeleton {
+  background: rgba(255, 255, 255, 0.85);
+  animation: pv-pulse 1.4s ease-in-out infinite;
+}
+@keyframes pv-pulse {
+  50% { opacity: 0.45; }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .pv-root,
+  .pv-skeleton { animation: none; }
   .backdrop .blob,
   .fade-up { animation: none; }
   .glass-card,
