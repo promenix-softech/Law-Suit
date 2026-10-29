@@ -95,7 +95,7 @@ Deno.serve(async (req) => {
       // Do not leave a login without an office: it would block this email for good.
       await admin.auth.admin.deleteUser(userId);
       await record("failed");
-      return json(500, { error: "Could not create the person. Nothing was sent; try again." });
+      return json(500, { error: "Could not create the person; the e-mail they may receive will not work. Try again." });
     }
   }
 
