@@ -1635,6 +1635,13 @@ begin
   raise exception 'FAIL: changed a plaint that went to the notary';
 exception when insufficient_privilege then raise notice 'ok - the plaint is locked once it goes to the notary';
 end $$;
+do $$
+begin
+  insert into public.drafts (org_id, case_id, doc_kind, language)
+  values ('11111111-1111-1111-1111-111111111111', 'c0000000-0000-0000-0000-000000000001', 'plaint', 'mr');
+  raise exception 'FAIL: added a second plaint after the notary';
+exception when insufficient_privilege then raise notice 'ok - no new plaint once it goes to the notary';
+end $$;
 rollback;
 
 -- a draft cannot be relabelled or moved (20261030040000)
