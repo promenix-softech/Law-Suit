@@ -1578,13 +1578,85 @@ select pg_temp.expect((select count(*) from public.cases where id = 'c0000000-00
 select pg_temp.expect(public.can_edit_case('c0000000-0000-0000-0000-000000000002'), 'restored case is editable');
 rollback;
 
+-- archive hardening (20261030030000): no approval, field upload or admin write slips past an archive
+begin;
+-- CS-1's plaint is in approval; the admin archives the case.
+update public.drafts set status = 'in_approval' where id = 'd0000000-0000-0000-0000-000000000001';
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+update public.cases set archived_at = now(), archived_by = auth.uid(), archive_reason = 'Opened twice'
+ where id = 'c0000000-0000-0000-0000-000000000001';
+select pg_temp.expect((select status from public.drafts where id = 'd0000000-0000-0000-0000-000000000001') = 'draft',
+  'archiving sends papers waiting for approval back to draft');
+reset role;
+-- even if a paper were still in approval, the approver cannot decide it
+update public.drafts set status = 'in_approval' where id = 'd0000000-0000-0000-0000-000000000001';
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000a1');
+do $$
+begin
+  insert into public.approvals (org_id, draft_id, decision)
+  values ('11111111-1111-1111-1111-111111111111', 'd0000000-0000-0000-0000-000000000001', 'approved');
+  raise exception 'FAIL: approved a paper of an archived case';
+exception when insufficient_privilege then raise notice 'ok - no approval on an archived case';
+end $$;
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+do $$
+begin
+  insert into public.documents (org_id, case_id, storage_path, sha256, doc_type, uploaded_by)
+  values ('11111111-1111-1111-1111-111111111111', 'c0000000-0000-0000-0000-000000000001',
+          '11111111-1111-1111-1111-111111111111/c0000000-0000-0000-0000-000000000001/scans/x.pdf', repeat('a', 64), 'scan', auth.uid());
+  raise exception 'FAIL: admin added a document to an archived case';
+exception when insufficient_privilege then raise notice 'ok - admins cannot write documents of an archived case';
+end $$;
+rollback;
+
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+update public.cases set archived_at = now(), archived_by = auth.uid(), archive_reason = 'Bank withdrew'
+ where id = 'c0000000-0000-0000-0000-000000000002';
+select pg_temp.expect((select count(*) from public.tasks where case_id = 'c0000000-0000-0000-0000-000000000002'
+                        and status in ('open', 'in_progress')) = 0, 'archiving cancels open field tasks');
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000f1');
+select pg_temp.expect(not public.has_open_task('c0000000-0000-0000-0000-000000000002'), 'field staff cannot upload to an archived case');
+rollback;
+
+-- the plaint is locked at the notary; a new version of an approved plaint reopens drafting
+begin;
+update public.cases set status = 'approved' where id = 'c0000000-0000-0000-0000-000000000001';
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000d1');
+update public.drafts set current_version = current_version + 1 where id = 'd0000000-0000-0000-0000-000000000001';
+select pg_temp.expect((select status from public.cases where id = 'c0000000-0000-0000-0000-000000000001') = 'drafting',
+  'a new plaint version sends an approved case back to drafting');
+reset role;
+update public.cases set status = 'notary_stamp' where id = 'c0000000-0000-0000-0000-000000000001';
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000d1');
+do $$
+begin
+  update public.drafts set current_version = current_version + 1 where id = 'd0000000-0000-0000-0000-000000000001';
+  raise exception 'FAIL: changed a plaint that went to the notary';
+exception when insufficient_privilege then raise notice 'ok - the plaint is locked once it goes to the notary';
+end $$;
+rollback;
+
+-- only the uploader of a file may record it
+insert into storage.objects (bucket_id, name, owner) values
+  ('case-files', '11111111-1111-1111-1111-111111111111/c0000000-0000-0000-0000-000000000001/drafts/fix.docx',
+   '00000000-0000-0000-0000-00000000000a');
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+select pg_temp.expect(public.uploaded_by_me('11111111-1111-1111-1111-111111111111/c0000000-0000-0000-0000-000000000001/drafts/fix.docx'),
+  'the uploader owns the file');
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000d1');
+select pg_temp.expect(not public.uploaded_by_me('11111111-1111-1111-1111-111111111111/c0000000-0000-0000-0000-000000000001/drafts/fix.docx'),
+  'someone else''s upload cannot be recorded as mine');
+rollback;
+
 -- firm code (20261030010000): the sign-in page learns a firm's name from its code, nothing more
 update public.organizations set slug = 'demo-adv' where id = '11111111-1111-1111-1111-111111111111';
 begin;
 set local role anon;
-select pg_temp.expect((select name from public.firm_by_code(' DEMO-adv ')) = 'Demo Advocates', 'firm found by its code');
-select pg_temp.expect((select count(*) from public.firm_by_code('other')) = 0, 'unknown code finds nothing');
-select pg_temp.expect((select count(*) from public.firm_by_code('')) = 0, 'empty code finds nothing');
+select pg_temp.expect(public.firm_by_code(' DEMO-adv ') = 'Demo Advocates', 'firm found by its code');
+select pg_temp.expect(public.firm_by_code('other') is null, 'unknown code finds nothing');
+select pg_temp.expect(public.firm_by_code('') is null, 'empty code finds nothing');
 rollback;
 do $$
 begin

@@ -27,7 +27,9 @@ import {
   type PlaintInput,
   type SuitType,
 } from "@civil-suits/templates";
+import JSZip from "jszip";
 import { renderDocx } from "@/lib/docx";
+import { EXTERNAL_TARGET, inspectDocx } from "@/lib/docx-zip";
 import { loadOfficeConfig, OFFICE_CONFIG_ERROR, type OfficeConfig } from "@/lib/office-profile";
 import { readExecutedDocs } from "@/lib/particulars";
 import { createClient } from "@/lib/supabase/server";
@@ -433,14 +435,6 @@ const SUIT_KINDS = new Set(["plaint", "original_application"]);
 const SUIT_LOCKED: CaseStatus[] = ["notary_stamp", "efiling_ready", "filed", "listed", "disposed"];
 const SUIT_LOCKED_ERROR = "The plaint has gone to the notary or the court; it can no longer be changed here.";
 
-/**
- * After a new version of the plaint (or OA) on an approved case, the case goes back to drafting:
- * the new version needs its own approval before the bundle can be built.
- */
-async function reopenIfApproved(supabase: Supabase, c: CaseRow & { needs_12a?: boolean }, kind: string) {
-  if (SUIT_KINDS.has(kind) && c.status === "approved") await setCaseStatus(supabase, c, "drafting");
-}
-
 /** Builds a document from case data and stores it as a new draft version (DOCX). */
 export async function generateDraft(caseId: string, kindInput: string): Promise<ActionResult> {
   const kind = DocKindSchema.safeParse(kindInput);
@@ -490,9 +484,9 @@ export async function generateDraft(caseId: string, kindInput: string): Promise<
   // A new version always needs a fresh approval.
   await supabase.from("drafts").update({ current_version: version, status: "draft" }).eq("id", draft.id);
 
+  // (A new plaint version on an approved case sends it back to drafting: database trigger.)
   const next = ADVANCES_TO[kind.data];
   if (next) await setCaseStatus(supabase, c as CaseRow, next);
-  await reopenIfApproved(supabase, c as CaseRow, kind.data);
 
   revalidatePath(`/dashboard/cases/${caseId}`);
   const label = storedKind === "statement_of_truth" ? "Statement of truth" : LABEL[kind.data];
@@ -505,12 +499,6 @@ const CorrectionInput = z.object({
   path: z.string().min(1).max(500),
   note: z.string().trim().min(3).max(300),
 });
-
-/** A DOCX is a ZIP whose entries include word/document.xml. */
-function looksLikeDocx(bytes: Uint8Array): boolean {
-  if (bytes.length < 30 || bytes[0] !== 0x50 || bytes[1] !== 0x4b || bytes[2] !== 0x03 || bytes[3] !== 0x04) return false;
-  return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.length).includes("word/document.xml");
-}
 
 /**
  * Stores a Word file the drafter corrected by hand (already uploaded by the browser under the
@@ -526,27 +514,44 @@ export async function recordCorrection(input: z.input<typeof CorrectionInput>): 
 
   const { data: d } = await supabase
     .from("drafts")
-    .select("id, org_id, case_id, doc_kind, current_version, cases(id, status, needs_12a)")
+    .select("id, org_id, case_id, doc_kind, status, current_version, cases(id, status)")
     .eq("id", draftId)
     .single();
-  const c = one(d?.cases ?? null) as (CaseRow & { needs_12a: boolean }) | null;
+  const c = one(d?.cases ?? null) as CaseRow | null;
   if (!d || !c) return { ok: false, error: "Draft not found." };
   if (!path.startsWith(`${d.org_id}/${d.case_id}/drafts/`) || !path.endsWith(".docx")) return { ok: false, error: "Invalid file path." };
+  if (d.status === "in_approval") return { ok: false, error: "This paper is with the approver. Ask for it back before correcting it." };
   if (SUIT_KINDS.has(d.doc_kind) && SUIT_LOCKED.includes(c.status)) return { ok: false, error: SUIT_LOCKED_ERROR };
+  // The person recording the file must be the one who uploaded it: they become its author.
+  const { data: mine } = await supabase.rpc("uploaded_by_me", { p_path: path });
+  if (mine !== true) return { ok: false, error: "Upload the file yourself, then save it." };
 
-  // Check what was uploaded before it becomes a version: a real Word file, not too large.
+  // Check what was uploaded before it becomes a version: a real Word file, within the size
+  // limits (declared sizes, before anything is unpacked), no macros, no links to outside files.
   const { data: blob } = await supabase.storage.from(BUCKET).download(path);
   if (!blob) return { ok: false, error: "The uploaded file could not be read." };
   if (blob.size > MAX_CORRECTION_BYTES) return { ok: false, error: "The Word file is larger than 10 MB." };
-  if (!looksLikeDocx(new Uint8Array(await blob.arrayBuffer()))) return { ok: false, error: "That is not a Word (.docx) file." };
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  const check = inspectDocx(bytes);
+  if (!check.ok) return { ok: false, error: check.error };
+  try {
+    const zip = await JSZip.loadAsync(bytes);
+    for (const rels of check.entries.filter((e) => e.name.endsWith(".rels"))) {
+      if (EXTERNAL_TARGET.test((await zip.file(rels.name)?.async("string")) ?? "")) {
+        return { ok: false, error: "The Word file links to outside files. Remove the links and upload again." };
+      }
+    }
+  } catch {
+    return { ok: false, error: "The Word file is damaged." };
+  }
 
   const version = d.current_version + 1;
   const ver = await supabase
     .from("draft_versions")
     .insert({ org_id: d.org_id, draft_id: d.id, version, docx_path: path, diff_summary: `Corrected by hand: ${note}` });
   if (ver.error) return { ok: false, error: "You cannot correct drafts of this case." };
+  // A new plaint version on an approved case sends it back to drafting (database trigger).
   await supabase.from("drafts").update({ current_version: version, status: "draft" }).eq("id", d.id);
-  await reopenIfApproved(supabase, c, d.doc_kind);
 
   revalidatePath(`/dashboard/cases/${d.case_id}`);
   return { ok: true, message: `Corrected file saved as v${version}. Submit it for approval when ready.` };

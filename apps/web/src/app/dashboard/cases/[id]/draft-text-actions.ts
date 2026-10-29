@@ -3,8 +3,9 @@
 import JSZip from "jszip";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { canTransition, type CaseStatus } from "@civil-suits/domain";
-import { applyParagraphEdits, docxParagraphs, type DocParagraph } from "@/lib/docx-text";
+import type { CaseStatus } from "@civil-suits/domain";
+import { applyParagraphEdits, DocxTextError, docxParagraphs, type DocParagraph } from "@/lib/docx-text";
+import { DOCX_LIMITS, inspectDocx } from "@/lib/docx-zip";
 import { createClient } from "@/lib/supabase/server";
 import type { ActionResult } from "./actions";
 
@@ -30,15 +31,19 @@ async function latestVersion(supabase: Supabase, draftId: string) {
   return v?.docx_path ? { d, v: { ...v, docx_path: v.docx_path }, c: one(d.cases) as { id: string; status: CaseStatus; needs_12a: boolean } | null } : null;
 }
 
-async function loadBody(supabase: Supabase, path: string): Promise<{ zip: JSZip; xml: string } | null> {
+/** Unzips a version only after its declared sizes pass the limits (no zip bombs, no huge XML). */
+async function loadBody(supabase: Supabase, path: string): Promise<{ zip: JSZip; xml: string } | string> {
   const { data: blob } = await supabase.storage.from(BUCKET).download(path);
-  if (!blob) return null;
+  if (!blob) return "The file could not be read.";
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  const check = inspectDocx(bytes);
+  if (!check.ok) return check.error;
   try {
-    const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+    const zip = await JSZip.loadAsync(bytes);
     const xml = await zip.file(BODY)?.async("string");
-    return xml ? { zip, xml } : null;
+    return xml && xml.length <= DOCX_LIMITS.documentXml ? { zip, xml } : "The file could not be read.";
   } catch {
-    return null;
+    return "The file could not be read.";
   }
 }
 
@@ -52,8 +57,12 @@ export async function loadDraftText(draftId: string): Promise<DraftText> {
   const found = await latestVersion(supabase, draftId);
   if (!found) return { ok: false, error: "This draft has no file yet." };
   const body = await loadBody(supabase, found.v.docx_path);
-  if (!body) return { ok: false, error: "The file could not be read." };
-  return { ok: true, versionId: found.v.id, version: found.v.version, paragraphs: docxParagraphs(body.xml) };
+  if (typeof body === "string") return { ok: false, error: body };
+  try {
+    return { ok: true, versionId: found.v.id, version: found.v.version, paragraphs: docxParagraphs(body.xml) };
+  } catch (e) {
+    return { ok: false, error: e instanceof DocxTextError ? e.message : "The file could not be read." };
+  }
 }
 
 const SaveInput = z.object({
@@ -88,12 +97,12 @@ export async function saveDraftText(input: z.input<typeof SaveInput>): Promise<A
   }
 
   const body = await loadBody(supabase, v.docx_path);
-  if (!body) return { ok: false, error: "The file could not be read." };
+  if (typeof body === "string") return { ok: false, error: body };
   let xml: string;
   try {
     xml = applyParagraphEdits(body.xml, new Map(edits.map((e) => [e.index, e.text])));
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Could not apply the changes." };
+    return { ok: false, error: e instanceof DocxTextError ? e.message : "Could not apply the changes." };
   }
   body.zip.file(BODY, xml);
   const file = await body.zip.generateAsync({ type: "uint8array", compression: "DEFLATE" });
@@ -110,10 +119,8 @@ export async function saveDraftText(input: z.input<typeof SaveInput>): Promise<A
     diff_summary: `Edited in Civil Suits (${edits.length} paragraph${edits.length === 1 ? "" : "s"}): ${note}`,
   });
   if (ver.error) return { ok: false, error: "You cannot edit drafts of this case." };
+  // A new plaint version on an approved case sends it back to drafting (database trigger).
   await supabase.from("drafts").update({ current_version: version, status: "draft" }).eq("id", d.id);
-  if (SUIT_KINDS.has(d.doc_kind) && c.status === "approved" && canTransition(c.status, "drafting", { needs12A: c.needs_12a })) {
-    await supabase.from("cases").update({ status: "drafting" }).eq("id", c.id);
-  }
 
   revalidatePath(`/dashboard/cases/${d.case_id}`);
   return { ok: true, message: `Saved as v${version}. Submit it for approval when ready.` };

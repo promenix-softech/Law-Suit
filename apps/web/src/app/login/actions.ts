@@ -52,7 +52,7 @@ export async function signIn(_prev: LoginState, formData: FormData): Promise<Log
   // Same answer as a wrong password: the sign-in page of one firm says nothing about another's users.
   const own = await myFirmCode(supabase, data.user.id);
   if (own !== firm.code) {
-    await supabase.auth.signOut();
+    await supabase.auth.signOut({ scope: "local" });
     return { error: "Invalid email or password." };
   }
   await rememberFirm(firm.code);

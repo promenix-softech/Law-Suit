@@ -72,4 +72,25 @@ describe("applyParagraphEdits", () => {
   it("does nothing without edits", () => {
     expect(applyParagraphEdits(XML, new Map())).toBe(XML);
   });
+
+  it("refuses lone surrogates", () => {
+    expect(() => applyParagraphEdits(XML, new Map([[0, "bad \uD800 half"]]))).toThrow(/invalid character/);
+    expect(applyParagraphEdits(XML, new Map([[0, "ok 😀 emoji"]]))).toContain("ok 😀 emoji");
+  });
+});
+
+describe("hostile XML", () => {
+  it("reads pathological input in linear time and refuses broken nesting", () => {
+    const unclosed = "<w:p>".repeat(200_000);
+    const t0 = Date.now();
+    expect(() => docxParagraphs(unclosed)).toThrow(/not valid/);
+    expect(() => docxParagraphs("<w:p<w:p".repeat(200_000))).not.toThrow();
+    expect(() => docxParagraphs("<w:p><w:t>" + "<w:t>".repeat(100_000))).toThrow(/not valid/);
+    expect(Date.now() - t0).toBeLessThan(2000);
+  });
+
+  it("refuses a text run left open or a stray closing tag", () => {
+    expect(() => docxParagraphs("<w:p><w:r><w:t>open</w:r></w:p>")).toThrow(/not valid/);
+    expect(() => docxParagraphs("</w:p>")).toThrow(/not valid/);
+  });
 });

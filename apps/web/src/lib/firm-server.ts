@@ -27,10 +27,9 @@ export async function onRootHost(): Promise<boolean> {
 }
 
 /** Name of the firm with this code, or null (the database exposes nothing else to signed-out visitors). */
-export async function findFirm(supabase: Supabase, code: string): Promise<{ id: string; name: string } | null> {
+export async function findFirm(supabase: Supabase, code: string): Promise<{ name: string } | null> {
   const { data } = await supabase.rpc("firm_by_code", { code });
-  const row = Array.isArray(data) ? data[0] : null;
-  return row && typeof row.name === "string" ? { id: row.id as string, name: row.name } : null;
+  return typeof data === "string" && data ? { name: data } : null;
 }
 
 export async function rememberFirm(code: string) {
