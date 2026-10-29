@@ -72,6 +72,11 @@ describe("pagesFromResults", () => {
       "<table><tr><td>Loan account no.</td><td>DEMO40217731</td></tr><tr><th>Rate</th><td>10.75% p.a. &amp; monthly rests</td></tr></table>";
     expect(htmlToText(table)).toBe("Loan account no. | DEMO40217731\nRate | 10.75% p.a. & monthly rests");
     expect(htmlToText("Plain text, no tags")).toBe("Plain text, no tags");
+    // Nested / broken tags and encoded brackets never turn back into markup.
+    for (const s of ["<<script>script>alert(1)<</script>/script>", "<td>&lt;img src=x onerror=1&gt;</td>", "<b>&amp;lt;script&amp;gt;</b>"]) {
+      expect(htmlToText(s)).not.toMatch(/[<>]/);
+    }
+    expect(htmlToText("<td>&amp;lt;b&amp;gt;</td>")).toBe("&lt;b&gt;");
     expect(pagesFromResults({ documents: [{ pages: [{ page_num: 1, blocks: [{ text: table, reading_order: 1 }] }] }] })[0]!.text).not.toMatch(
       /<[^>]+>/,
     );

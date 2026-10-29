@@ -108,11 +108,13 @@ function blocksText(blocks: ResultPage["blocks"]): string {
     .join("\n\n");
 }
 
-const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', "#39": "'", nbsp: " " };
+const ENTITIES: Record<string, string> = { quot: '"', "#39": "'", nbsp: " " };
 
 /**
  * Table blocks arrive as HTML (`<table><tr><td>…`). Rows become lines and cells are joined
  * with " | ", so the OCR text view and anything reading it see plain text, never markup.
+ * Angle brackets left by nested or broken tags are dropped, `&lt;`/`&gt;` are not decoded,
+ * and `&amp;` is decoded last, so no tag can be rebuilt from the output.
  */
 export function htmlToText(s: string): string {
   if (!s.includes("<")) return s;
@@ -120,7 +122,9 @@ export function htmlToText(s: string): string {
     .replace(/<\/t[dh]>\s*<t[dh][^>]*>/gi, " | ")
     .replace(/<\/tr>|<br\s*\/?>/gi, "\n")
     .replace(/<[^>]*>/g, "")
-    .replace(/&(amp|lt|gt|quot|#39|nbsp);/g, (_, e: string) => ENTITIES[e]!)
+    .replace(/[<>]/g, "")
+    .replace(/&(quot|#39|nbsp);/g, (_, e: string) => ENTITIES[e]!)
+    .replace(/&amp;/g, "&")
     .split("\n")
     .map((l) => l.trim())
     .filter(Boolean)
