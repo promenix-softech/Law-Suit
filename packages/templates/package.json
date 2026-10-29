@@ -18,7 +18,7 @@
     "docx": "^9.13.0"
   },
   "devDependencies": {
-    "@types/node": "^20.19.43",
+    "@types/node": "^26.6.5",
     "typescript": "^5",
     "vitest": "^4"
   }
