@@ -280,13 +280,13 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
               </div>
             </div>
             <div className="glass-card mt-3 overflow-x-auto p-2">
-              <table className="w-full min-w-[720px] text-left text-sm">
+              <table className="w-full min-w-[640px] text-left text-sm">
                 <thead>
                   <tr className="label">
                     <th className="px-4 py-3 font-semibold">{t("Case")}</th>
                     <th className="px-4 py-3 font-semibold">{t("Borrower")}</th>
                     <th className="px-4 py-3 font-semibold">{t("Status")}</th>
-                    <th className="px-4 py-3 font-semibold">{t("Type")}</th>
+                    <th className="hidden px-4 py-3 font-semibold 2xl:table-cell">{t("Type")}</th>
                     <th className="px-4 py-3 text-right font-semibold">{t("Claim")}</th>
                     <th className="px-4 py-3 text-right font-semibold">{view === "archived" ? t("Archived") : t("Age")}</th>
                     <th className="px-4 py-3" />
@@ -306,13 +306,13 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
                     return (
                       <tr key={c.id} className="row-hover row-link">
                         <td className="rounded-l-xl p-0">
-                          <Link href={href} className="block px-4 py-3 font-semibold">
+                          <Link href={href} className="block whitespace-nowrap px-4 py-3 font-semibold">
                             {c.case_no_internal}
                           </Link>
                         </td>
                         <td className="p-0">{cell(borrower ?? "—")}</td>
-                        <td className="p-0">{cell(<span className={`pill ${tone}`}>{label}</span>)}</td>
-                        <td className="p-0">
+                        <td className="p-0">{cell(<span className={`pill whitespace-nowrap ${tone}`}>{label}</span>)}</td>
+                        <td className="hidden p-0 2xl:table-cell">
                           {cell(c.is_commercial ? t("Commercial") : c.suit_type === "summary_o37" ? t("Summary (O.37)") : t("Ordinary"), "muted")}
                         </td>
                         <td className="p-0">
@@ -321,7 +321,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
                         <td className="p-0">
                           {cell(
                             c.archived_at ? fmtDate(c.archived_at) : `${ageDays(c.created_at)} ${t("days")}`,
-                            `muted text-right tabular-nums ${!c.archived_at && ageDays(c.created_at) > 60 && !DONE.has(c.status) ? "text-amber-600 dark:text-amber-300" : ""}`,
+                            `muted whitespace-nowrap text-right tabular-nums ${!c.archived_at && ageDays(c.created_at) > 60 && !DONE.has(c.status) ? "text-amber-600 dark:text-amber-300" : ""}`,
                           )}
                         </td>
                         <td className="rounded-r-xl px-3 py-2 text-right">
