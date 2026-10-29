@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { FieldKind } from "@/lib/extract/fields";
+import { translator, type Lang } from "@/lib/i18n";
 import { applyVerifiedFields, verifyField } from "./extract-actions";
 
 export type ReviewRow = {
@@ -94,7 +95,8 @@ const SURE = 0.95;
  */
 const BULK_KINDS: FieldKind[] = ["text", "ifsc"];
 
-export function ExtractionReview({ rows, caseId, canEdit }: { rows: ReviewRow[]; caseId: string; canEdit: boolean }) {
+export function ExtractionReview({ rows, caseId, canEdit, lang }: { rows: ReviewRow[]; caseId: string; canEdit: boolean; lang: Lang }) {
+  const t = translator(lang);
   const router = useRouter();
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -127,10 +129,10 @@ export function ExtractionReview({ rows, caseId, canEdit }: { rows: ReviewRow[];
         <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 px-4 py-3 text-sm">
           <label className="flex items-center gap-2">
             <input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)} className="accent-emerald-600" />
-            I have compared these {sure.length} names / addresses / IFSC (≥ {Math.round(SURE * 100)}%, unedited) with the scan — amounts, rates and dates are checked one by one
+            {t("I have compared these names / addresses / IFSC with the scan — amounts, rates and dates are checked one by one")} ({sure.length}, ≥ {Math.round(SURE * 100)}%)
           </label>
           <button disabled={!checked || pending} onClick={verifySure} className="btn btn-primary px-4 py-1.5 text-sm">
-            {pending ? "Verifying…" : `✓ Verify these ${sure.length}`}
+            {pending ? t("Verifying…") : `✓ ${t("Verify these")} ${sure.length}`}
           </button>
         </div>
       )}
@@ -170,7 +172,7 @@ export function ExtractionReview({ rows, caseId, canEdit }: { rows: ReviewRow[];
               }
               className="btn btn-primary"
             >
-              {pending ? "Applying…" : "Apply verified values to case"}
+              {pending ? t("Applying…") : t("Apply verified values to case")}
             </button>
           </div>
         )}

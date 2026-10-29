@@ -17,7 +17,7 @@ export default async function MastersPage() {
   if (!supabase) redirect("/login");
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) redirect("/login");
-  const { t } = await getT();
+  const { lang, t } = await getT();
 
   const [{ data: profile }, { data: roles }, { data: branches }, { data: courts }] = await Promise.all([
     supabase.from("profiles").select("full_name, organizations(name)").eq("id", auth.user.id).single(),
@@ -52,11 +52,12 @@ export default async function MastersPage() {
             <h2 className="text-lg font-semibold">
               {t("Bank branches")} <span className="muted text-sm">({branchRows.length})</span>
             </h2>
-            <BranchForm banks={banks} />
+            <BranchForm banks={banks} lang={lang} />
             <ul className="space-y-1 border-t border-current/10 pt-4">
               {branchRows.map((b) => (
                 <EditableRow
                   key={b.id}
+                  lang={lang}
                   summary={
                     <>
                       <span className="font-semibold">{b.shortCode}</span> — {b.branchName}
@@ -65,7 +66,7 @@ export default async function MastersPage() {
                     </>
                   }
                 >
-                  <BranchForm banks={banks} edit={b} />
+                  <BranchForm banks={banks} edit={b} lang={lang} />
                 </EditableRow>
               ))}
               {!branchRows.length && <p className="muted text-sm">{t("No branches yet.")}</p>}
@@ -76,22 +77,23 @@ export default async function MastersPage() {
             <h2 className="text-lg font-semibold">
               {t("Courts")} <span className="muted text-sm">({courtRows.length})</span>
             </h2>
-            <CourtForm states={states} />
+            <CourtForm states={states} lang={lang} />
             <ul className="space-y-1 border-t border-current/10 pt-4">
               {courtRows.map((c) => (
                 <EditableRow
                   key={c.id}
+                  lang={lang}
                   summary={
                     <>
                       <span className="font-semibold">{c.name}</span>
                       <span className="muted">
                         {" "}
-                        · {COURT_TYPE[c.courtType]} · {c.district}, {c.state}
+                        · {t(COURT_TYPE[c.courtType])} · {c.district}, {c.state}
                       </span>
                     </>
                   }
                 >
-                  <CourtForm states={states} edit={c} />
+                  <CourtForm states={states} edit={c} lang={lang} />
                 </EditableRow>
               ))}
               {!courtRows.length && <p className="muted text-sm">{t("No courts yet.")}</p>}
