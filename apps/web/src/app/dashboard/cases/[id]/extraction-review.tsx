@@ -3,7 +3,8 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { FieldKind } from "@/lib/extract/fields";
+import { BULK_KINDS, type FieldKind } from "@/lib/extract/fields";
+import { translator, type Lang } from "@/lib/i18n";
 import { applyVerifiedFields, verifyField } from "./extract-actions";
 
 export type ReviewRow = {
@@ -17,6 +18,8 @@ export type ReviewRow = {
   reason: string | null;
   confidence: number | null;
   verified: boolean;
+  /** How it was confirmed (null: unverified, or verified before methods were recorded). */
+  verifiedMethod: "single" | "bulk" | null;
   documentId: string | null;
 };
 
@@ -62,7 +65,9 @@ function Row({ r, caseId, canEdit, value, setValue }: { r: ReviewRow; caseId: st
       </td>
       <td className="px-3 py-3 text-right">
         {r.verified && value === r.initial ? (
-          <span className="pill pill-green">Verified</span>
+          <span className="pill pill-green" title={r.verifiedMethod === "bulk" ? "Confirmed with the bulk “compared with the scan” button" : undefined}>
+            Verified{r.verifiedMethod === "bulk" ? " (bulk)" : ""}
+          </span>
         ) : canEdit ? (
           <button
             disabled={pending}
@@ -87,14 +92,9 @@ function Row({ r, caseId, canEdit, value, setValue }: { r: ReviewRow; caseId: st
 
 /** Only values the extractor was sure of (and code accepted) can be confirmed together. */
 const SURE = 0.95;
-/**
- * The extractor's confidence is model output over an untrusted scan, so bulk confirmation is
- * limited to names, addresses and IFSC. Amounts, rates, account numbers, tenure and dates
- * (claim and limitation) are always verified one by one.
- */
-const BULK_KINDS: FieldKind[] = ["text", "ifsc"];
 
-export function ExtractionReview({ rows, caseId, canEdit }: { rows: ReviewRow[]; caseId: string; canEdit: boolean }) {
+export function ExtractionReview({ rows, caseId, canEdit, lang }: { rows: ReviewRow[]; caseId: string; canEdit: boolean; lang: Lang }) {
+  const t = translator(lang);
   const router = useRouter();
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -113,7 +113,7 @@ export function ExtractionReview({ rows, caseId, canEdit }: { rows: ReviewRow[];
     start(async () => {
       const failed: string[] = [];
       for (const r of sure) {
-        const res = await verifyField({ caseId, fieldKey: r.key, value: r.initial });
+        const res = await verifyField({ caseId, fieldKey: r.key, value: r.initial, method: "bulk" });
         if (!res.ok) failed.push(res.error);
       }
       setChecked(false);
@@ -127,10 +127,10 @@ export function ExtractionReview({ rows, caseId, canEdit }: { rows: ReviewRow[];
         <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 px-4 py-3 text-sm">
           <label className="flex items-center gap-2">
             <input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)} className="accent-emerald-600" />
-            I have compared these {sure.length} names / addresses / IFSC (≥ {Math.round(SURE * 100)}%, unedited) with the scan — amounts, rates and dates are checked one by one
+            {t("I have compared these names / addresses / IFSC with the scan — amounts, rates and dates are checked one by one")} ({sure.length}, ≥ {Math.round(SURE * 100)}%)
           </label>
           <button disabled={!checked || pending} onClick={verifySure} className="btn btn-primary px-4 py-1.5 text-sm">
-            {pending ? "Verifying…" : `✓ Verify these ${sure.length}`}
+            {pending ? t("Verifying…") : `✓ ${t("Verify these")} ${sure.length}`}
           </button>
         </div>
       )}
@@ -170,7 +170,7 @@ export function ExtractionReview({ rows, caseId, canEdit }: { rows: ReviewRow[];
               }
               className="btn btn-primary"
             >
-              {pending ? "Applying…" : "Apply verified values to case"}
+              {pending ? t("Applying…") : t("Apply verified values to case")}
             </button>
           </div>
         )}

@@ -2,6 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { translator, type Lang } from "@/lib/i18n";
 import { createClient } from "@/lib/supabase/client";
 import {
   decideDraft,
@@ -48,7 +49,8 @@ function Status({ result }: { result: ActionResult | null }) {
   );
 }
 
-export function UploadScan({ orgId, caseId }: { orgId: string; caseId: string }) {
+export function UploadScan({ orgId, caseId, lang }: { orgId: string; caseId: string; lang: Lang }) {
+  const t = translator(lang);
   const input = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -86,19 +88,19 @@ export function UploadScan({ orgId, caseId }: { orgId: string; caseId: string })
             className="sr-only"
             onChange={(e) => setName(e.target.files?.[0]?.name ?? null)}
           />
-          {name ? `📄 ${name.slice(0, 28)}` : "Choose scan…"}
+          {name ? `📄 ${name.slice(0, 28)}` : t("Choose scan…")}
         </label>
         <button onClick={onUpload} disabled={busy || !name} className="btn btn-primary">
-          {busy ? (autoRead ? "Uploading and starting AI…" : "Uploading…") : autoRead ? "✦ Upload & read with AI" : "Upload"}
+          {busy ? (autoRead ? t("Uploading and starting AI…") : t("Uploading…")) : autoRead ? `✦ ${t("Upload & read with AI")}` : t("Upload")}
         </button>
         <label className="flex items-center gap-1.5 text-sm">
           <input type="checkbox" checked={autoRead} onChange={(e) => setAutoRead(e.target.checked)} className="accent-violet-500" />
-          AI reads it automatically
+          {t("AI reads it automatically")}
         </label>
         {autoRead && (
           <select value={language} onChange={(e) => setLanguage(e.target.value as typeof language)} className="input-glass w-auto px-2 py-1 text-xs" aria-label="Scan language">
-            <option value="en-IN">English scan</option>
-            <option value="mr-IN">Marathi scan</option>
+            <option value="en-IN">{t("English scan")}</option>
+            <option value="mr-IN">{t("Marathi scan")}</option>
           </select>
         )}
       </div>
@@ -149,7 +151,8 @@ function useBatch() {
 }
 
 /** One click for the whole suit set, each paper exactly as its own button would make it. */
-export function GenerateAll({ caseId, kinds }: { caseId: string; kinds: { kind: DocKind; label: string }[] }) {
+export function GenerateAll({ caseId, kinds, lang }: { caseId: string; kinds: { kind: DocKind; label: string }[]; lang: Lang }) {
+  const t = translator(lang);
   const { progress, result, run } = useBatch();
   return (
     <div className="space-y-1">
@@ -158,7 +161,7 @@ export function GenerateAll({ caseId, kinds }: { caseId: string; kinds: { kind: 
         className="btn btn-primary px-5 py-3 text-base"
         onClick={() => run(kinds.map((k) => ({ label: k.label, go: () => generateDraft(caseId, k.kind) })), `All ${kinds.length} papers generated.`)}
       >
-        {progress ? `Generating ${progress}…` : `✦ Generate all papers (${kinds.length})`}
+        {progress ? `${t("Generating")} ${progress}…` : `✦ ${t("Generate all papers")} (${kinds.length})`}
       </button>
       <Status result={result} />
     </div>
@@ -166,7 +169,8 @@ export function GenerateAll({ caseId, kinds }: { caseId: string; kinds: { kind: 
 }
 
 /** Sends every draft that is ready to the approver in one go. */
-export function SubmitAll({ drafts }: { drafts: { id: string; label: string }[] }) {
+export function SubmitAll({ drafts, lang }: { drafts: { id: string; label: string }[]; lang: Lang }) {
+  const t = translator(lang);
   const { progress, result, run } = useBatch();
   if (!drafts.length) return null;
   return (
@@ -176,7 +180,7 @@ export function SubmitAll({ drafts }: { drafts: { id: string; label: string }[] 
         className="btn px-5 py-3 text-base"
         onClick={() => run(drafts.map((d) => ({ label: d.label, go: () => submitForApproval(d.id) })), `${drafts.length} drafts sent for approval.`)}
       >
-        {progress ? `Sending ${progress}…` : `Submit all for approval (${drafts.length}) →`}
+        {progress ? `${t("Sending")} ${progress}…` : `${t("Submit all for approval")} (${drafts.length}) →`}
       </button>
       <Status result={result} />
     </div>

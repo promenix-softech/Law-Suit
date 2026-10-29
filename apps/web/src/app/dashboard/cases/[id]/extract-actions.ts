@@ -4,27 +4,33 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { commercialCheck, suitRoute } from "@civil-suits/domain";
 import { encryptText } from "@/lib/crypto";
-import { FIELD_BY_KEY, normalise } from "@/lib/extract/fields";
+import { BULK_KINDS, FIELD_BY_KEY, normalise } from "@/lib/extract/fields";
 import { decodeField, encodeField } from "@/lib/extract/stored";
 import { loadOfficeConfig, OFFICE_CONFIG_ERROR } from "@/lib/office-profile";
+import { ExecutedDocsSchema } from "@/lib/particulars";
 import { createClient } from "@/lib/supabase/server";
 import type { ActionResult } from "./actions";
 
 const VerifyInput = z.object({
   caseId: z.uuid(),
   fieldKey: z.string().refine((k) => FIELD_BY_KEY.has(k), "Unknown field"),
-  value: z.string().trim().min(1).max(300),
+  // Long enough for a list of executed documents; each kind's own limit applies in normalise().
+  value: z.string().trim().min(1).max(3000),
+  method: z.enum(["single", "bulk"]).default("single"),
 });
 
 /**
  * The drafter confirms (or corrects) one extracted value. It is re-validated in code and
  * stamped with who verified it; only verified values can be applied to the case.
  */
-export async function verifyField(input: z.infer<typeof VerifyInput>): Promise<ActionResult> {
+export async function verifyField(input: z.input<typeof VerifyInput>): Promise<ActionResult> {
   const parsed = VerifyInput.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Enter a value to verify." };
-  const { caseId, fieldKey, value } = parsed.data;
+  const { caseId, fieldKey, value, method } = parsed.data;
   const def = FIELD_BY_KEY.get(fieldKey)!;
+  if (method === "bulk" && !BULK_KINDS.includes(def.kind)) {
+    return { ok: false, error: `${def.label}: check this value on its own.` };
+  }
   const n = normalise(def.kind, value);
   if (!n.ok) return { ok: false, error: `${def.label}: ${n.reason.toLowerCase()}.` };
   if (def.maxLength && n.stored.length > def.maxLength) {
@@ -55,6 +61,7 @@ export async function verifyField(input: z.infer<typeof VerifyInput>): Promise<A
       value_enc: encodeField({ raw, stored: n.stored, reason: null }),
       verified_by: auth.user.id,
       verified_at: new Date().toISOString(),
+      verified_method: method,
     },
     { onConflict: "case_id,field_key" },
   );
@@ -109,6 +116,18 @@ export async function applyVerifiedFields(caseId: string): Promise<ActionResult>
   if (v.has("loan_purpose")) loanPatch.purpose = v.get("loan_purpose");
   if (v.has("application_date")) loanPatch.application_date = v.get("application_date");
   if (v.has("tenure_months")) loanPatch.tenure_months = Number(v.get("tenure_months"));
+  if (v.has("executed_documents")) {
+    // Stored as the normalised JSON list; re-checked against the column's schema before writing.
+    let parsed: unknown = null;
+    try {
+      parsed = JSON.parse(v.get("executed_documents")!);
+    } catch {
+      return { ok: false, error: "Documents executed: verify the list again." };
+    }
+    const docs = ExecutedDocsSchema.safeParse(parsed);
+    if (!docs.success) return { ok: false, error: "Documents executed: verify the list again." };
+    loanPatch.executed_docs = docs.data;
+  }
 
   const applied: string[] = [];
   const fail = (what: string): ActionResult => ({ ok: false, error: `Could not update ${what}.` });

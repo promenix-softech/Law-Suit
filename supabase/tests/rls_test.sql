@@ -1463,6 +1463,64 @@ select pg_temp.expect(
   'admin can approve a draft written by someone else');
 rollback;
 
+-- how a value was verified is recorded, and only together with a verification (20261029010000)
+begin;
+do $$
+begin
+  insert into public.extracted_fields (org_id, case_id, field_key, verified_by, verified_at, verified_method)
+  values ('11111111-1111-1111-1111-111111111111', 'c0000000-0000-0000-0000-000000000001', 'borrower_name',
+          '00000000-0000-0000-0000-0000000000d1', now(), 'bulk');
+  raise notice 'ok - bulk verification is recorded';
+  begin
+    insert into public.extracted_fields (org_id, case_id, field_key, verified_method)
+    values ('11111111-1111-1111-1111-111111111111', 'c0000000-0000-0000-0000-000000000001', 'ifsc', 'single');
+    raise exception 'FAIL: verification method without a verification';
+  exception when check_violation then raise notice 'ok - method needs a verification';
+  end;
+  begin
+    insert into public.extracted_fields (org_id, case_id, field_key, verified_by, verified_at, verified_method)
+    values ('11111111-1111-1111-1111-111111111111', 'c0000000-0000-0000-0000-000000000001', 'facility_type',
+            '00000000-0000-0000-0000-0000000000d1', now(), 'auto');
+    raise exception 'FAIL: unknown verification method accepted';
+  exception when check_violation then raise notice 'ok - only single or bulk';
+  end;
+end $$;
+rollback;
+
+-- invite_attempts (20261029020000): only the edge function writes; only the office's admins read
+insert into public.invite_attempts (org_id, invited_by, email_sha256, outcome) values
+  ('11111111-1111-1111-1111-111111111111', '00000000-0000-0000-0000-00000000000a', repeat('a', 64), 'sent');
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+select pg_temp.expect((select count(*) from public.invite_attempts) = 1, 'admin reads own office invite attempts');
+rollback;
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000d1');
+select pg_temp.expect((select count(*) from public.invite_attempts) = 0, 'drafter cannot read invite attempts');
+rollback;
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000b9');
+select pg_temp.expect((select count(*) from public.invite_attempts) = 0, 'other office admin cannot read invite attempts');
+rollback;
+do $$
+begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', true);
+  set local role authenticated;
+  begin
+    insert into public.invite_attempts (org_id, invited_by, email_sha256, outcome)
+    values ('11111111-1111-1111-1111-111111111111', '00000000-0000-0000-0000-00000000000a', repeat('b', 64), 'sent');
+    raise exception 'FAIL: user wrote an invite attempt';
+  exception when insufficient_privilege then raise notice 'ok - users cannot write invite attempts';
+  end;
+  reset role;
+  begin
+    insert into public.invite_attempts (org_id, invited_by, email_sha256, outcome)
+    values ('11111111-1111-1111-1111-111111111111', '00000000-0000-0000-0000-0000000000b9', repeat('c', 64), 'sent');
+    raise exception 'FAIL: invite attempt by another office''s user';
+  exception when check_violation then raise notice 'ok - invite attempt must be by a user of the same office';
+  end;
+end $$;
+
 select pg_temp.expect(
   not exists (select 1 from pg_tables where schemaname = 'public' and not rowsecurity),
   'RLS enabled on every public table');

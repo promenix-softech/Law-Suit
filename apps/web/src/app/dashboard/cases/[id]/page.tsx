@@ -172,7 +172,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
 
   const { data: extracted } = await supabase
     .from("extracted_fields")
-    .select("field_key, value_enc, confidence, verified_at, document_id")
+    .select("field_key, value_enc, confidence, verified_at, verified_method, document_id")
     .eq("case_id", id);
   const byKey = new Map((extracted ?? []).map((e) => [e.field_key, e]));
   const reviewRows: ReviewRow[] = FIELDS.flatMap((f) => {
@@ -190,6 +190,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
         reason: p.reason,
         confidence: e.confidence == null ? null : Number(e.confidence),
         verified: !!e.verified_at,
+        verifiedMethod: e.verified_method === "single" || e.verified_method === "bulk" ? e.verified_method : null,
         documentId: e.document_id,
       },
     ];
@@ -480,7 +481,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
         </div>
 
         <Section title={`${t("Documents")} (${docs?.length ?? 0})`} subtitle="Scans are stored privately; links expire in 5 minutes" delay={300}>
-          {canEdit && <UploadScan orgId={c.org_id} caseId={c.id} />}
+          {canEdit && <UploadScan orgId={c.org_id} caseId={c.id} lang={lang} />}
           <ul className="mt-4 space-y-2">
             {docs?.map((d) => (
               <li key={d.id} className="row-hover flex flex-wrap items-center justify-between gap-3 rounded-xl px-3 py-2 text-sm">
@@ -512,7 +513,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
             subtitle="Read from the scans by Sarvam. Check each value against the source, then verify. Only verified values reach the case."
             delay={320}
           >
-            <ExtractionReview rows={reviewRows} caseId={c.id} canEdit={canEdit} />
+            <ExtractionReview rows={reviewRows} caseId={c.id} canEdit={canEdit} lang={lang} />
           </Section>
         )}
 
@@ -552,8 +553,9 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
         <Section title={t("Drafts")} subtitle="Generated from verified case data · approval enforced by the database" delay={340}>
           {canEdit && (
             <div className="mb-4 flex flex-wrap items-start gap-3">
-              <GenerateAll caseId={c.id} kinds={suitSet} />
+              <GenerateAll caseId={c.id} kinds={suitSet} lang={lang} />
               <SubmitAll
+                lang={lang}
                 // Returned papers go back one by one, after the approver's comments are dealt with.
                 drafts={(drafts ?? []).filter((d) => d.status === "draft").map((d) => ({ id: d.id, label: title(d.doc_kind) }))}
               />
