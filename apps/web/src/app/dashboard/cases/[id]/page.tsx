@@ -295,7 +295,8 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
   const paperDrafts = suitSet.map((p) => ({ ...p, draft: draftOf(p.kind) }));
   const otherDrafts = (drafts ?? []).filter((d) => !paperDrafts.some((p) => p.draft?.id === d.id));
   const allDrafts = drafts ?? [];
-  const count = (s: string) => paperDrafts.filter((p) => p.draft?.status === s).length;
+  // A draft row without a version (generation stopped, e.g. penal interest pending) is not a paper yet.
+  const count = (s: string) => paperDrafts.filter((p) => p.draft?.status === s && p.draft.current_version > 0).length;
 
   const missing = isDrt
     ? []
@@ -697,7 +698,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
               <SubmitAll
                 lang={lang}
                 // Returned papers go back one by one, after the approver's comments are dealt with.
-                drafts={allDrafts.filter((d) => d.status === "draft").map((d) => ({ id: d.id, label: title(d.doc_kind) }))}
+                drafts={allDrafts.filter((d) => d.status === "draft" && d.current_version > 0).map((d) => ({ id: d.id, label: title(d.doc_kind) }))}
               />
             </div>
           )}
