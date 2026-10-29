@@ -155,7 +155,10 @@
 - [x] `docs/demo-kit/`: two synthetic scanned loan files (Case A Term Loan with guarantor, 6 pages; Case B Vehicle Loan, 5 pages; image-only 300 DPI) + `manifest.json` with the values extraction should find; generator `scripts/demo-kit-scans.mjs`
 - [x] Marathi process guide `docs/demo-kit/demo-process-guide-mr.pdf` (flow chart, manual / automatic / AI per step, live screenshots; source in `docs/demo-kit/guide/`). Dashboard screenshots cropped above the case list
 - [x] Live run on civilsuits.promenix.in: admin opened DEMO-2026-0011 (Case A, drafter1 / approver), drafter1 uploaded the scan — works
-- [ ] **Blocker — OCR/extraction on the live site:** Sarvam answers 401/403 ("Sarvam API key is missing or invalid."). `SARVAM_API_KEY` exists in Vercel (production + preview) but is rejected. Owner: put a valid key in Vercel and redeploy, then re-run OCR on DEMO-2026-0011 and add the extraction-review screenshot to the guide
+- [x] Live OCR fixed: owner replaced the rejected `SARVAM_API_KEY`; digitise results are read as JSON layout blocks (the API refuses Markdown for these jobs) — #21
+- [x] **First full live run (29 Oct)** on DEMO-2026-0011: upload → OCR (6 pages) → extract (14 fields, 13 at 100 %) → verify / apply → claim ₹5,77,812 (A + B + C), court fee ₹16,030, O.37 → notice + dispatch → particulars → all 10 papers → plaint approved by the approver. Guide updated with these screenshots
+- [x] OCR text view: HTML table blocks become plain "cell | cell" lines; image blocks (model-written picture descriptions) are reduced to "[image]"
+- [ ] Gaps seen in the live run: rate printed as "10.75% per annum, with monthly rests" fails the rate normaliser (drafter corrects it — by design, but a leading "n%" could be accepted); guarantor address is not extracted, so the plaint prints "ADDRESS: ____"
 - [ ] Demo DB: CS-2026-0011 and CS-2026-0015 carry names that do not follow the synthetic pattern (no Demo/Test/Sample/Fake) — owner to confirm they are not real people, else delete
 
 ## Next (Phase 1)

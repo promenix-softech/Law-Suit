@@ -215,35 +215,37 @@
 <section class="page">
   <div class="step">
     <div class="hd"><span class="n">6</span><span class="ttl">Run OCR → Extract fields</span><span class="chip i">AI</span><span class="chip role">Drafter क्लिक करतो</span></div>
-    <p>भाषा (English / Marathi) निवडा → <b>Run OCR</b>. Sarvam AI प्रत्येक पान वाचते (≤ 10 पाने प्रति job). मग <b>✦ Extract fields</b>: AI 14 माहिती शोधते आणि प्रत्येकासोबत confidence दाखवते. AI ला फक्त scan चा text मिळतो, कोणतीही "action" करण्याची परवानगी नाही. Text आणि values encrypted साठवले जातात.</p>
-    <div class="box warn">
-      <p><b class="t">आज live वर अडचण:</b> हे बटण दाबल्यावर <i>"Sarvam API key is missing or invalid."</i> असा error येतो (खाली screenshot). Vercel मध्ये <code>SARVAM_API_KEY</code> नावाची नोंद आहे, पण Sarvam ती key नाकारतो (401/403). शेवटच्या पानावरचे उपाय पाहा. Key दुरुस्त झाल्यावर हा टप्पा आणि पुढचा टप्पा 7 live चालतील.</p>
-    </div>
-    <img class="shot" src="img/ocr-error.jpg">
+    <p>भाषा (English / Marathi) निवडा → <b>Run OCR</b>. Sarvam AI प्रत्येक पान वाचते (≤ 10 पाने प्रति job, साधारण 15–30 सेकंद). झाल्यावर <b>View text (6 pages)</b> दिसते. मग <b>✦ Extract fields</b>: AI 14 माहिती शोधते आणि प्रत्येकासोबत confidence दाखवते. AI ला फक्त scan चा मजकूर मिळतो, कोणतीही "action" करण्याची परवानगी नाही. मजकूर आणि values encrypted साठवले जातात.</p>
+    <img class="shot" src="img/ocr-done.jpg">
+    <p class="cap">"View text" उघडल्यावर प्रत्येक पानाचा वाचलेला मजकूर दिसतो (खाली: Case A चे sanction letter), आणि "Open original scan" ने मूळ scan.</p>
+    <img class="shot" src="img/ocr-text.jpg" style="width:80%">
   </div>
+</section>
 
+<section class="page">
   <div class="step">
     <div class="hd"><span class="n">7</span><span class="ttl">Extracted data — तपासा, Verify, Apply</span><span class="chip m">Manual (बंधनकारक)</span><span class="chip role">Drafter</span></div>
     <ul>
-      <li>प्रत्येक field समोर AI ची value आणि confidence; scan चे पान उघडून जुळवा.</li>
-      <li>बरोबर असेल तर <b>Verify</b>; चूक असेल तर दुरुस्त करून Verify. Value पुन्हा code मध्ये तपासली जाते (तारीख, रक्कम paise मध्ये, IFSC, खाते क्र.).</li>
-      <li><b>Apply verified values to case</b>: फक्त verified values case मध्ये जातात. AI ने काढलेली value माणसाने verify केल्याशिवाय कधीच वापरली जात नाही.</li>
-      <li>पुन्हा extract केले तरी माणसाने verify केलेल्या values बदलत नाहीत.</li>
+      <li>प्रत्येक field समोर: scan मध्ये जसे छापले आहे ते, AI चा confidence, आणि वापरायची value. <b>source</b> ने ते पान उघडून जुळवा.</li>
+      <li>बरोबर असेल तर <b>Verify</b>. चूक असेल किंवा code ने "Invalid" दाखवले तर value दुरुस्त करून Verify. Value पुन्हा code मध्ये तपासली जाते (तारीख, रक्कम paise मध्ये, IFSC, खाते क्र.).</li>
+      <li><b>Apply verified values to case</b>: फक्त verified values case मध्ये जातात. AI ची value माणसाने verify केल्याशिवाय कधीच वापरली जात नाही. पुन्हा extract केले तरी verified values बदलत नाहीत.</li>
     </ul>
-    <p class="muted">(Sarvam key दुरुस्त झाल्यावर या पानाचा screenshot जोडता येईल.)</p>
+    <p><b>Live उदाहरण (Case A):</b> व्याजदर scan वर "10.75% per annum, with monthly rests" असा होता. Code ने तो "Invalid — not a valid rate" दाखवला. Drafter ने <code>10.75</code> असा दुरुस्त करून Verify केला. 14 पैकी बाकी 13 values AI ने 100% confidence ने बरोबर वाचल्या.</p>
+    <img class="shot" src="img/rate-invalid.jpg">
+    <img class="shot" src="img/extraction.jpg" style="width:74%">
   </div>
 </section>
 
 <section class="page">
   <div class="step">
     <div class="hd"><span class="n">8</span><span class="ttl">दावा रक्कम, court fee, suit type</span><span class="chip a">Automatic — code, AI नाही</span></div>
-    <p>Apply झाल्यावर लगेच: व्याजासह दावा रक्कम, court fee (Maharashtra Court-fees Act slabs), suit type (Summary O.37 / Commercial / DRT ≥ ₹20 लाख), Sec 12A लागू आहे की नाही. हे सर्व tested code मध्ये मोजले जाते, LLM कधीच नाही. (उदाहरण: DEMO-2026-0002)</p>
+    <p>Apply झाल्यावर लगेच: व्याजासह दावा रक्कम, court fee (Maharashtra Court-fees Act slabs), suit type (Summary O.37 / Commercial / DRT ≥ ₹20 लाख), Sec 12A लागू आहे की नाही. हे सर्व tested code मध्ये मोजले जाते, LLM कधीच नाही. खाली Case A (DEMO-2026-0011) शेवटी approve झाल्यानंतर: दावा ₹5,77,812 (A थकबाकी ₹5,58,812 + B ₹11,500 + C ₹7,500), court fee ₹16,030, Summary (O.37), 12A लागू नाही.</p>
     <img class="shot" src="img/claim.jpg">
   </div>
 
   <div class="step">
     <div class="hd"><span class="n">9</span><span class="ttl">Demand notice → पाठवल्याची नोंद</span><span class="chip a">Notice: Automatic</span><span class="chip m">नोंद: Manual</span></div>
-    <p><b>✦ Generate demand notice</b> → office format मधील DOCX तयार. नोटीस पाठवल्यावर mode (RPAD / courier / hand), tracking no., तारीख → <b>Record dispatch</b> → status "Notice sent". Plaint मध्ये ही तारीख आपोआप येते.</p>
+    <p><b>✦ Generate demand notice</b> → office format मधील DOCX तयार. नोटीस पाठवल्यावर mode (RPAD / courier / hand), tracking no., तारीख → <b>Record dispatch</b> → status "Notice sent". Plaint मध्ये ही तारीख आपोआप येते. (Case A: RPAD, RP1234DEMO5IN, 29 Oct 2026)</p>
     <img class="shot half" src="img/dispatch.jpg">
   </div>
 </section>
@@ -257,7 +259,8 @@
 
   <div class="step">
     <div class="hd"><span class="n">11</span><span class="ttl">Suit particulars</span><span class="chip m">Manual</span><span class="chip role">Drafter</span></div>
-    <p>Scan मध्ये सहसा नसलेली माहिती: सही करणारा बँक अधिकारी (नाव, पद, वय), <b>B — penal interest</b> (रिकामे = नंतर ठरवायचे, 0 = NIL), <b>C — खर्च</b>, firm असल्यास "Through its Proprietor…", loan application date, purpose, tenure, executed documents (एका ओळीत एक: <code>Title | DD.MM.YYYY</code>). → <b>Save particulars</b>; रक्कम आणि court fee पुन्हा मोजले जातात.</p>
+    <p>Scan मध्ये सहसा नसलेली माहिती: सही करणारा बँक अधिकारी (नाव, पद, वय), <b>B — penal interest</b> (रिकामे = नंतर ठरवायचे, 0 = NIL), <b>C — खर्च</b>, firm असल्यास "Through its Proprietor…", loan application date, purpose, tenure, executed documents (एका ओळीत एक: <code>Title | DD.MM.YYYY</code>). → <b>Save particulars</b>; रक्कम आणि court fee पुन्हा मोजले जातात. त्यानंतर drafts पुन्हा generate करा.</p>
+    <div class="box"><b>Case A साठी भरलेले:</b> Meera Demo Kulkarni, Branch Manager, 45 · B = 11500 · C = 7500 · application 01.03.2023 · tenure 60 · documents: Loan Application, Sanction Letter, Term Loan Agreement, Deed of Guarantee (12.03.2023), Balance Confirmation (10.01.2025).</div>
     <img class="shot" src="img/particulars.jpg">
   </div>
 </section>
@@ -266,11 +269,12 @@
   <div class="step">
     <div class="hd"><span class="n">12</span><span class="ttl">पूर्ण दावा-संच तयार करा</span><span class="chip a">Automatic</span><span class="chip role">Drafter क्लिक करतो</span></div>
     <p>प्रत्येक <b>✦ Generate …</b> बटण office च्या format मध्ये (caption, परिच्छेदांचा क्रम, Rs. x/- आणि अक्षरी रक्कम, header/footer) DOCX तयार करते: plaint, list of documents, vakalatnama, affidavit / statement of truth, address memo, draft decree (O.37), Bankers' Books certificate, court-fee letter, e-filing data sheet. <b>Preview</b> ने screen वर पाहा, <b>DOCX</b> download करा. नवीन version बनवला की तो पुन्हा "Draft" होतो.</p>
-    <img class="shot" src="img/drafts.jpg" style="width:82%">
+    <img class="shot" src="img/drafts.jpg" style="width:66%">
     <div class="two">
       <img class="shot" src="img/plaint-page.jpg">
       <div>
-        <p class="cap" style="margin-top:10px">Sample plaint चे पहिले पान (synthetic): court caption, SPECIAL SUMMARY SUIT, Order XXXVII, पक्षकार, जामीनदार.</p>
+        <p class="cap" style="margin-top:10px">Case A चा live तयार झालेला plaint (पान 1 / 5): court caption, SPECIAL SUMMARY SUIT, Order XXXVII, बँक तर्फे अधिकारी, कर्जदार, जामीनदार, वसुली रक्कम Rs. 5,77,812/-.</p>
+        <div class="box warn"><b class="t">लक्षात ठेवा:</b> जामीनदाराचा पत्ता scan मधून काढला जात नाही, त्यामुळे plaint मध्ये "ADDRESS: ____" रिकामा राहतो. DOCX मध्ये हाताने भरा (पुढच्या version मध्ये screen वर भरता येईल).</div>
         <div class="box"><b>Advocate ने तपासायचे (Manual):</b> <code>[[LEGAL_REVIEW]]</code> असे चिन्हांकित परिच्छेद DOCX मध्ये highlight केलेले असतात. त्यात BBE Act certificate wording, ₹1 लाखाखालील court-fee slabs आणि welfare stamp येतात. System कायद्याचा मजकूर कधीच स्वतः तयार करत नाही.</div>
         <div class="box"><b>Penal interest (B) रिकामे असेल तर:</b> plaint मध्ये "To be determined" छापले जाते, draft decree आणि submit for approval नाकारले जातात.</div>
       </div>
@@ -281,7 +285,7 @@
 <section class="page">
   <div class="step">
     <div class="hd"><span class="n">13</span><span class="ttl">Submit for approval → Approve / Return</span><span class="chip m">Manual</span><span class="chip role">Drafter → Approver</span></div>
-    <p>Drafter प्रत्येक draft वर <b>Submit for approval →</b> दाबतो. Approver च्या dashboard वर <b>"Awaiting my approval"</b> मध्ये तो येतो. Approver case उघडून <b>Approve</b> करतो, किंवा comment लिहून <b>Return to drafter</b>. Plaint approve झाला की case "Approved" होतो, return झाला की परत "Drafting".</p>
+    <p>Drafter प्रत्येक draft वर <b>Submit for approval →</b> दाबतो. Approver च्या dashboard वर <b>"Awaiting my approval"</b> मध्ये तो येतो. Approver case उघडून <b>Approve</b> करतो, किंवा comment लिहून <b>Return to drafter</b>. Plaint approve झाला की case "Approved" होतो, return झाला की परत "Drafting". खाली: Anil (approver) च्या queue मध्ये DEMO-2026-0011 चा plaint. त्याने Approve केल्यावर case "Approved" झाला (step 8 चा screenshot).</p>
     <div class="box"><b>Maker-checker:</b> ज्याने draft बनवला तो तो approve करू शकत नाही. हे फक्त screen वर नाही, database मध्येच नाकारले जाते.</div>
     <img class="shot" src="img/approver-dash.jpg">
   </div>
@@ -344,21 +348,15 @@
   </table>
 
   <h2 style="margin-top:18px">5. Demo checklist (आज)</h2>
-  <div class="box warn">
-    <p><b class="t">1. Sarvam key दुरुस्त करा (OCR साठी आवश्यक):</b></p>
-    <ul>
-      <li>dashboard.sarvam.ai मध्ये login → API key valid आहे आणि credits शिल्लक आहेत का ते पाहा (नसल्यास नवीन key बनवा).</li>
-      <li>Vercel → project <b>civil-suits</b> → Settings → Environment Variables → <code>SARVAM_API_KEY</code> → Edit → नवीन key paste → Save.</li>
-      <li>Deployments → शेवटचे production deployment → <b>Redeploy</b> (env बदल redeploy नंतरच लागू होतो).</li>
-      <li>मग Case A (DEMO-2026-0011) उघडून <b>Run OCR</b> करून पाहा.</li>
-    </ul>
+  <div class="box">
+    <p><b>29 Oct ला live चाचणी पूर्ण:</b> Case A (DEMO-2026-0011) वर नवीन case → upload → OCR → extraction → verify / apply → notice → particulars → 10 drafts → approval → "Approved" असा पूर्ण flow civilsuits.promenix.in वर यशस्वी झाला.</p>
   </div>
   <ul>
     <li>Demo च्या आधी प्रत्येक account ने एकदा login करा.</li>
     <li>Supabase → Authentication → sign-ups बंद आहेत ना ते पाहा.</li>
-    <li><b>Case A</b> (DEMO-2026-0011) उघडलेला आहे आणि scan upload झालेला आहे: Run OCR पासून पुढे दाखवा.</li>
-    <li><b>Case B</b>: client समोर अगदी सुरुवातीपासून (step 3) करा, म्हणजे "नवीन case → upload → AI → drafts" पूर्ण दिसेल.</li>
-    <li>Sarvam चालत नसेल तर पर्याय: DEMO-2026-0002 (Drafting) वर claim card, suit particulars आणि Generate plaint दाखवा; OCR "पुढचा टप्पा" म्हणून सांगा.</li>
+    <li><b>Case B</b>: client समोर अगदी सुरुवातीपासून (step 3) करा. Case no. <code>DEMO-2026-0012</code>, drafter <b>drafter2</b> (Dipti). OCR + extraction ला साधारण 1 मिनिट लागतो.</li>
+    <li><b>Case A</b> (DEMO-2026-0011) पूर्ण झालेला आहे: वेळ कमी असेल तर तयार निकाल (extraction, drafts, approval, audit log) दाखवण्यासाठी तो वापरा.</li>
+    <li>व्याजदरासारखी value "Invalid" आली तर ती दुरुस्त करून Verify करा. हा माणसाच्या तपासणीचा टप्पा आहे, तो demo मध्ये मुद्दाम दाखवा.</li>
     <li>DEMO-2026-0007 (commercial) वर <b>Save particulars</b> दाबू नका: office forum "Special Summary Suit" असल्यामुळे case summary suit कडे वळतो.</li>
   </ul>
   <p class="muted" style="margin-top:14px">Promenix Softech LLP · Civil Suits · हा guide आणि सर्व screenshots synthetic demo data वरून तयार केले आहेत.</p>
