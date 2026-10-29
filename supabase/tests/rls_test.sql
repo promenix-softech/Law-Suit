@@ -1487,6 +1487,40 @@ begin
 end $$;
 rollback;
 
+-- invite_attempts (20261029020000): only the edge function writes; only the office's admins read
+insert into public.invite_attempts (org_id, invited_by, email_sha256, outcome) values
+  ('11111111-1111-1111-1111-111111111111', '00000000-0000-0000-0000-00000000000a', repeat('a', 64), 'sent');
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+select pg_temp.expect((select count(*) from public.invite_attempts) = 1, 'admin reads own office invite attempts');
+rollback;
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000d1');
+select pg_temp.expect((select count(*) from public.invite_attempts) = 0, 'drafter cannot read invite attempts');
+rollback;
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000b9');
+select pg_temp.expect((select count(*) from public.invite_attempts) = 0, 'other office admin cannot read invite attempts');
+rollback;
+do $$
+begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', true);
+  set local role authenticated;
+  begin
+    insert into public.invite_attempts (org_id, invited_by, email_sha256, outcome)
+    values ('11111111-1111-1111-1111-111111111111', '00000000-0000-0000-0000-00000000000a', repeat('b', 64), 'sent');
+    raise exception 'FAIL: user wrote an invite attempt';
+  exception when insufficient_privilege then raise notice 'ok - users cannot write invite attempts';
+  end;
+  reset role;
+  begin
+    insert into public.invite_attempts (org_id, invited_by, email_sha256, outcome)
+    values ('11111111-1111-1111-1111-111111111111', '00000000-0000-0000-0000-0000000000b9', repeat('c', 64), 'sent');
+    raise exception 'FAIL: invite attempt by another office''s user';
+  exception when check_violation then raise notice 'ok - invite attempt must be by a user of the same office';
+  end;
+end $$;
+
 select pg_temp.expect(
   not exists (select 1 from pg_tables where schemaname = 'public' and not rowsecurity),
   'RLS enabled on every public table');

@@ -19,6 +19,7 @@ export function SetPasswordForm() {
   const [error, setError] = useState<string | null>(null);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [email, setEmail] = useState<string | null>(null);
 
   useEffect(() => {
     const supabase = createClient();
@@ -39,10 +40,10 @@ export function SetPasswordForm() {
         ok = !(await supabase.auth.exchangeCodeForSession(url.searchParams.get("code")!)).error;
       } else if (url.searchParams.get("token_hash") && url.searchParams.get("type")) {
         ok = !(await supabase.auth.verifyOtp({ token_hash: url.searchParams.get("token_hash")!, type: url.searchParams.get("type") as EmailOtpType })).error;
-      } else {
-        ok = !!(await supabase.auth.getUser()).data.user;
       }
+      // No link, no password change: an existing session alone (e.g. an unlocked shared PC) is not enough.
       clean();
+      if (ok) setEmail((await supabase.auth.getUser()).data.user?.email ?? null);
       if (!ok) setError("This link has expired or was already used. Ask your office admin to send a new invitation.");
       setPhase(ok ? "ready" : "invalid");
     })();
@@ -53,11 +54,14 @@ export function SetPasswordForm() {
     if (password !== confirm) return setError("The two passwords do not match.");
     setError(null);
     setPhase("saving");
-    const { error: e } = await createClient().auth.updateUser({ password });
+    const supabase = createClient();
+    const { error: e } = await supabase.auth.updateUser({ password });
     if (e) {
       setError(e.message.includes("weak") || e.message.includes("short") ? "Choose a stronger password." : "Could not save the password. Try again.");
       return setPhase("ready");
     }
+    // A reset should end every other session of this account.
+    await supabase.auth.signOut({ scope: "others" });
     setPhase("done");
     router.replace("/dashboard");
   }
@@ -81,6 +85,20 @@ export function SetPasswordForm() {
         void save();
       }}
     >
+      {/* A link can carry someone else's session: show whose password this is. */}
+      <p className="rounded-xl bg-violet-500/10 px-3 py-2 text-sm">
+        Setting the password for <span className="font-semibold">{email ?? "this account"}</span>.{" "}
+        <button
+          type="button"
+          className="underline"
+          onClick={async () => {
+            await createClient().auth.signOut();
+            window.location.replace("/login");
+          }}
+        >
+          Not you? Sign out
+        </button>
+      </p>
       <label className="block">
         <span className="label">New password</span>
         <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={MIN} autoComplete="new-password" className="input-glass mt-2" />

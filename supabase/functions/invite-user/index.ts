@@ -1,13 +1,19 @@
 // Invites a person into the caller's office. Only an office admin may call it.
 //
-// The service-role key is used here, on Supabase's servers only — never in the web app or the
-// browser. The caller's own JWT decides who they are and whether they are an admin (RLS + has_role);
-// the new user can only ever join the caller's office (the same-office triggers refuse anything else).
-import { createClient } from "npm:@supabase/supabase-js@2.118.0";
+// The service-role key stays on Supabase's servers and is used for two things only: sending the
+// invitation (auth admin API) and recording the attempt. The profile and roles are written AS THE
+// CALLER, so RLS (profile_admin / roles_admin) and the audit log's actor apply; the same-office
+// triggers refuse any link to another office whatever the client.
+import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.118.0";
 
 const ROLES = ["admin", "drafter", "approver", "field"] as const;
 type Role = (typeof ROLES)[number];
-const MAX_INVITES_PER_DAY = 20;
+type Outcome = "sent" | "existing_member" | "refused" | "failed";
+
+/** Attempts per office per rolling day, successful or not (so probing uses up the limit). */
+const MAX_ATTEMPTS_PER_DAY = 20;
+/** One answer for every refusal, so nobody can learn whether an email has an account elsewhere. */
+const REFUSED = "Could not invite this email. If the person already has a Civil Suits login, ask Promenix to move it.";
 
 type Input = { email: string; fullName: string; roles: Role[] };
 
@@ -25,6 +31,11 @@ function parse(body: unknown): Input | string {
 
 const json = (status: number, body: Record<string, unknown>) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+
+async function sha256Hex(text: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
 
 Deno.serve(async (req) => {
   if (req.method !== "POST") return json(405, { error: "POST only." });
@@ -54,11 +65,13 @@ Deno.serve(async (req) => {
   if (typeof input === "string") return json(400, { error: input });
 
   const admin = createClient(url, service, { auth: { persistSession: false } });
+  const emailHash = await sha256Hex(input.email);
+  const record = (outcome: Outcome) =>
+    admin.from("invite_attempts").insert({ org_id: orgId, invited_by: me.user!.id, email_sha256: emailHash, outcome });
 
-  // Abuse guard: a handful of new people per office per day is plenty.
   const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
-  const { count } = await admin.from("profiles").select("id", { count: "exact", head: true }).eq("org_id", orgId).gte("created_at", since);
-  if ((count ?? 0) >= MAX_INVITES_PER_DAY) return json(429, { error: "Daily invitation limit reached. Try again tomorrow." });
+  const { count } = await admin.from("invite_attempts").select("id", { count: "exact", head: true }).eq("org_id", orgId).gte("created_at", since);
+  if ((count ?? 0) >= MAX_ATTEMPTS_PER_DAY) return json(429, { error: "Daily invitation limit reached. Try again tomorrow." });
 
   const redirectTo = Deno.env.get("APP_URL") ? `${Deno.env.get("APP_URL")}/auth/set-password` : undefined;
   const invited = await admin.auth.admin.inviteUserByEmail(input.email, { redirectTo, data: { full_name: input.fullName } });
@@ -66,24 +79,39 @@ Deno.serve(async (req) => {
   let userId: string;
   let newUser = true;
   if (invited.error) {
-    // Already a login somewhere: only allowed if that person is already in this office.
+    // Already a login: allowed only if that person is already in this office (then: roles only).
     const existing = await findUserByEmail(admin, input.email);
-    if (!existing) return json(400, { error: "Could not send the invitation. Check the email address." });
-    const { data: theirs } = await admin.from("profiles").select("org_id").eq("id", existing).maybeSingle();
-    if (theirs?.org_id !== orgId) return json(409, { error: "This email already belongs to another office. Use a different email." });
+    const { data: theirs } = existing ? await admin.from("profiles").select("org_id").eq("id", existing).maybeSingle() : { data: null };
+    if (!existing || theirs?.org_id !== orgId) {
+      await record("refused");
+      return json(400, { error: REFUSED });
+    }
     userId = existing;
     newUser = false;
   } else {
     userId = invited.data.user.id;
-    const { error } = await admin.from("profiles").insert({ id: userId, org_id: orgId, full_name: input.fullName });
-    if (error) return json(500, { error: "Invitation sent, but the profile could not be created. Contact Promenix." });
+    const { error } = await asCaller.from("profiles").insert({ id: userId, org_id: orgId, full_name: input.fullName });
+    if (error) {
+      // Do not leave a login without an office: it would block this email for good.
+      await admin.auth.admin.deleteUser(userId);
+      await record("failed");
+      return json(500, { error: "Could not create the person. Nothing was sent; try again." });
+    }
   }
 
-  const { error: rolesError } = await admin
+  const { error: rolesError } = await asCaller
     .from("user_roles")
     .upsert(input.roles.map((role) => ({ user_id: userId, org_id: orgId, role })), { onConflict: "user_id,org_id,role", ignoreDuplicates: true });
-  if (rolesError) return json(500, { error: "Could not give the roles. Try again from the team list." });
+  if (rolesError) {
+    await record("failed");
+    return json(500, {
+      error: newUser
+        ? "Invitation sent, but the roles could not be given. Give them from the team list."
+        : "Could not give the roles. Try again from the team list.",
+    });
+  }
 
+  await record(newUser ? "sent" : "existing_member");
   return json(200, {
     message: newUser
       ? `Invitation sent to ${input.email}. They set their own password from the email.`
@@ -92,7 +120,7 @@ Deno.serve(async (req) => {
 });
 
 /** auth.users is not exposed through the API; page through the admin list (small offices). */
-async function findUserByEmail(admin: ReturnType<typeof createClient>, email: string): Promise<string | null> {
+async function findUserByEmail(admin: Pick<SupabaseClient, "auth">, email: string): Promise<string | null> {
   for (let page = 1; page <= 20; page++) {
     const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 1000 });
     if (error || !data.users.length) return null;

@@ -118,8 +118,15 @@ export async function applyVerifiedFields(caseId: string): Promise<ActionResult>
   if (v.has("tenure_months")) loanPatch.tenure_months = Number(v.get("tenure_months"));
   if (v.has("executed_documents")) {
     // Stored as the normalised JSON list; re-checked against the column's schema before writing.
-    const docs = ExecutedDocsSchema.safeParse(JSON.parse(v.get("executed_documents")!));
-    if (docs.success) loanPatch.executed_docs = docs.data;
+    let parsed: unknown = null;
+    try {
+      parsed = JSON.parse(v.get("executed_documents")!);
+    } catch {
+      return { ok: false, error: "Documents executed: verify the list again." };
+    }
+    const docs = ExecutedDocsSchema.safeParse(parsed);
+    if (!docs.success) return { ok: false, error: "Documents executed: verify the list again." };
+    loanPatch.executed_docs = docs.data;
   }
 
   const applied: string[] = [];
