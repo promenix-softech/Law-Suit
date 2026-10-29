@@ -101,7 +101,8 @@
 
 ## Removed (slice 14 — Promenix Tasks intern app, 24 Oct)
 - Built by mistake (the owner wanted a Civil Suits field app); app and workflow deleted, tables dropped by `20261024030000_drop_intern_tasks`
-- [ ] Apply the drop migration and delete the two `@tasks.promenix.test` demo users on the demo DB (needs owner confirmation in the Supabase connector); delete GitHub releases `tasks-android-1..3`
+- [x] Intern tables, functions and types dropped on the demo DB (29 Oct, owner ran the SQL in the Supabase SQL editor, so it is not in the hosted migration history)
+- [ ] Delete the two `@tasks.promenix.test` demo users on the demo DB (owner confirmation); delete GitHub releases `tasks-android-1..3`
 
 ## Done (slice 15 — Civil Suits Field Android app, 24 Oct)
 - [x] `apps/field-android`: field role only; own tasks (type, case no., court, branch, due, instructions); start / mark done with note + proof photo (shrunk, EXIF/GPS stripped, uploaded to `{org}/{case}/field/`); device-lock gate, auto-lock, FLAG_SECURE, Keystore-sealed session, HTTPS + system CAs only, no backups, root/debugger refusal, R8; animated UI; APK from `field-android.yml`
@@ -148,7 +149,7 @@
 - [x] Admin-only office settings (migration `20261026010000_office_settings`): `organizations.settings` (forum for bank claims — default Order XXXVII summary suit; margins — default office margins), office profile edited by admins on `/dashboard/settings`; read via `office_config()` (admin/drafter/approver; never field staff); `office_profile`/`settings` no longer readable directly; changes audited (`organizations_audit`). Field-only users are sent to their tasks instead of the case file. Demo office profile invented (`docs/samples/demo-office-profile.json`)
 - [x] Applied to the demo DB on 28 Oct (owner approved): `office_format`, `office_settings`, `office_settings_values` (schema only). Demo data filled with invented values: both offices' profiles and settings, case signatory / penal interest / expenses, loan application date / purpose / executed documents, bank branch addresses; claim amounts recomputed A + B + C. Hero case DEMO-2026-0002 moved to drafting with penal interest left pending
 - [x] Plaint writes the loan purpose after "for" even when it was typed without (test added)
-- [x] Demo dry run (28 Oct, local app on the demo DB, throwaway QA users): all papers generate; penal pending blocks the decree and plaint approval; maker-checker approval works. Talk track: `docs/demo-script.md`
+- [x] Demo dry run (28 Oct, local app on the demo DB, throwaway QA users): all papers generate; penal pending blocks the decree and plaint approval; maker-checker approval works. Repeated on production after PR #19. QA users and QA cases deleted (29 Oct); their generated DOCX files stay in the private `case-files` bucket (synthetic). Talk track: `docs/demo-script.md`
 - [ ] Owner: answer `docs/open-questions.md` #14–19, #24 (full account numbers, BBE Act, sale prayer, PAN / fee account …)
 
 ## Next (Phase 1)
