@@ -1682,6 +1682,11 @@ select pg_temp.expect(public.firm_by_code(' DEMO-adv ') = 'Demo Advocates', 'fir
 select pg_temp.expect(public.firm_by_code('other') is null, 'unknown code finds nothing');
 select pg_temp.expect(public.firm_by_code('') is null, 'empty code finds nothing');
 rollback;
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000d1');
+select pg_temp.expect((select slug from public.organizations) = 'demo-adv',
+  'a signed-in member reads their own firm code (sign-in checks it)');
+rollback;
 do $$
 begin
   update public.organizations set slug = '9bad code' where id = '22222222-2222-2222-2222-222222222222';
