@@ -174,6 +174,12 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
   const jobs = (jobRows ?? []) as JobRow[];
   const pdfJob = (versionId: string) => jobs.find((j) => j.kind === "draft_pdf" && j.payload.draft_version_id === versionId);
   const bundles = jobs.filter((j) => j.kind === "efiling_bundle");
+  const latestApprovalAt = Math.max(
+    -Infinity,
+    ...(drafts ?? []).flatMap((d) =>
+      (d.approvals ?? []).filter((a) => a.decision === "approved").map((a) => Date.parse(a.created_at)),
+    ),
+  );
   const exports = jobs.filter((j) => j.kind === "case_export").slice(0, 3);
 
   const docIds = (docs ?? []).map((d) => d.id);
@@ -337,7 +343,8 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
       approved: count("approved"),
     },
     plaintApproved: BUNDLE_READY.includes(c.status),
-    bundleBuilt: bundles.some((b) => b.status === "done"),
+    // Only a bundle built after the latest approval counts (the database checks the same).
+    bundleBuilt: bundles.some((b) => b.status === "done" && Date.parse(b.created_at) >= latestApprovalAt),
     hasCnr: !!c.cnr_no,
     canEdit,
     awaitingMe: isApprover ? allDrafts.filter((d) => d.status === "in_approval" && d.created_by !== auth.user.id).length : 0,

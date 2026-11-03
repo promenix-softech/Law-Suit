@@ -28,6 +28,7 @@ export async function advanceFiling(input: z.input<typeof StepInput>): Promise<A
     return { ok: false, error: "This step is not next for this case." };
   }
   const { data, error } = await supabase.from("cases").update({ status: parsed.data.to }).eq("id", c.id).select("id");
+  if (error?.code === "23514") return { ok: false, error: "Build the e-filing bundle again after the latest approval first." };
   if (error || !data?.length) return { ok: false, error: "You cannot update this case." };
   revalidatePath(`/dashboard/cases/${c.id}`);
   return { ok: true, message: parsed.data.to === "notary_stamp" ? "Notary / stamp recorded." : "Marked ready for e-filing." };
@@ -58,18 +59,18 @@ export async function recordFiling(input: z.input<typeof FilingInput>): Promise<
     const [r, p = ""] = courtFeeRupees.split(".");
     return Number(r) * 100 + Number(p.padEnd(2, "0"));
   })() : null;
-  const { error } = await supabase.from("filings").insert({
-    org_id: c.org_id,
-    case_id: c.id,
-    efiling_no: efilingNo,
-    court_fee_paise: fee,
-    txn_id: txnId || null,
-    filed_at: `${filedOn}T12:00:00+05:30`,
-    status: "filed",
+  // One database transaction: the filing record and the "filed" status are written together.
+  const { error } = await supabase.rpc("record_filing", {
+    p_case_id: c.id,
+    p_efiling_no: efilingNo,
+    p_filed_on: filedOn,
+    p_fee_paise: fee,
+    p_txn_id: txnId || "",
   });
-  if (error) return { ok: false, error: "You cannot record the filing for this case." };
-  const moved = await supabase.from("cases").update({ status: "filed" }).eq("id", c.id).select("id");
-  if (moved.error || !moved.data?.length) return { ok: false, error: "Filing saved, but the case status could not change." };
+  if (error) {
+    if (error.code === "23514") return { ok: false, error: "Filing date must be between the case's opening and today." };
+    return { ok: false, error: "You cannot record the filing for this case." };
+  }
 
   revalidatePath(`/dashboard/cases/${c.id}`);
   revalidatePath("/dashboard");
@@ -99,7 +100,7 @@ export async function recordRegistration(input: z.input<typeof RegistrationInput
     .update({ cnr_no: cnr, filing_no: parsed.data.filingNo || null })
     .eq("id", c.id);
   if (error) {
-    if (error.code === "23505") return { ok: false, error: "Another case of this office already has this CNR." };
+    if (error.code === "23505") return { ok: false, error: "This CNR could not be saved. Check the number." };
     return { ok: false, error: "You cannot update this case." };
   }
   revalidatePath(`/dashboard/cases/${c.id}`);
