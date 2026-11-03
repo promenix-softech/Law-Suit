@@ -1674,10 +1674,13 @@ select pg_temp.expect(not public.uploaded_by_me('11111111-1111-1111-1111-1111111
   'someone else''s upload cannot be recorded as mine');
 rollback;
 
--- filing record (20261103000000 + 20261103010000_filing_integrity): approved → notary → e-filing
--- ready (needs a bundle) → filed (only via record_filing) → CNR / filing no.
+-- filing record (20261103000000 + filing_integrity / filing_integrity_2): approved → notary → e-filing
+-- ready (needs a fresh bundle) → filed (only with a checked filing record) → CNR / filing no.
 begin;
 update public.cases set status = 'approved' where id = 'c0000000-0000-0000-0000-000000000002';
+insert into public.drafts (id, org_id, case_id, doc_kind, language, created_by) values
+  ('d0000000-0000-0000-0000-0000000000f9', '11111111-1111-1111-1111-111111111111',
+   'c0000000-0000-0000-0000-000000000002', 'vakalatnama', 'en', '00000000-0000-0000-0000-0000000000d2');
 select pg_temp.act_as('00000000-0000-0000-0000-0000000000d2');
 do $$
 begin
@@ -1696,20 +1699,31 @@ exception when insufficient_privilege then raise notice 'ok - the vakalatnama is
 end $$;
 do $$
 begin
+  delete from public.drafts where id = 'd0000000-0000-0000-0000-0000000000f9';
+  raise exception 'FAIL: vakalatnama deleted after notary';
+exception when insufficient_privilege then raise notice 'ok - a sworn paper cannot be deleted after the notary';
+end $$;
+do $$
+begin
   update public.cases set status = 'efiling_ready' where id = 'c0000000-0000-0000-0000-000000000002';
   raise exception 'FAIL: e-filing ready without a bundle';
 exception when check_violation then raise notice 'ok - ready for e-filing needs a built bundle';
 end $$;
 do $$
 begin
-  insert into public.filings (org_id, case_id, efiling_no, status)
-  values ('11111111-1111-1111-1111-111111111111', 'c0000000-0000-0000-0000-000000000002', 'EF/X', 'filed');
+  insert into public.filings (org_id, case_id, efiling_no, filed_at, status)
+  values ('11111111-1111-1111-1111-111111111111', 'c0000000-0000-0000-0000-000000000002', 'EF/X', now(), 'filed');
   raise exception 'FAIL: filing row before e-filing ready';
 exception when insufficient_privilege then raise notice 'ok - no filing record before the case is ready for e-filing';
 end $$;
+insert into public.doc_jobs (id, org_id, case_id, kind, payload, created_by, created_at)
+values ('e0000000-0000-0000-0000-0000000000b1', '11111111-1111-1111-1111-111111111111',
+        'c0000000-0000-0000-0000-000000000002', 'efiling_bundle', '{}', '00000000-0000-0000-0000-0000000000d2',
+        '2100-01-01');
+select pg_temp.expect((select created_at from public.doc_jobs where id = 'e0000000-0000-0000-0000-0000000000b1') < '2100-01-01',
+  'the database, not the client, sets when a bundle job was created');
 reset role;
-insert into public.doc_jobs (org_id, case_id, kind, payload, status)
-values ('11111111-1111-1111-1111-111111111111', 'c0000000-0000-0000-0000-000000000002', 'efiling_bundle', '{}', 'done');
+update public.doc_jobs set status = 'done' where id = 'e0000000-0000-0000-0000-0000000000b1';
 select pg_temp.act_as('00000000-0000-0000-0000-0000000000d2');
 update public.cases set status = 'efiling_ready' where id = 'c0000000-0000-0000-0000-000000000002';
 do $$
@@ -1717,6 +1731,20 @@ begin
   update public.cases set status = 'filed' where id = 'c0000000-0000-0000-0000-000000000002';
   raise exception 'FAIL: filed without a filing record';
 exception when check_violation then raise notice 'ok - filed needs the filing record';
+end $$;
+do $$
+begin
+  insert into public.filings (org_id, case_id, efiling_no, court_fee_paise, filed_at, status)
+  values ('11111111-1111-1111-1111-111111111111', 'c0000000-0000-0000-0000-000000000002', 'EF/FAKE', 0, '1990-01-01', 'filed');
+  raise exception 'FAIL: direct filing row dated 1990';
+exception when check_violation then raise notice 'ok - a filing written directly is date-checked too';
+end $$;
+do $$
+begin
+  insert into public.filings (org_id, case_id, efiling_no, filed_at, status)
+  values ('11111111-1111-1111-1111-111111111111', 'c0000000-0000-0000-0000-000000000002', 'EF/X', now(), 'objection');
+  raise exception 'FAIL: non-filed row inserted';
+exception when check_violation then raise notice 'ok - users add only the filing record itself';
 end $$;
 do $$
 begin
@@ -1730,11 +1758,26 @@ begin
   raise exception 'FAIL: filing date before the case';
 exception when check_violation then raise notice 'ok - filing date cannot be before the case was opened';
 end $$;
+do $$
+declare u text;
+begin
+  foreach u in array array['00000000-0000-0000-0000-0000000000d1', '00000000-0000-0000-0000-0000000000f1',
+                           '00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-0000000000b9'] loop
+    perform set_config('request.jwt.claim.sub', u, true);
+    begin
+      perform public.record_filing('c0000000-0000-0000-0000-000000000002', 'EF/2026/1234', current_date, 1, '');
+      raise exception 'FAIL: % recorded a filing', u;
+    exception when insufficient_privilege then null;
+    end;
+  end loop;
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000d2', true);
+  raise notice 'ok - only the assigned drafter (or an admin) can record the filing';
+end $$;
 select public.record_filing('c0000000-0000-0000-0000-000000000002', 'EF/2026/1234',
   (now() at time zone 'Asia/Kolkata')::date, 1043000, 'GRN123');
 select pg_temp.expect((select status from public.cases where id = 'c0000000-0000-0000-0000-000000000002') = 'filed'
   and (select count(*) from public.filings where case_id = 'c0000000-0000-0000-0000-000000000002') = 1,
-  'record_filing stores the filing and marks the case filed together');
+  'recording the filing stores it and marks the case filed together');
 do $$
 begin
   perform public.record_filing('c0000000-0000-0000-0000-000000000002', 'EF/2026/9999', current_date, 1, '');
@@ -1768,9 +1811,25 @@ select pg_temp.expect((select court_fee_paise from public.filings where case_id 
   'an admin can correct a filing record');
 do $$
 begin
+  update public.filings set status = 'withdrawn' where case_id = 'c0000000-0000-0000-0000-000000000002';
+  raise exception 'FAIL: filing withdrawn while the case is filed';
+exception when check_violation then raise notice 'ok - a filed case keeps its filing record';
+end $$;
+do $$
+begin
   update public.cases set status = 'efiling_ready' where id = 'c0000000-0000-0000-0000-000000000002';
   raise exception 'FAIL: case moved below filed with a CNR';
 exception when check_violation then raise notice 'ok - moving a case back below filed needs the CNR cleared';
+end $$;
+update public.cases set cnr_no = null, filing_no = null, status = 'efiling_ready' where id = 'c0000000-0000-0000-0000-000000000002';
+select pg_temp.expect((select status from public.filings where case_id = 'c0000000-0000-0000-0000-000000000002') = 'withdrawn',
+  'moving a case back below filed withdraws its filing record');
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000d2');
+do $$
+begin
+  update public.cases set status = 'filed' where id = 'c0000000-0000-0000-0000-000000000002';
+  raise exception 'FAIL: filed again on a withdrawn filing';
+exception when check_violation then raise notice 'ok - a withdrawn filing does not count';
 end $$;
 rollback;
 
