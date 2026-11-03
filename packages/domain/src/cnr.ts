@@ -14,7 +14,8 @@ export function parseCnr(input: string, nextYear = new Date().getUTCFullYear() +
   const cnr = normaliseCnr(input);
   const m = /^([A-Z]{2})([A-Z]{2})(\d{2})(\d{6})(\d{4})$/.exec(cnr);
   if (!m) return null;
-  const year = Number(m[5]);
+  const [, state = "", district = "", establishment = "", serial = "", yearText = ""] = m;
+  const year = Number(yearText);
   if (year < 1950 || year > nextYear) return null;
-  return { state: m[1], district: m[2], establishment: m[3], serial: m[4], year };
+  return { state, district, establishment, serial, year };
 }
