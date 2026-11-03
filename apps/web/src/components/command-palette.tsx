@@ -7,7 +7,7 @@ import { translator, type Lang } from "@/lib/i18n";
 import { createClient } from "@/lib/supabase/client";
 import { caseStatus } from "@/lib/ui";
 
-type CaseHit = { id: string; no: string; borrower: string; status: string };
+type CaseHit = { id: string; no: string; borrower: string; status: string; cnr: string | null };
 type Item = { key: string; label: string; hint?: string; group: "action" | "case"; run: () => void };
 
 /**
@@ -51,7 +51,7 @@ export function CommandPalette({ lang, roles }: { lang: Lang; roles: string[] })
     (async () => {
       const { data } = await createClient()
         .from("cases")
-        .select("id, case_no_internal, status, parties(name, position)")
+        .select("id, case_no_internal, status, cnr_no, parties(name, position)")
         .is("archived_at", null)
         .order("case_no_internal")
         .limit(1000);
@@ -61,6 +61,7 @@ export function CommandPalette({ lang, roles }: { lang: Lang; roles: string[] })
           id: c.id,
           no: c.case_no_internal,
           status: c.status,
+          cnr: c.cnr_no,
           borrower: [...(c.parties ?? [])].sort((a, b) => a.position - b.position)[0]?.name ?? "",
         })),
       );
@@ -104,7 +105,7 @@ export function CommandPalette({ lang, roles }: { lang: Lang; roles: string[] })
     const caseItems: Item[] = (cases ?? []).map((c) => ({
       key: `c:${c.id}`,
       label: c.no,
-      hint: [c.borrower, caseStatus(c.status, t)[0]].filter(Boolean).join(" · "),
+      hint: [c.borrower, caseStatus(c.status, t)[0], c.cnr && `CNR ${c.cnr}`].filter(Boolean).join(" · "),
       group: "case",
       run: go(`/dashboard/cases/${c.id}`),
     }));

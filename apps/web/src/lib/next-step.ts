@@ -24,6 +24,8 @@ export type CaseFacts = {
   papers: { expected: number; generated: number; draft: number; returned: number; inApproval: number; approved: number };
   plaintApproved: boolean;
   bundleBuilt: boolean;
+  /** The court's CNR is recorded (after filing). */
+  hasCnr: boolean;
   canEdit: boolean;
   /** Papers in approval this user may decide (not their own). */
   awaitingMe: number;
@@ -47,8 +49,11 @@ const doIt = (f: CaseFacts, s: Omit<Step, "who" | "tone">): Step =>
 export function nextStep(f: CaseFacts): Step {
   if (f.archived) return { id: "archived", title: "Case archived — restore it to work on it", anchor: "archive", who: "nobody", tone: "wait" };
   if (f.status === "filed" || f.status === "listed" || f.status === "disposed") {
-    return { id: "filed", title: "Suit filed — track hearings", anchor: "summary", who: "nobody", tone: "done" };
+    if (!f.hasCnr) return doIt(f, { id: "cnr", title: "Add the CNR and filing number when the court registers the suit", anchor: "filing" });
+    return { id: "filed", title: "Suit filed — track hearings", anchor: "filing", who: "nobody", tone: "done" };
   }
+  if (f.status === "notary_stamp") return doIt(f, { id: "efiling-ready", title: "Mark the case ready for e-filing", anchor: "filing" });
+  if (f.status === "efiling_ready") return doIt(f, { id: "record-filing", title: "Record the filing: e-filing number, date and court fee", anchor: "filing" });
   if (f.scans === 0) return doIt(f, { id: "upload", title: "Upload the bank's loan file", anchor: "documents" });
   if (f.readingNow) return { id: "reading", title: "AI is reading the scans — about a minute", anchor: "documents", who: "nobody", tone: "wait" };
   if (f.extracted === 0) return doIt(f, { id: "read", title: "Read the scans with AI", anchor: "documents" });
@@ -76,7 +81,7 @@ export function nextStep(f: CaseFacts): Step {
       : { id: "with-approver", title: "With the approver", count: p.inApproval, anchor: "drafts", who: "approver", tone: "wait" };
   }
   if (f.plaintApproved && !f.bundleBuilt) return doIt(f, { id: "bundle", title: "Build the e-filing bundle", anchor: "bundle" });
-  if (f.bundleBuilt) return doIt(f, { id: "file", title: "Notary, stamp and e-file — assign the field tasks", anchor: "tasks" });
+  if (f.bundleBuilt) return doIt(f, { id: "notary", title: "Notary and stamp, then mark it done", anchor: "filing" });
   return { id: "done", title: "Everything is up to date", anchor: "summary", who: "nobody", tone: "done" };
 }
 
@@ -96,6 +101,8 @@ export function checklist(f: CaseFacts): CheckItem[] {
     { label: "Papers generated", done: p.expected > 0 && p.generated >= p.expected, anchor: "drafts" },
     { label: "Papers approved", done: p.expected > 0 && p.approved >= p.expected, anchor: "drafts" },
     { label: "E-filing bundle", done: f.bundleBuilt, anchor: "bundle" },
+    { label: "Filed", done: ["filed", "listed", "disposed"].includes(f.status), anchor: "filing" },
+    { label: "CNR", done: f.hasCnr, anchor: "filing" },
   );
   return items;
 }

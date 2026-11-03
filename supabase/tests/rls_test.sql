@@ -1674,6 +1674,32 @@ select pg_temp.expect(not public.uploaded_by_me('11111111-1111-1111-1111-1111111
   'someone else''s upload cannot be recorded as mine');
 rollback;
 
+-- filing record (20261103000000): approved → notary → e-filing ready → filed, then CNR / filing no.
+begin;
+update public.cases set status = 'approved' where id = 'c0000000-0000-0000-0000-000000000002';
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000d2');
+do $$
+begin
+  update public.cases set cnr_no = 'MHPU010012342026' where id = 'c0000000-0000-0000-0000-000000000002';
+  raise exception 'FAIL: CNR before filing';
+exception when check_violation then raise notice 'ok - no CNR before the suit is filed';
+end $$;
+update public.cases set status = 'notary_stamp' where id = 'c0000000-0000-0000-0000-000000000002';
+update public.cases set status = 'efiling_ready' where id = 'c0000000-0000-0000-0000-000000000002';
+insert into public.filings (org_id, case_id, efiling_no, court_fee_paise, txn_id, filed_at, status)
+values ('11111111-1111-1111-1111-111111111111', 'c0000000-0000-0000-0000-000000000002', 'EF/2026/1234', 1043000, 'GRN123', now(), 'filed');
+update public.cases set status = 'filed' where id = 'c0000000-0000-0000-0000-000000000002';
+update public.cases set cnr_no = 'MHPU010012342026', filing_no = 'SCS/1234/2026' where id = 'c0000000-0000-0000-0000-000000000002';
+select pg_temp.expect((select cnr_no from public.cases where id = 'c0000000-0000-0000-0000-000000000002') = 'MHPU010012342026',
+  'assigned drafter records filing, CNR and filing number in order');
+do $$
+begin
+  update public.cases set cnr_no = 'mhpu01-001234' where id = 'c0000000-0000-0000-0000-000000000002';
+  raise exception 'FAIL: malformed CNR stored';
+exception when check_violation then raise notice 'ok - CNR must be 16 characters in the eCourts shape';
+end $$;
+rollback;
+
 -- firm code (20261030010000): the sign-in page learns a firm's name from its code, nothing more
 update public.organizations set slug = 'demo-adv' where id = '11111111-1111-1111-1111-111111111111';
 begin;
