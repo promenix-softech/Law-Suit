@@ -17,6 +17,7 @@ const base: CaseFacts = {
   papers: { expected: 9, generated: 9, draft: 0, returned: 0, inApproval: 0, approved: 9 },
   plaintApproved: true,
   bundleBuilt: false,
+  hasCnr: false,
   canEdit: true,
   awaitingMe: 0,
 };
@@ -36,7 +37,14 @@ describe("nextStep", () => {
     expect(nextStep(f({ papers: papers({ returned: 1, approved: 8 }) })).id).toBe("returned");
     expect(nextStep(f({ papers: papers({ draft: 9, approved: 0 }) }))).toMatchObject({ id: "submit", count: 9 });
     expect(nextStep(f({})).id).toBe("bundle");
-    expect(nextStep(f({ bundleBuilt: true })).id).toBe("file");
+    expect(nextStep(f({ bundleBuilt: true })).id).toBe("notary");
+  });
+
+  it("walks the filing steps after approval up to the CNR", () => {
+    expect(nextStep(f({ status: "notary_stamp", bundleBuilt: true })).id).toBe("efiling-ready");
+    expect(nextStep(f({ status: "efiling_ready", bundleBuilt: true })).id).toBe("record-filing");
+    expect(nextStep(f({ status: "filed", bundleBuilt: true }))).toMatchObject({ id: "cnr", anchor: "filing" });
+    expect(nextStep(f({ status: "filed", bundleBuilt: true, hasCnr: true })).tone).toBe("done");
   });
 
   it("asks for 12A mediation only when the suit needs it", () => {
@@ -58,14 +66,14 @@ describe("nextStep", () => {
 
   it("stops at archived and filed cases", () => {
     expect(nextStep(f({ archived: true, scans: 0 })).id).toBe("archived");
-    expect(nextStep(f({ status: "filed" })).tone).toBe("done");
+    expect(nextStep(f({ status: "filed", hasCnr: true })).tone).toBe("done");
   });
 });
 
 describe("checklist", () => {
   it("ticks reached milestones and adds 12A only when needed", () => {
     const items = checklist(f({}));
-    expect(items.map((i) => i.done)).toEqual([true, true, true, true, true, true, false]);
+    expect(items.map((i) => i.done)).toEqual([true, true, true, true, true, true, false, false, false]);
     expect(checklist(f({ needs12A: true })).some((i) => i.label === "Sec 12A mediation")).toBe(true);
     expect(checklist(f({ isDrt: true })).some((i) => i.label === "Suit particulars")).toBe(false);
   });

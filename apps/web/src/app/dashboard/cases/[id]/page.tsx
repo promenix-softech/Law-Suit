@@ -10,6 +10,7 @@ import { caseStatus, draftStatus, fmtDate, title } from "@/lib/ui";
 import { DecideDraft, GenerateAll, MediationOutcome, MediationStart, NoticeForm, SubmitAll, SubmitDraft, UploadScan } from "./case-actions";
 import { CorrectDraft, RegenerateDraft } from "./draft-controls";
 import { EditDraftText } from "./draft-editor";
+import { FilingPanel } from "./filing-controls";
 import { ArchiveCase, RestoreCase } from "./archive-controls";
 import { checklist, nextStep, type CaseFacts } from "@/lib/next-step";
 import type { DocKind } from "./actions";
@@ -69,6 +70,7 @@ const STEPS = [
   "drafting",
   "in_approval",
   "approved",
+  "notary_stamp",
   "efiling_ready",
   "filed",
 ] as const;
@@ -145,7 +147,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
   const { data: c } = await supabase
     .from("cases")
     .select(
-      "id, org_id, case_no_internal, status, archived_at, archive_reason, archived_by, suit_type, claim_amount_paise, is_commercial, needs_12a, urgent_interim_relief, assigned_drafter, assigned_approver, courts(name, state), bank_branches(branch_name, ifsc, banks(name)), signatory_name, signatory_designation, signatory_age, penal_interest_paise, expenses_paise, parties(id, name, role, address, aadhaar_last4, position, through_capacity, through_name), loans(id, facility_type, account_last4, sanction_date, sanction_amount_paise, roi_bps, npa_date, outstanding_paise, interest_upto_date, application_date, purpose, executed_docs, tenure_months, created_at), notices(id, dispatch_mode, tracking_no, sent_at), mediations(id, authority, applied_at, outcome, report_date, report_path)",
+      "id, org_id, case_no_internal, status, archived_at, archive_reason, archived_by, cnr_no, filing_no, filings(efiling_no, court_fee_paise, txn_id, filed_at, created_at), suit_type, claim_amount_paise, is_commercial, needs_12a, urgent_interim_relief, assigned_drafter, assigned_approver, courts(name, state), bank_branches(branch_name, ifsc, banks(name)), signatory_name, signatory_designation, signatory_age, penal_interest_paise, expenses_paise, parties(id, name, role, address, aadhaar_last4, position, through_capacity, through_name), loans(id, facility_type, account_last4, sanction_date, sanction_amount_paise, roi_bps, npa_date, outstanding_paise, interest_upto_date, application_date, purpose, executed_docs, tenure_months, created_at), notices(id, dispatch_mode, tracking_no, sent_at), mediations(id, authority, applied_at, outcome, report_date, report_path)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -172,6 +174,12 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
   const jobs = (jobRows ?? []) as JobRow[];
   const pdfJob = (versionId: string) => jobs.find((j) => j.kind === "draft_pdf" && j.payload.draft_version_id === versionId);
   const bundles = jobs.filter((j) => j.kind === "efiling_bundle");
+  const latestApprovalAt = Math.max(
+    -Infinity,
+    ...(drafts ?? []).flatMap((d) =>
+      (d.approvals ?? []).filter((a) => a.decision === "approved").map((a) => Date.parse(a.created_at)),
+    ),
+  );
   const exports = jobs.filter((j) => j.kind === "case_export").slice(0, 3);
 
   const docIds = (docs ?? []).map((d) => d.id);
@@ -335,7 +343,9 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
       approved: count("approved"),
     },
     plaintApproved: BUNDLE_READY.includes(c.status),
-    bundleBuilt: bundles.some((b) => b.status === "done"),
+    // Only a bundle built after the latest approval counts (the database checks the same).
+    bundleBuilt: bundles.some((b) => b.status === "done" && Date.parse(b.created_at) >= latestApprovalAt),
+    hasCnr: !!c.cnr_no,
     canEdit,
     awaitingMe: isApprover ? allDrafts.filter((d) => d.status === "in_approval" && d.created_by !== auth.user.id).length : 0,
   };
@@ -359,6 +369,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
             <h1 className="text-3xl font-semibold tracking-tight">{c.case_no_internal}</h1>
             <span className={`pill ${statusTone}`}>{statusLabel}</span>
             {c.is_commercial && <span className="pill pill-violet">Commercial</span>}
+            {c.cnr_no && <span className="pill pill-green font-mono tracking-wider">CNR {c.cnr_no}</span>}
           </div>
           <p className="muted mt-1 text-sm">
             {parties[0]?.name ?? "—"} · {one(branch?.banks ?? null)?.name ?? "—"}, {branch?.branch_name ?? "—"}
@@ -876,6 +887,37 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
             Built by the document worker. Sign with DSC / eSign and pay court fee on eCourts before filing.
           </p>
         </Section>
+
+        {[...BUNDLE_READY, "listed", "disposed"].includes(c.status) && (
+          <Section id="filing" title={t("Filing")} subtitle={t("After approval: notary, e-filing and the court's CNR")} delay={400}>
+            <FilingPanel
+              lang={lang}
+              v={{
+                caseId: c.id,
+                status: c.status,
+                canEdit,
+                bundleBuilt: facts.bundleBuilt,
+                courtFeePaise: (() => {
+                  const st = one(c.courts as Rel<{ state: string }>)?.state;
+                  return claim != null && isStateCode(st) ? (courtFeeFor(st, claim).feePaise ?? null) : null;
+                })(),
+                filing: (() => {
+                  const f = [...(c.filings ?? [])].sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+                  return f
+                    ? {
+                        efilingNo: f.efiling_no,
+                        filedOn: f.filed_at ? fmtDate(f.filed_at) : null,
+                        courtFeePaise: f.court_fee_paise == null ? null : Number(f.court_fee_paise),
+                        txnId: f.txn_id,
+                      }
+                    : null;
+                })(),
+                cnr: c.cnr_no,
+                filingNo: c.filing_no,
+              }}
+            />
+          </Section>
+        )}
 
         {isAdmin && !archived && (
           <section id="archive" className="fade-up scroll-mt-24 rounded-3xl border border-red-500/20 bg-red-500/5 p-6">
