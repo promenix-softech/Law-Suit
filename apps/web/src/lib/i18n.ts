@@ -432,6 +432,8 @@ const MR: Record<string, string> = {
   "Branch": "शाखा",
   "Stage": "टप्पा",
   "The sheet has the same cases and columns, with account numbers masked to the last 4 digits.": "डाउनलोड केलेल्या तक्त्यात हीच प्रकरणे व रकाने असतात; खाते क्रमांकाचे फक्त शेवटचे 4 अंक दिसतात.",
+  // Marathi papers
+  "Demand notice in Marathi": "मराठी मागणी नोटीस",
 };
 
 export type T = (en: string) => string;

@@ -7,6 +7,7 @@ export * from "./interest";
 export * from "./efiling";
 export * from "./lifecycle";
 export * from "./words";
+export * from "./wordsMr";
 export * from "./forum";
 export * from "./drtBenches";
 export * from "./billing";

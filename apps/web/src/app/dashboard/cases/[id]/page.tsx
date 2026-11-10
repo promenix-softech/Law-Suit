@@ -334,8 +334,10 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
 
   // Drafts by suit-set paper (the commercial affidavit is stored as the statement of truth).
   type DraftRow = NonNullable<typeof drafts>[number];
-  const draftOf = (kind: DocKind): DraftRow | undefined =>
-    (drafts ?? []).find((d) => d.doc_kind === kind || (kind === "affidavit" && d.doc_kind === "statement_of_truth"));
+  const draftOf = (kind: DocKind): DraftRow | undefined => {
+    const of = (drafts ?? []).filter((d) => d.doc_kind === kind || (kind === "affidavit" && d.doc_kind === "statement_of_truth"));
+    return of.find((d) => d.language === "en") ?? of[0];
+  };
   const paperDrafts = suitSet.map((p) => ({ ...p, draft: draftOf(p.kind) }));
   const otherDrafts = (drafts ?? []).filter((d) => !paperDrafts.some((p) => p.draft?.id === d.id));
   const allDrafts = drafts ?? [];
@@ -874,6 +876,18 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
                 // Returned papers go back one by one, after the approver's comments are dealt with.
                 drafts={allDrafts.filter((d) => d.status === "draft" && d.current_version > 0).map((d) => ({ id: d.id, label: title(d.doc_kind) }))}
               />
+              {/* The demand notice also has a Marathi template; it is drafted and approved like any other paper. */}
+              {!allDrafts.some((d) => d.doc_kind === "demand_notice" && d.language === "mr") && (
+                <RegenerateDraft
+                  caseId={c.id}
+                  kind="demand_notice"
+                  language="mr"
+                  exists={false}
+                  approved={false}
+                  label={t("Demand notice in Marathi")}
+                  lang={lang}
+                />
+              )}
             </div>
           )}
           <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
@@ -958,7 +972,14 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
                       {canEdit && d.status === "draft" && <SubmitDraft draftId={d.id} primary lang={lang} />}
                       {canEdit && d.status !== "in_approval" && (
                         <>
-                          <RegenerateDraft caseId={c.id} kind={(d.doc_kind === "statement_of_truth" ? "affidavit" : d.doc_kind) as DocKind} exists approved={approvedNow} lang={lang} />
+                          <RegenerateDraft
+                            caseId={c.id}
+                            kind={(d.doc_kind === "statement_of_truth" ? "affidavit" : d.doc_kind) as DocKind}
+                            language={d.language}
+                            exists
+                            approved={approvedNow}
+                            lang={lang}
+                          />
                           <EditDraftText draftId={d.id} heading={`${c.case_no_internal} · ${title(d.doc_kind)}`} approved={approvedNow} lang={lang} />
                           <CorrectDraft orgId={c.org_id} caseId={c.id} draftId={d.id} approved={approvedNow} lang={lang} />
                         </>

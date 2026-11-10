@@ -10,6 +10,7 @@ import {
   buildBbeCertificate,
   buildCourtFeeLetter,
   buildDemandNotice,
+  buildDemandNoticeMr,
   buildDraftDecree,
   buildEfilingSheet,
   buildInterimApplication,
@@ -145,7 +146,7 @@ type CaseDetail = CaseRow & {
 const PENAL_PENDING = "Enter the penal interest in Suit particulars first (0 for NIL) — it decides the suit amount and court fee, then regenerate the plaint.";
 
 /** Assembles the template for one document kind from case data. Amounts come from the DB / domain code. */
-function buildModel(kind: DocKind, c: CaseDetail, version: number, config: OfficeConfig): DocModel | string {
+function buildModel(kind: DocKind, c: CaseDetail, version: number, config: OfficeConfig, language: DraftLanguage = "en"): DocModel | string {
   const loans = [...(c.loans ?? [])].sort((a, b) => a.created_at.localeCompare(b.created_at));
   const loan = loans[0];
   const branch = one(c.bank_branches);
@@ -191,7 +192,7 @@ function buildModel(kind: DocKind, c: CaseDetail, version: number, config: Offic
   });
 
   if (kind === "demand_notice") {
-    return buildDemandNotice({
+    return (language === "mr" ? buildDemandNoticeMr : buildDemandNotice)({
       noticeDate: todayIST(),
       refNo: office?.refPrefix ? `${office.refPrefix}/${c.case_no_internal}/DN/${version}` : null,
       office,
@@ -435,10 +436,17 @@ const SUIT_KINDS = new Set(["plaint", "original_application"]);
 const SUIT_LOCKED: CaseStatus[] = ["notary_stamp", "efiling_ready", "filed", "listed", "disposed"];
 const SUIT_LOCKED_ERROR = "The plaint has gone to the notary or the court; it can no longer be changed here.";
 
+/** Papers that have a Marathi template; everything else is drafted in English. */
+const MARATHI_KINDS: ReadonlySet<DocKind> = new Set<DocKind>(["demand_notice"]);
+type DraftLanguage = "en" | "mr";
+
 /** Builds a document from case data and stores it as a new draft version (DOCX). */
-export async function generateDraft(caseId: string, kindInput: string): Promise<ActionResult> {
+export async function generateDraft(caseId: string, kindInput: string, languageInput: string = "en"): Promise<ActionResult> {
   const kind = DocKindSchema.safeParse(kindInput);
-  if (!z.uuid().safeParse(caseId).success || !kind.success) return { ok: false, error: "Invalid request." };
+  const lang = z.enum(["en", "mr"]).safeParse(languageInput);
+  if (!z.uuid().safeParse(caseId).success || !kind.success || !lang.success) return { ok: false, error: "Invalid request." };
+  const language: DraftLanguage = lang.data;
+  if (language === "mr" && !MARATHI_KINDS.has(kind.data)) return { ok: false, error: "This paper has no Marathi template yet." };
   const supabase = await createClient();
   if (!supabase) return { ok: false, error: "Database is not configured." };
 
@@ -454,12 +462,12 @@ export async function generateDraft(caseId: string, kindInput: string): Promise<
     .select("id, current_version")
     .eq("case_id", caseId)
     .eq("doc_kind", storedKind)
-    .eq("language", "en")
+    .eq("language", language)
     .maybeSingle();
   if (!draft) {
     const created = await supabase
       .from("drafts")
-      .insert({ org_id: c.org_id, case_id: caseId, doc_kind: storedKind, language: "en" })
+      .insert({ org_id: c.org_id, case_id: caseId, doc_kind: storedKind, language })
       .select("id, current_version")
       .single();
     if (created.error) return { ok: false, error: "You cannot draft documents for this case." };
@@ -469,11 +477,11 @@ export async function generateDraft(caseId: string, kindInput: string): Promise<
 
   const config = await loadOfficeConfig(supabase);
   if (!config) return { ok: false, error: OFFICE_CONFIG_ERROR };
-  const model = buildModel(kind.data, c as unknown as CaseDetail, version, config);
+  const model = buildModel(kind.data, c as unknown as CaseDetail, version, config, language);
   if (typeof model === "string") return { ok: false, error: model };
 
   const file = await renderDocx(model, { courtMargins: config.settings.margins });
-  const path = `${c.org_id}/${caseId}/drafts/${storedKind}-en-v${version}-${Date.now()}.docx`;
+  const path = `${c.org_id}/${caseId}/drafts/${storedKind}-${language}-v${version}-${Date.now()}.docx`;
   const up = await supabase.storage.from(BUCKET).upload(path, file, { contentType: DOCX_MIME });
   if (up.error) return { ok: false, error: "Could not store the generated file." };
 
@@ -489,7 +497,7 @@ export async function generateDraft(caseId: string, kindInput: string): Promise<
   if (next) await setCaseStatus(supabase, c as CaseRow, next);
 
   revalidatePath(`/dashboard/cases/${caseId}`);
-  const label = storedKind === "statement_of_truth" ? "Statement of truth" : LABEL[kind.data];
+  const label = `${storedKind === "statement_of_truth" ? "Statement of truth" : LABEL[kind.data]}${language === "mr" ? " (Marathi)" : ""}`;
   return { ok: true, message: `${label} v${version} generated.` };
 }
 

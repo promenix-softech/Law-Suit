@@ -63,7 +63,8 @@ const PROFILES: Record<NonNullable<DocModel["layout"]>, Profile> = {
   },
 };
 
-const FONT = "Times New Roman";
+/** Latin text in Times New Roman; Devanagari (a complex script) in Noto Serif Devanagari. */
+const FONT = { ascii: "Times New Roman", hAnsi: "Times New Roman", eastAsia: "Times New Roman", cs: "Noto Serif Devanagari" };
 const A4 = { width: 11906, height: 16838 }; // twips
 const BOX_BORDER = { style: BorderStyle.SINGLE, size: 8, color: "000000" };
 const NO_BORDER = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
