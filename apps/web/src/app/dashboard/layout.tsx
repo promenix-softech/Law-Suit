@@ -39,6 +39,7 @@ export default async function DashboardLayout({ children }: LayoutProps<"/dashbo
     ...(admin ? [{ href: "/dashboard/cases/new", label: t("New case"), icon: "＋", group: work }] : []),
     ...(admin || r.has("approver") ? [{ href: "/dashboard#approvals", label: t("Approvals"), icon: "✓", badge: queue, group: work }] : []),
     { href: "/dashboard/tasks", label: t("My tasks"), icon: "☰", badge: tasksOpen ?? 0, group: work },
+    ...(admin || r.has("approver") || r.has("drafter") ? [{ href: "/dashboard/reports", label: t("Reports"), icon: "▤", group: work }] : []),
     ...(admin
       ? [
           { href: "/dashboard/batches", label: t("Bulk upload"), icon: "⇪", group: work },

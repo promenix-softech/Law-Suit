@@ -422,6 +422,16 @@ const MR: Record<string, string> = {
   "Record the filing": "दाखल केल्याची नोंद करा",
   "Add the CNR and the first hearing date": "CNR आणि पहिली सुनावणी तारीख टाका",
   "Hearing date saved.": "सुनावणी तारीख जतन झाली.",
+  // status report
+  "Reports": "अहवाल",
+  "Status report": "स्थिती अहवाल",
+  "Where every case stands, bank by bank. Download it to send to the bank.": "प्रत्येक प्रकरण कुठे आहे ते बँकेनुसार. बँकेला पाठवण्यासाठी डाउनलोड करा.",
+  "Download for Excel": "Excel साठी डाउनलोड",
+  "All banks": "सर्व बँका",
+  "Total claim": "एकूण दावा रक्कम",
+  "Branch": "शाखा",
+  "Stage": "टप्पा",
+  "The sheet has the same cases and columns, with account numbers masked to the last 4 digits.": "डाउनलोड केलेल्या तक्त्यात हीच प्रकरणे व रकाने असतात; खाते क्रमांकाचे फक्त शेवटचे 4 अंक दिसतात.",
 };
 
 export type T = (en: string) => string;
