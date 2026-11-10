@@ -30,6 +30,7 @@ Always reply to the owner (Manoj) in Marathi; code, commits and docs stay in Eng
 pnpm install
 pnpm dev                 # web app
 pnpm test:unit           # vitest (domain)
+pnpm check               # lint + typecheck + unit tests for every package — what CI's app job runs; run before every push
 pnpm typecheck
 pnpm lint
 pnpm test:db             # migrations + RLS tests on local Postgres (DATABASE_URL)

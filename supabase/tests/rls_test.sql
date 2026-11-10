@@ -789,6 +789,20 @@ begin
   end;
   raise notice 'ok - a split must use every page once and new case numbers must be free';
 end $$;
+-- archived = read-only on every path, the bulk-upload split included (20261109010000)
+reset role;
+update public.cases set archived_at = now(), archive_reason = 'test: closed by the bank', archived_by = '00000000-0000-0000-0000-00000000000a'
+ where id = 'c0000000-0000-0000-0000-000000000001';
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+do $$
+begin
+  perform public.confirm_batch('ba000000-0000-0000-0000-000000000001',
+    '[{"pages":[1,2,3,4],"case_id":"c0000000-0000-0000-0000-000000000001"}]');
+  raise exception 'FAIL: pages attached to an archived case';
+exception when raise_exception then
+  if sqlerrm like 'FAIL%' then raise; end if;
+  raise notice 'ok - a bulk-upload split cannot add pages to an archived case';
+end $$;
 select public.confirm_batch('ba000000-0000-0000-0000-000000000001',
   '[{"pages":[1,2],"case_no":"NEW-1"},{"pages":[3,4],"case_id":"c0000000-0000-0000-0000-000000000002"}]');
 select pg_temp.expect((select status from public.batches) = 'applying', 'admin confirms a valid split');
