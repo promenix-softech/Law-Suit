@@ -470,6 +470,14 @@ body {
   50% { opacity: 0.45; }
 }
 
+/* Folding cards (case page): no browser marker, and a card does not lift on hover. In the simple
+   view the explanatory sub-lines are hidden; "Show everything" brings them back. */
+.fold > summary { list-style: none; }
+.fold > summary::-webkit-details-marker { display: none; }
+.fold > summary:focus-visible { outline: 2px solid rgb(139, 92, 246); outline-offset: 2px; border-radius: 1rem; }
+.glass-card.fold:hover { transform: none; }
+[data-view="simple"] .section-sub { display: none; }
+
 @media (prefers-reduced-motion: reduce) {
   .pv-root,
   .pv-skeleton,

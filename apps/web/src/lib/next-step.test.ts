@@ -18,6 +18,8 @@ const base: CaseFacts = {
   plaintApproved: true,
   bundleBuilt: false,
   hasCnr: false,
+  nextHearing: null,
+  hearingsToRecord: 0,
   canEdit: true,
   awaitingMe: 0,
 };
@@ -44,7 +46,16 @@ describe("nextStep", () => {
     expect(nextStep(f({ status: "notary_stamp", bundleBuilt: true })).id).toBe("efiling-ready");
     expect(nextStep(f({ status: "efiling_ready", bundleBuilt: true })).id).toBe("record-filing");
     expect(nextStep(f({ status: "filed", bundleBuilt: true }))).toMatchObject({ id: "cnr", anchor: "filing" });
-    expect(nextStep(f({ status: "filed", bundleBuilt: true, hasCnr: true })).tone).toBe("done");
+    expect(nextStep(f({ status: "filed", bundleBuilt: true, hasCnr: true }))).toMatchObject({ id: "hearing-add", anchor: "hearings" });
+  });
+
+  it("keeps the hearing diary going until the suit is disposed", () => {
+    const court = { status: "listed" as const, hasCnr: true };
+    expect(nextStep(f({ ...court, nextHearing: "2026-12-01" }))).toMatchObject({ id: "hearing-wait", date: "2026-12-01", tone: "wait" });
+    expect(nextStep(f({ ...court, nextHearing: "2026-12-01", hearingsToRecord: 1 }))).toMatchObject({ id: "hearing-record", count: 1 });
+    expect(nextStep(f({ ...court })).id).toBe("hearing-add");
+    expect(nextStep(f({ ...court, canEdit: false }))).toMatchObject({ id: "hearing-add", who: "drafter", tone: "wait" });
+    expect(nextStep(f({ status: "disposed", hasCnr: true, hearingsToRecord: 2 }))).toMatchObject({ id: "disposed", tone: "done" });
   });
 
   it("asks for 12A mediation only when the suit needs it", () => {
@@ -66,14 +77,14 @@ describe("nextStep", () => {
 
   it("stops at archived and filed cases", () => {
     expect(nextStep(f({ archived: true, scans: 0 })).id).toBe("archived");
-    expect(nextStep(f({ status: "filed", hasCnr: true })).tone).toBe("done");
+    expect(nextStep(f({ status: "disposed", hasCnr: true })).tone).toBe("done");
   });
 });
 
 describe("checklist", () => {
   it("ticks reached milestones and adds 12A only when needed", () => {
     const items = checklist(f({}));
-    expect(items.map((i) => i.done)).toEqual([true, true, true, true, true, true, false, false, false]);
+    expect(items.map((i) => i.done)).toEqual([true, true, true, true, true, true, false, false, false, false]);
     expect(checklist(f({ needs12A: true })).some((i) => i.label === "Sec 12A mediation")).toBe(true);
     expect(checklist(f({ isDrt: true })).some((i) => i.label === "Suit particulars")).toBe(false);
   });

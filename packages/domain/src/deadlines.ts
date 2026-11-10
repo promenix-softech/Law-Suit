@@ -6,15 +6,19 @@ import { CASE_STATUSES, type CaseStatus } from "./lifecycle";
  *
  * - limitation: a conservative WATCH date, three years from the estimated default. Default is
  *   estimated as NPA date − 90 days (RBI IRAC: an account becomes NPA after 90 days overdue).
- *   The real start of limitation and any extension by acknowledgement (Limitation Act s.18) is
- *   for the advocate to confirm — [[LEGAL_REVIEW]].
+ *   A written acknowledgement (Limitation Act s.18) or a part-payment (s.19) made while the
+ *   period was still running starts a fresh three years from its date; see limitationWatch().
+ *   The real start of limitation and the effect of each event is for the advocate to confirm —
+ *   [[LEGAL_REVIEW]].
+ * - hearing / hearing_record: the next court date of a filed suit, and passed dates nobody has
+ *   written up.
  * - mediation_12a: Commercial Courts Act s.12A(3) — mediation to be completed within three months
  *   of the application (extendable by two months with consent).
  * - notice_period: the payment period given in the demand notice (office practice, default 15 days).
  * - approval: office target of two days for an approver to decide.
  */
 
-export type DeadlineKind = "limitation" | "mediation_12a" | "notice_period" | "approval";
+export type DeadlineKind = "limitation" | "mediation_12a" | "notice_period" | "approval" | "hearing" | "hearing_record";
 
 export interface Deadline {
   kind: DeadlineKind;
@@ -36,6 +40,30 @@ export interface DeadlineInput {
   mediationAppliedOn?: string | null;
   /** When the oldest draft of the case went to the approver. */
   approvalWaitingSince?: string | null;
+  /** Acknowledgements and part-payments recorded for the case. */
+  limitationEvents?: readonly LimitationEvent[];
+  /** Next court date still ahead, for a filed suit. */
+  nextHearingOn?: string | null;
+  /** Oldest court date that has passed without an outcome. */
+  hearingToRecordOn?: string | null;
+}
+
+export type LimitationEventKind = "acknowledgment" | "part_payment";
+export interface LimitationEvent {
+  kind: LimitationEventKind;
+  /** ISO date the acknowledgement was signed or the payment made. */
+  on: string;
+}
+
+export interface LimitationWatch {
+  /** Estimated default (NPA date − 90 days): where the first three years start. */
+  base: string;
+  /** The watch date after the events that count. */
+  due: string;
+  /** Events made while the period was running: each restarted the three years. */
+  counted: LimitationEvent[];
+  /** Events made after the period had already run out: they do not revive it. */
+  late: LimitationEvent[];
 }
 
 const DAY_MS = 86_400_000;
@@ -76,7 +104,34 @@ export function limitationWatchDate(npaDate: string): string {
   return addMonthsISO(addDaysISO(npaDate, -NPA_OVERDUE_DAYS), LIMITATION_YEARS * 12);
 }
 
+/**
+ * Limitation watch with acknowledgements and part-payments. Events are taken in date order; one
+ * made on or before the watch date then running (and not before the default) moves the watch date
+ * to three years from the event. One made after the period had run out is reported as `late` and
+ * changes nothing. A watch date for the office, not a legal opinion — [[LEGAL_REVIEW]].
+ */
+export function limitationWatch(npaDate: string, events: readonly LimitationEvent[] = []): LimitationWatch {
+  const base = addDaysISO(npaDate, -NPA_OVERDUE_DAYS);
+  let due = addMonthsISO(base, LIMITATION_YEARS * 12);
+  const counted: LimitationEvent[] = [];
+  const late: LimitationEvent[] = [];
+  for (const e of [...events].sort((a, b) => a.on.localeCompare(b.on))) {
+    parse(e.on);
+    if (e.on < base) continue;
+    if (e.on > due) {
+      late.push(e);
+      continue;
+    }
+    counted.push(e);
+    const fresh = addMonthsISO(e.on, LIMITATION_YEARS * 12);
+    if (fresh > due) due = fresh;
+  }
+  return { base, due, counted, late };
+}
+
 const FILED_INDEX = CASE_STATUSES.indexOf("filed");
+const HEARING_WARN_DAYS = 7;
+const HEARING_URGENT_DAYS = 1;
 
 export function caseDeadlines(i: DeadlineInput): Deadline[] {
   const out: Deadline[] = [];
@@ -87,7 +142,7 @@ export function caseDeadlines(i: DeadlineInput): Deadline[] {
   };
 
   if (i.npaDate && CASE_STATUSES.indexOf(i.status) < FILED_INDEX) {
-    at("limitation", limitationWatchDate(i.npaDate), (d) =>
+    at("limitation", limitationWatch(i.npaDate, i.limitationEvents).due, (d) =>
       d <= URGENT_DAYS ? "red" : d <= LIMITATION_WARN_DAYS ? "amber" : null,
     );
   }
@@ -96,6 +151,12 @@ export function caseDeadlines(i: DeadlineInput): Deadline[] {
   }
   if (i.status === "notice_sent" && i.noticeSentOn) {
     at("notice_period", addDaysISO(i.noticeSentOn, i.noticePaymentDays ?? 15), (d) => (d < 0 ? "amber" : null));
+  }
+  if (i.status === "filed" || i.status === "listed") {
+    if (i.hearingToRecordOn) at("hearing_record", i.hearingToRecordOn, () => "red");
+    if (i.nextHearingOn) {
+      at("hearing", i.nextHearingOn, (d) => (d <= HEARING_URGENT_DAYS ? "red" : d <= HEARING_WARN_DAYS ? "amber" : null));
+    }
   }
   if (i.approvalWaitingSince) {
     at("approval", addDaysISO(i.approvalWaitingSince, APPROVAL_TARGET_DAYS), (d) => (d < 0 ? "amber" : null));

@@ -1,12 +1,15 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { caseDeadlines, daysBetween, formatINR, type CaseStatus, type DeadlineKind } from "@civil-suits/domain";
+import { caseDeadlines, daysBetween, formatINR, type CaseStatus, type DeadlineKind, type LimitationEvent } from "@civil-suits/domain";
 import { CountUp } from "@/components/count-up";
 import { TopBar } from "@/components/top-bar";
 import type { T } from "@/lib/i18n";
 import { getT } from "@/lib/lang";
 import { createClient } from "@/lib/supabase/server";
+import { STATUS_NEXT } from "@/lib/next-step";
 import { caseStatus, fmtDate, title, todayIST } from "@/lib/ui";
+import { getViewMode } from "@/lib/view-mode";
+import { ViewToggle } from "@/components/view-toggle";
 
 export const metadata = { title: "Dashboard — Civil Suits" };
 
@@ -66,6 +69,8 @@ const DEADLINE_LABEL: Record<DeadlineKind | "task_overdue" | "task_today", strin
   mediation_12a: "12A mediation period ends",
   notice_period: "Notice period over — next step",
   approval: "Approval pending",
+  hearing: "Court date",
+  hearing_record: "Write what happened at the hearing",
   task_overdue: "Task overdue",
   task_today: "Task due today",
 };
@@ -90,11 +95,12 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
 
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) redirect("/login");
-  const { t } = await getT();
+  const { lang, t } = await getT();
+  const full = (await getViewMode()) === "full";
 
   // RLS decides which rows come back: admin/approver see all, drafter only assigned,
   // field only cases with their own tasks.
-  const [{ data: profile }, { data: roles }, { data: cases }, { data: tasks }, { data: pending }] = await Promise.all([
+  const [{ data: profile }, { data: roles }, { data: cases }, { data: tasks }, { data: pending }, { data: openHearings }, { data: limitationRows }] = await Promise.all([
     supabase.from("profiles").select("full_name, organizations(name)").eq("id", auth.user.id).single(),
     supabase.from("user_roles").select("role").eq("user_id", auth.user.id),
     supabase
@@ -113,6 +119,9 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
       .eq("status", "in_approval")
       .is("cases.archived_at", null)
       .order("updated_at"),
+    // Court dates nobody has written up yet: the next one ahead and any that have passed.
+    supabase.from("hearings").select("case_id, hearing_date").is("outcome", null).order("hearing_date"),
+    supabase.from("limitation_events").select("case_id, kind, event_date"),
   ]);
 
   const orgName = one(profile?.organizations as Rel<{ name: string }>)?.name;
@@ -135,6 +144,16 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
     const since = istDate(d.updated_at);
     if (!oldestApproval.has(d.case_id) || since < oldestApproval.get(d.case_id)!) oldestApproval.set(d.case_id, since);
   });
+  const nextHearing = new Map<string, string>();
+  const hearingToRecord = new Map<string, string>();
+  (openHearings ?? []).forEach((h) => {
+    const m = h.hearing_date < today ? hearingToRecord : nextHearing;
+    if (!m.has(h.case_id)) m.set(h.case_id, h.hearing_date);
+  });
+  const limitationEvents = new Map<string, LimitationEvent[]>();
+  (limitationRows ?? []).forEach((e) => {
+    limitationEvents.set(e.case_id, [...(limitationEvents.get(e.case_id) ?? []), { kind: e.kind, on: e.event_date }]);
+  });
   const alerts: Alert[] = active.flatMap((c) => {
     const notice = (c.notices ?? []).map((n) => n.sent_at).filter(Boolean).sort().at(-1) ?? null;
     const mediation = (c.mediations ?? []).find((m) => m.outcome === "pending" || m.outcome == null);
@@ -147,6 +166,9 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
       noticeSentOn: notice ? istDate(notice) : null,
       mediationAppliedOn: mediation?.applied_at ? mediation.applied_at.slice(0, 10) : null,
       approvalWaitingSince: oldestApproval.get(c.id) ?? null,
+      limitationEvents: limitationEvents.get(c.id),
+      nextHearingOn: nextHearing.get(c.id) ?? null,
+      hearingToRecordOn: hearingToRecord.get(c.id) ?? null,
     }).map((d) => ({ ...d, key: `${c.id}:${d.kind}`, caseId: c.id, caseNo: c.case_no_internal }));
     } catch {
       return [];
@@ -205,13 +227,18 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
     <>
       <TopBar org={orgName} name={profile?.full_name} roles={roleNames} />
       <main className="w-full flex-1 px-4 pb-16 pt-8 lg:px-6">
-        <h1 className="fade-up text-3xl font-semibold tracking-tight">
-          {t("Good day")}
-          {firstName ? `, ${firstName}` : ""}
-        </h1>
-        <p className="muted fade-up mt-1 text-sm">{t("Here is where your cases stand.")}</p>
+        <div className="fade-up flex flex-wrap items-center gap-3">
+          <h1 className="text-3xl font-semibold tracking-tight">
+            {t("Good day")}
+            {firstName ? `, ${firstName}` : ""}
+          </h1>
+          <span className="ml-auto">
+            <ViewToggle mode={full ? "full" : "simple"} lang={lang} />
+          </span>
+        </div>
+        <p className="muted fade-up mt-1 text-sm">{full ? t("Here is where your cases stand.") : t("Start with what needs you today. Open a case to see its next step.")}</p>
 
-        <section className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-5">
+        <section className={`mt-6 grid-cols-2 gap-4 lg:grid-cols-5 ${full ? "grid" : "hidden"}`}>
           <Stat label={t("Active cases")} value={active.length} hint={`${active.filter((c) => c.is_commercial).length} ${t("commercial (12A)")}`} delay={60} href="/dashboard#cases" />
           <Stat label={t("Claims in progress")} value={claimInPipeline} format="inr" hint={t("Not yet filed")} delay={110} />
           <Stat
@@ -227,7 +254,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
         </section>
 
         {/* Pipeline: every active case by stage; a click filters the list below */}
-        {active.length > 0 && (
+        {full && active.length > 0 && (
           <section className="glass-card fade-up mt-4 p-5" style={{ animationDelay: "300ms" }}>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="font-semibold">{t("Pipeline")}</h2>
@@ -286,9 +313,10 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
                     <th className="px-4 py-3 font-semibold">{t("Case")}</th>
                     <th className="px-4 py-3 font-semibold">{t("Borrower")}</th>
                     <th className="px-4 py-3 font-semibold">{t("Status")}</th>
-                    <th className="hidden px-4 py-3 font-semibold 2xl:table-cell">{t("Type")}</th>
-                    <th className="px-4 py-3 text-right font-semibold">{t("Claim")}</th>
-                    <th className="px-4 py-3 text-right font-semibold">{view === "archived" ? t("Archived") : t("Age")}</th>
+                    {!full && <th className="px-4 py-3 font-semibold">{t("Next step")}</th>}
+                    {full && <th className="hidden px-4 py-3 font-semibold 2xl:table-cell">{t("Type")}</th>}
+                    {full && <th className="px-4 py-3 text-right font-semibold">{t("Claim")}</th>}
+                    {full && <th className="px-4 py-3 text-right font-semibold">{view === "archived" ? t("Archived") : t("Age")}</th>}
                     <th className="px-4 py-3" />
                   </tr>
                 </thead>
@@ -312,18 +340,36 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
                         </td>
                         <td className="p-0">{cell(borrower ?? "—")}</td>
                         <td className="p-0">{cell(<span className={`pill whitespace-nowrap ${tone}`}>{label}</span>)}</td>
-                        <td className="hidden p-0 2xl:table-cell">
-                          {cell(c.is_commercial ? t("Commercial") : c.suit_type === "summary_o37" ? t("Summary (O.37)") : t("Ordinary"), "muted")}
-                        </td>
-                        <td className="p-0">
-                          {cell(c.claim_amount_paise != null ? formatINR(Number(c.claim_amount_paise)) : "—", "text-right font-medium tabular-nums")}
-                        </td>
-                        <td className="p-0">
-                          {cell(
-                            c.archived_at ? fmtDate(c.archived_at) : `${ageDays(c.created_at)} ${t("days")}`,
-                            `muted whitespace-nowrap text-right tabular-nums ${!c.archived_at && ageDays(c.created_at) > 60 && !DONE.has(c.status) ? "text-amber-600 dark:text-amber-300" : ""}`,
-                          )}
-                        </td>
+                        {!full && (
+                          <td className="p-0">
+                            {cell(
+                              c.archived_at
+                                ? t("Archived")
+                                : nextHearing.has(c.id) && (c.status === "filed" || c.status === "listed")
+                                  ? `${t("Court date")} ${fmtDate(nextHearing.get(c.id))}`
+                                  : t(STATUS_NEXT[c.status as CaseStatus] ?? ""),
+                              "muted",
+                            )}
+                          </td>
+                        )}
+                        {full && (
+                          <td className="hidden p-0 2xl:table-cell">
+                            {cell(c.is_commercial ? t("Commercial") : c.suit_type === "summary_o37" ? t("Summary (O.37)") : t("Ordinary"), "muted")}
+                          </td>
+                        )}
+                        {full && (
+                          <td className="p-0">
+                            {cell(c.claim_amount_paise != null ? formatINR(Number(c.claim_amount_paise)) : "—", "text-right font-medium tabular-nums")}
+                          </td>
+                        )}
+                        {full && (
+                          <td className="p-0">
+                            {cell(
+                              c.archived_at ? fmtDate(c.archived_at) : `${ageDays(c.created_at)} ${t("days")}`,
+                              `muted whitespace-nowrap text-right tabular-nums ${!c.archived_at && ageDays(c.created_at) > 60 && !DONE.has(c.status) ? "text-amber-600 dark:text-amber-300" : ""}`,
+                            )}
+                          </td>
+                        )}
                         <td className="rounded-r-xl px-3 py-2 text-right">
                           <Link href={href} className="btn px-3 py-1 text-xs">
                             {t("Open")} →
@@ -345,8 +391,8 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
           </section>
 
           {/* Right rail: what needs doing now */}
-          <aside className="space-y-5">
-            {isAdmin && (
+          <aside className={`space-y-5 ${full ? "" : "order-first xl:order-none"}`}>
+            {isAdmin && full && (
               <section className="glass-card fade-up p-5">
                 <h2 className="text-lg font-semibold">{t("Quick actions")}</h2>
                 <div className="mt-3 grid grid-cols-2 gap-2">
@@ -368,12 +414,12 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
 
             <section className="glass-card fade-up p-5" style={{ animationDelay: "120ms" }}>
               <div className="flex items-center justify-between gap-2">
-                <h2 className="text-lg font-semibold">{t("Needs attention")}</h2>
+                <h2 className="text-lg font-semibold">{full ? t("Needs attention") : t("Do today")}</h2>
                 {!!alerts.length && <span className="pill pill-amber">{alerts.length}</span>}
               </div>
               {alerts.length ? (
                 <ul className="mt-3 divide-y divide-current/5">
-                  {alerts.slice(0, 12).map((a) => (
+                  {alerts.slice(0, full ? 12 : 6).map((a) => (
                     <li key={a.key}>
                       <Link href={`/dashboard/cases/${a.caseId}`} className="row-hover flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl px-2 py-2.5">
                         <span className={`pill ${a.tone === "red" ? "pill-red" : "pill-amber"}`}>{daysText(a.daysLeft, t)}</span>
@@ -390,7 +436,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
               ) : (
                 <p className="muted mt-2 text-sm">{t("Nothing urgent. Limitation, 12A, notice and approval dates are all comfortable.")}</p>
               )}
-              {alerts.some((a) => a.kind === "limitation") && (
+              {full && alerts.some((a) => a.kind === "limitation") && (
                 <p className="muted mt-3 text-xs">
                   {t("Limitation watch = 3 years from NPA date − 90 days; advocate to confirm (acknowledgements extend it).")}
                 </p>

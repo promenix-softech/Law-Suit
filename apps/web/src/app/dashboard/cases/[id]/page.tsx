@@ -1,16 +1,31 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { CASE_STATUSES, courtFeeFor, formatINR, isStateCode, recoveryForum, stateName } from "@civil-suits/domain";
+import {
+  CASE_STATUSES,
+  courtFeeFor,
+  daysBetween,
+  formatINR,
+  hearingDiary,
+  isStateCode,
+  limitationWatch,
+  recoveryForum,
+  stateName,
+  type Disposal,
+  type HearingPurpose,
+} from "@civil-suits/domain";
 import { DraftPreview } from "@/components/draft-preview";
 import { TopBar } from "@/components/top-bar";
 import type { T } from "@/lib/i18n";
 import { getT } from "@/lib/lang";
 import { createClient } from "@/lib/supabase/server";
-import { caseStatus, draftStatus, fmtDate, title } from "@/lib/ui";
+import { caseStatus, draftStatus, fmtDate, title, todayIST } from "@/lib/ui";
+import { getViewMode } from "@/lib/view-mode";
+import { ViewToggle } from "@/components/view-toggle";
 import { DecideDraft, GenerateAll, MediationOutcome, MediationStart, NoticeForm, SubmitAll, SubmitDraft, UploadScan } from "./case-actions";
 import { CorrectDraft, RegenerateDraft } from "./draft-controls";
 import { EditDraftText } from "./draft-editor";
 import { FilingPanel } from "./filing-controls";
+import { HearingsPanel, LimitationPanel } from "./court-controls";
 import { ArchiveCase, RestoreCase } from "./archive-controls";
 import { checklist, nextStep, type CaseFacts } from "@/lib/next-step";
 import type { DocKind } from "./actions";
@@ -114,25 +129,43 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
+/**
+ * A card that folds. In the simple view only the section of the next step is open; a closed card
+ * shows a one-line summary. React re-applies `open` only when it changes, so a card the person
+ * opened by hand stays open across refreshes.
+ */
 function Section({
   title: t,
   subtitle,
+  summary,
+  open = true,
   children,
   delay = 0,
   id,
 }: {
   title: string;
   subtitle?: string;
+  /** Shown beside the title while the card is closed. */
+  summary?: string;
+  open?: boolean;
   children: React.ReactNode;
   delay?: number;
   id?: string;
 }) {
   return (
-    <section id={id} className="glass-card fade-up scroll-mt-24 p-6" style={{ animationDelay: `${delay}ms` }}>
-      <h2 className="text-lg font-semibold">{t}</h2>
-      {subtitle && <p className="muted mt-0.5 text-sm">{subtitle}</p>}
-      <div className="mt-4">{children}</div>
-    </section>
+    <details id={id} open={open} className="glass-card fade-up fold group scroll-mt-24" style={{ animationDelay: `${delay}ms` }}>
+      <summary className="flex cursor-pointer list-none items-center gap-3 px-6 py-4">
+        <h2 className="text-lg font-semibold">{t}</h2>
+        {summary && <span className="muted min-w-0 flex-1 truncate text-sm group-open:hidden">{summary}</span>}
+        <span className="muted ml-auto text-lg transition-transform group-open:rotate-90" aria-hidden>
+          ›
+        </span>
+      </summary>
+      <div className="px-6 pb-6">
+        {subtitle && <p className="section-sub muted -mt-2 mb-4 text-sm">{subtitle}</p>}
+        {children}
+      </div>
+    </details>
   );
 }
 
@@ -143,17 +176,18 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) redirect("/login");
   const { lang, t } = await getT();
+  const full = (await getViewMode()) === "full";
 
   const { data: c } = await supabase
     .from("cases")
     .select(
-      "id, org_id, case_no_internal, status, archived_at, archive_reason, archived_by, cnr_no, filing_no, filings(efiling_no, court_fee_paise, txn_id, filed_at, created_at), suit_type, claim_amount_paise, is_commercial, needs_12a, urgent_interim_relief, assigned_drafter, assigned_approver, courts(name, state), bank_branches(branch_name, ifsc, banks(name)), signatory_name, signatory_designation, signatory_age, penal_interest_paise, expenses_paise, parties(id, name, role, address, aadhaar_last4, position, through_capacity, through_name), loans(id, facility_type, account_last4, sanction_date, sanction_amount_paise, roi_bps, npa_date, outstanding_paise, interest_upto_date, application_date, purpose, executed_docs, tenure_months, created_at), notices(id, dispatch_mode, tracking_no, sent_at), mediations(id, authority, applied_at, outcome, report_date, report_path)",
+      "id, org_id, case_no_internal, status, created_at, archived_at, archive_reason, archived_by, cnr_no, filing_no, disposed_on, disposal, disposal_note, filings(efiling_no, court_fee_paise, txn_id, filed_at, created_at), suit_type, claim_amount_paise, is_commercial, needs_12a, urgent_interim_relief, assigned_drafter, assigned_approver, courts(name, state), bank_branches(branch_name, ifsc, banks(name)), signatory_name, signatory_designation, signatory_age, penal_interest_paise, expenses_paise, parties(id, name, role, address, aadhaar_last4, position, through_capacity, through_name), loans(id, facility_type, account_last4, sanction_date, sanction_amount_paise, roi_bps, npa_date, outstanding_paise, interest_upto_date, application_date, purpose, executed_docs, tenure_months, created_at), notices(id, dispatch_mode, tracking_no, sent_at), mediations(id, authority, applied_at, outcome, report_date, report_path)",
     )
     .eq("id", id)
     .maybeSingle();
   if (!c) notFound();
 
-  const [{ data: profile }, { data: roles }, { data: docs }, { data: drafts }, { data: jobRows }] = await Promise.all([
+  const [{ data: profile }, { data: roles }, { data: docs }, { data: drafts }, { data: jobRows }, { data: hearingRows }, { data: limitationRows }] = await Promise.all([
     supabase.from("profiles").select("full_name, organizations(name)").eq("id", auth.user.id).single(),
     supabase.from("user_roles").select("role").eq("user_id", auth.user.id),
     supabase.from("documents").select("id, storage_path, created_at").eq("case_id", id).order("created_at", { ascending: false }),
@@ -170,6 +204,8 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
       .eq("case_id", id)
       .order("created_at", { ascending: false })
       .limit(30),
+    supabase.from("hearings").select("id, hearing_date, purpose, outcome").eq("case_id", id).order("hearing_date"),
+    supabase.from("limitation_events").select("id, kind, event_date, note").eq("case_id", id).order("event_date"),
   ]);
   const jobs = (jobRows ?? []) as JobRow[];
   const pdfJob = (versionId: string) => jobs.find((j) => j.kind === "draft_pdf" && j.payload.draft_version_id === versionId);
@@ -321,6 +357,30 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
       : mediations.some((m) => m.outcome === "failed" || m.outcome === "non_starter")
         ? "failed"
         : "pending";
+  // Court dates and the limitation watch: worked out in packages/domain, never by hand.
+  const today = todayIST();
+  const inCourt = ["filed", "listed", "disposed"].includes(c.status);
+  const hearings = (hearingRows ?? []).map((h) => ({
+    id: h.id as string,
+    date: h.hearing_date as string,
+    purpose: h.purpose as HearingPurpose,
+    outcome: h.outcome as string | null,
+  }));
+  const diary = hearingDiary(hearings, today);
+  const limitationEvents = (limitationRows ?? []).map((e) => ({
+    id: e.id as string,
+    kind: e.kind as "acknowledgment" | "part_payment",
+    on: e.event_date as string,
+    note: e.note as string | null,
+  }));
+  const watch = (() => {
+    try {
+      return loan?.npa_date ? limitationWatch(loan.npa_date, limitationEvents) : null;
+    } catch {
+      return null;
+    }
+  })();
+
   const facts: CaseFacts = {
     status: c.status as CaseFacts["status"],
     archived,
@@ -346,11 +406,18 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
     // Only a bundle built after the latest approval counts (the database checks the same).
     bundleBuilt: bundles.some((b) => b.status === "done" && Date.parse(b.created_at) >= latestApprovalAt),
     hasCnr: !!c.cnr_no,
+    nextHearing: diary.next?.date ?? null,
+    hearingsToRecord: diary.toRecord.length,
     canEdit,
     awaitingMe: isApprover ? allDrafts.filter((d) => d.status === "in_approval" && d.created_by !== auth.user.id).length : 0,
   };
   const step = nextStep(facts);
   const checks = checklist(facts);
+  // Simple view: only the next step's card is open. Full view: everything.
+  const openFor = (sectionId: string) => full || step.anchor === sectionId;
+  const stepList = STEPS.filter((x) => x !== "mediation_12a" || c.needs_12a);
+  const stepNo = inCourt ? stepList.length : Math.max(0, stepList.findIndex((x) => x === c.status)) + 1;
+  const openTasks = (caseTasks ?? []).filter((x) => x.status !== "done" && x.status !== "cancelled").length;
   const WHO: Record<string, string> = { you: "Your turn", approver: "Approver's turn", drafter: "Drafter's turn", field: "Field staff", nobody: "" };
 
   return (
@@ -360,7 +427,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
         name={profile?.full_name}
         roles={roleNames}
       />
-      <main className="w-full flex-1 lg:px-6 space-y-5 px-4 pb-16 pt-8">
+      <main data-view={full ? "full" : "simple"} className="w-full flex-1 lg:px-6 space-y-5 px-4 pb-16 pt-8">
         <div className="fade-up">
           <Link href="/dashboard" className="muted text-sm hover:underline">
             ← All cases
@@ -370,6 +437,9 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
             <span className={`pill ${statusTone}`}>{statusLabel}</span>
             {c.is_commercial && <span className="pill pill-violet">Commercial</span>}
             {c.cnr_no && <span className="pill pill-green font-mono tracking-wider">CNR {c.cnr_no}</span>}
+            <span className="ml-auto">
+              <ViewToggle mode={full ? "full" : "simple"} lang={lang} />
+            </span>
           </div>
           <p className="muted mt-1 text-sm">
             {parties[0]?.name ?? "—"} · {one(branch?.banks ?? null)?.name ?? "—"}, {branch?.branch_name ?? "—"}
@@ -391,9 +461,23 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
           </div>
         )}
 
-        <div className="glass-card fade-up overflow-x-auto p-4" style={{ animationDelay: "60ms" }}>
-          <Stepper status={c.status} needs12A={c.needs_12a} t={t} />
-        </div>
+        {full ? (
+          <div className="glass-card fade-up overflow-x-auto p-4" style={{ animationDelay: "60ms" }}>
+            <Stepper status={c.status} needs12A={c.needs_12a} t={t} />
+          </div>
+        ) : (
+          <div className="fade-up flex items-center gap-3 text-sm" style={{ animationDelay: "60ms" }}>
+            <span className="muted whitespace-nowrap tabular-nums">
+              {t("Step")} {stepNo} / {stepList.length}
+            </span>
+            <div className="h-2 flex-1 overflow-hidden rounded-full bg-current/10">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-violet-500"
+                style={{ width: `${(stepNo / stepList.length) * 100}%` }}
+              />
+            </div>
+          </div>
+        )}
 
         {/* What now: the one next step, worked out in code from the case, and the milestones so far */}
         <div className="fade-up grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto]" style={{ animationDelay: "80ms" }}>
@@ -414,12 +498,13 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
               <span className="mt-0.5 block text-lg font-semibold">
                 {t(step.title)}
                 {step.count != null && <span className="tabular-nums"> ({step.count})</span>}
+                {step.date && <span> · {fmtDate(step.date)}</span>}
               </span>
               {step.detail && <span className="muted block text-sm">{step.detail.split(", ").map((m) => t(m)).join(", ")}</span>}
             </span>
             {step.tone === "action" && <span className="btn btn-primary shrink-0 px-4 py-2 text-sm transition group-hover:translate-x-0.5">{t("Go")} →</span>}
           </a>
-          <ol className="glass-card flex flex-wrap items-center gap-x-4 gap-y-2 p-4 text-sm lg:max-w-xl">
+          <ol className={`glass-card flex-wrap items-center gap-x-4 gap-y-2 p-4 text-sm lg:max-w-xl ${full ? "flex" : "hidden"}`}>
             {checks.map((ci) => (
               <li key={ci.label}>
                 <a href={`#${ci.anchor}`} className={`inline-flex items-center gap-1.5 hover:underline ${ci.done ? "" : "muted"}`}>
@@ -433,8 +518,15 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
           </ol>
         </div>
 
-        <div id="summary" className="grid scroll-mt-24 gap-5 md:grid-cols-3">
-          <div className="glass-card fade-up p-6 md:col-span-1" style={{ animationDelay: "100ms" }}>
+        <Section
+          id="summary"
+          title={t("Case details")}
+          summary={`${claim == null ? "—" : formatINR(claim)} · ${(one(c.courts) as { name: string } | null)?.name ?? "—"}`}
+          open={openFor("summary")}
+          delay={100}
+        >
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="rounded-2xl bg-white/20 p-5 dark:bg-white/5 md:col-span-1">
             <p className="label">Claim incl. interest</p>
             <p className="gradient-text mt-1 text-3xl font-semibold tracking-tight">{claim == null ? "—" : formatINR(claim)}</p>
             <dl className="mt-5 grid grid-cols-2 gap-4">
@@ -454,10 +546,10 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
               )}
               <Field label="Court">{(one(c.courts) as { name: string } | null)?.name ?? "—"}</Field>
             </dl>
-            <p className="muted mt-4 text-xs">Computed in code from the loan data — never by AI.</p>
+            <p className="section-sub muted mt-4 text-xs">Computed in code from the loan data — never by AI.</p>
           </div>
 
-          <div className="glass-card fade-up p-6" style={{ animationDelay: "140ms" }}>
+          <div className="rounded-2xl bg-white/20 p-5 dark:bg-white/5">
             <p className="label">Loan</p>
             {loan ? (
               <dl className="mt-3 grid grid-cols-2 gap-4">
@@ -475,7 +567,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
             )}
           </div>
 
-          <div className="glass-card fade-up p-6" style={{ animationDelay: "180ms" }}>
+          <div className="rounded-2xl bg-white/20 p-5 dark:bg-white/5">
             <p className="label">Parties</p>
             <ul className="mt-3 space-y-3">
               {parties.map((p) => (
@@ -499,9 +591,17 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
             </ul>
           </div>
         </div>
+        </Section>
 
         {(canEdit || (caseTasks?.length ?? 0) > 0) && (
-          <Section id="tasks" title={t("Field tasks")} subtitle="Documents, notary, e-filing, dispatch — field staff update from their phone" delay={190}>
+          <Section
+            id="tasks"
+            title={t("Field tasks")}
+            subtitle="Documents, notary, e-filing, dispatch — field staff update from their phone"
+            summary={`${openTasks} ${t("open")}`}
+            open={openFor("tasks")}
+            delay={190}
+          >
             {caseTasks?.length ? (
               <ul className="mb-4 space-y-2 text-sm">
                 {caseTasks.map((t) => (
@@ -528,7 +628,13 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
           </Section>
         )}
 
-        <Section title={t("Team")} subtitle="Maker–checker: the approver can never be the drafter" delay={200}>
+        <Section
+          title={t("Team")}
+          subtitle="Maker–checker: the approver can never be the drafter"
+          summary={`${t("Drafter")}: ${nameOf(c.assigned_drafter)} · ${t("Approver")}: ${nameOf(c.assigned_approver)}`}
+          open={full}
+          delay={200}
+        >
           {roleNames.includes("admin") ? (
             <AssignForm
               caseId={c.id}
@@ -564,7 +670,14 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
         </Section>
 
         <div className="grid gap-5 lg:grid-cols-2">
-          <Section id="notice" title={t("Demand notice dispatch")} subtitle="Record how and when the notice was sent" delay={220}>
+          <Section
+            id="notice"
+            title={t("Demand notice dispatch")}
+            subtitle="Record how and when the notice was sent"
+            summary={notices.length ? `${t("Sent")} ${fmtDate(notices[0]?.sent_at)}` : t("Not sent yet")}
+            open={openFor("notice")}
+            delay={220}
+          >
             <ul className="space-y-2">
               {notices.map((n) => (
                 <li key={n.id} className="flex items-center justify-between rounded-xl bg-white/20 px-3 py-2 text-sm dark:bg-white/5">
@@ -584,7 +697,14 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
           </Section>
 
           {c.needs_12a ? (
-            <Section id="mediation" title={t("Sec 12A pre-institution mediation")} subtitle="Mandatory before filing a commercial suit" delay={260}>
+            <Section
+              id="mediation"
+              title={t("Sec 12A pre-institution mediation")}
+              subtitle="Mandatory before filing a commercial suit"
+              summary={t({ none: "Not started", pending: "Pending", failed: "Report received", settled: "Settled" }[mediationState])}
+              open={openFor("mediation")}
+              delay={260}
+            >
               {mediations.map((m) => (
                 <div key={m.id} className="mb-3 rounded-xl bg-white/20 px-3 py-2 text-sm dark:bg-white/5">
                   <div className="flex items-center justify-between">
@@ -614,14 +734,46 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
               ))}
               {!mediations.length && (canEdit ? <MediationStart caseId={c.id} /> : <p className="muted text-sm">Not started.</p>)}
             </Section>
-          ) : (
+          ) : full ? (
             <Section id="mediation" title={t("Sec 12A pre-institution mediation")} delay={260}>
               <p className="muted text-sm">Not required for this case.</p>
             </Section>
-          )}
+          ) : null}
         </div>
 
-        <Section id="documents" title={`${t("Documents")} (${docs?.length ?? 0})`} subtitle="Scans are stored privately; links expire in 5 minutes" delay={300}>
+        {(!inCourt || limitationEvents.length > 0) && (
+          <Section
+            id="limitation"
+            title={t("Limitation")}
+            summary={watch ? `${t("File the suit before")} ${fmtDate(watch.due)}` : t("NPA date missing")}
+            open={openFor("limitation")}
+            delay={280}
+          >
+            <LimitationPanel
+              lang={lang}
+              v={{
+                caseId: c.id,
+                canEdit,
+                today,
+                due: watch?.due ?? null,
+                daysLeft: watch && !inCourt ? daysBetween(today, watch.due) : null,
+                events: limitationEvents.map((e) => ({
+                  ...e,
+                  late: !!watch?.late.some((l) => l.on === e.on && l.kind === e.kind),
+                })),
+              }}
+            />
+          </Section>
+        )}
+
+        <Section
+          id="documents"
+          title={t("Documents")}
+          subtitle="Scans are stored privately; links expire in 5 minutes"
+          summary={`${docs?.length ?? 0} ${t("scans")}`}
+          open={openFor("documents")}
+          delay={300}
+        >
           {canEdit && <UploadScan orgId={c.org_id} caseId={c.id} lang={lang} />}
           <ul className="mt-4 space-y-2">
             {docs?.map((d) => (
@@ -653,6 +805,8 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
             id="extraction"
             title={t("Extracted data — review")}
             subtitle="Read from the scans by Sarvam. Check each value against the source, then verify. Only verified values reach the case."
+            summary={facts.unverified ? `${facts.unverified} ${t("to check")}` : t("All verified")}
+            open={openFor("extraction")}
             delay={320}
           >
             <ExtractionReview rows={reviewRows} caseId={c.id} canEdit={canEdit} lang={lang} />
@@ -664,6 +818,8 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
             id="particulars"
             title={t("Suit particulars")}
             subtitle="Printed in the plaint, decree, list of documents and affidavit in the office format · amounts totalled in code"
+            summary={missing.length ? `${t("Missing")}: ${missing.map((m) => t(m)).join(", ")}` : t("Complete")}
+            open={openFor("particulars")}
             delay={330}
           >
             <SuitParticulars
@@ -693,7 +849,14 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
           </Section>
         )}
 
-        <Section id="drafts" title={t("Drafts")} subtitle={t("Generated from verified case data · approval enforced by the database")} delay={340}>
+        <Section
+          id="drafts"
+          title={t("Drafts")}
+          subtitle={t("Generated from verified case data · approval enforced by the database")}
+          summary={`${facts.papers.approved} / ${facts.papers.expected} ${t("approved")}`}
+          open={openFor("drafts")}
+          delay={340}
+        >
           {canEdit && (
             <div className="mb-5 flex flex-wrap items-start gap-3">
               <GenerateAll
@@ -842,6 +1005,8 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
           id="bundle"
           title={t("E-filing bundle")}
           subtitle="Index → plaint → annexures → vakalatnama → affidavit / SOT · one PDF/A-2b, A4, bookmarked, ≤ 25 MB"
+          summary={facts.bundleBuilt ? t("Built") : t("Not built yet")}
+          open={openFor("bundle")}
           delay={380}
         >
           {BUNDLE_READY.includes(c.status) ? (
@@ -889,7 +1054,14 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
         </Section>
 
         {[...BUNDLE_READY, "listed", "disposed"].includes(c.status) && (
-          <Section id="filing" title={t("Filing")} subtitle={t("After approval: notary, e-filing and the court's CNR")} delay={400}>
+          <Section
+            id="filing"
+            title={t("Filing")}
+            subtitle={t("After approval: notary, e-filing and the court's CNR")}
+            summary={c.cnr_no ? `CNR ${c.cnr_no}` : statusLabel}
+            open={openFor("filing")}
+            delay={400}
+          >
             <FilingPanel
               lang={lang}
               v={{
@@ -919,14 +1091,45 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
           </Section>
         )}
 
+        {inCourt && (
+          <Section
+            id="hearings"
+            title={t("Hearings")}
+            summary={
+              c.status === "disposed"
+                ? t("Disposed")
+                : diary.toRecord.length
+                  ? `${diary.toRecord.length} ${t("to write up")}`
+                  : diary.next
+                    ? `${t("Next date")} ${fmtDate(diary.next.date)}`
+                    : t("No date yet")
+            }
+            open={openFor("hearings")}
+            delay={420}
+          >
+            <HearingsPanel
+              lang={lang}
+              v={{
+                caseId: c.id,
+                status: c.status,
+                canEdit,
+                today,
+                rows: hearings,
+                disposal:
+                  c.disposed_on && c.disposal ? { on: c.disposed_on, result: c.disposal as Disposal, note: c.disposal_note } : null,
+              }}
+            />
+          </Section>
+        )}
+
         {isAdmin && !archived && (
-          <section id="archive" className="fade-up scroll-mt-24 rounded-3xl border border-red-500/20 bg-red-500/5 p-6">
-            <h2 className="text-lg font-semibold">{t("Archive")}</h2>
+          <details id="archive" open={full} className="fade-up fold scroll-mt-24 rounded-3xl border border-red-500/20 bg-red-500/5 p-6">
+            <summary className="cursor-pointer list-none text-lg font-semibold">{t("Archive")}</summary>
             <p className="muted mt-0.5 text-sm">{t("Cases are never deleted. An archived case can be restored by an admin.")}</p>
             <div className="mt-4">
               <ArchiveCase caseId={c.id} caseNo={c.case_no_internal} lang={lang} />
             </div>
-          </section>
+          </details>
         )}
       </main>
     </>

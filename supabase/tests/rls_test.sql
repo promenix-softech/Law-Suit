@@ -1811,6 +1811,12 @@ select pg_temp.expect((select court_fee_paise from public.filings where case_id 
   'an admin can correct a filing record');
 do $$
 begin
+  update public.filings set filed_at = '1990-01-01' where case_id = 'c0000000-0000-0000-0000-000000000002';
+  raise exception 'FAIL: admin back-dated a filing to 1990';
+exception when check_violation then raise notice 'ok - an admin''s correction keeps the filing date in range';
+end $$;
+do $$
+begin
   update public.filings set status = 'withdrawn' where case_id = 'c0000000-0000-0000-0000-000000000002';
   raise exception 'FAIL: filing withdrawn while the case is filed';
 exception when check_violation then raise notice 'ok - a filed case keeps its filing record';
@@ -1830,6 +1836,169 @@ begin
   update public.cases set status = 'filed' where id = 'c0000000-0000-0000-0000-000000000002';
   raise exception 'FAIL: filed again on a withdrawn filing';
 exception when check_violation then raise notice 'ok - a withdrawn filing does not count';
+end $$;
+rollback;
+
+-- hearings, disposal and limitation events (20261109000000)
+create or replace function pg_temp.ist_today() returns date language sql as $$
+  select (now() at time zone 'Asia/Kolkata')::date
+$$;
+begin;
+update public.cases set status = 'filed' where id = 'c0000000-0000-0000-0000-000000000002';
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000d2');
+do $$
+begin
+  update public.cases set status = 'listed' where id = 'c0000000-0000-0000-0000-000000000002';
+  raise exception 'FAIL: listed without a hearing date';
+exception when check_violation then raise notice 'ok - a case is listed only with a hearing date';
+end $$;
+insert into public.hearings (id, org_id, case_id, hearing_date, purpose, created_by, created_at) values
+  ('a1000000-0000-0000-0000-000000000002', '11111111-1111-1111-1111-111111111111',
+   'c0000000-0000-0000-0000-000000000002', pg_temp.ist_today() + 10, 'first_date',
+   '00000000-0000-0000-0000-0000000000d2', '2100-01-01');
+select pg_temp.expect((select status from public.cases where id = 'c0000000-0000-0000-0000-000000000002') = 'listed'
+  and (select created_at from public.hearings where id = 'a1000000-0000-0000-0000-000000000002') < '2100-01-01',
+  'the first hearing date lists the case; the database sets when it was entered');
+do $$
+begin
+  update public.hearings set outcome = 'Decreed' where id = 'a1000000-0000-0000-0000-000000000002';
+  raise exception 'FAIL: outcome before the date';
+exception when check_violation then raise notice 'ok - an outcome is written only once the date has come';
+end $$;
+do $$
+begin
+  insert into public.hearings (org_id, case_id, hearing_date, purpose, created_by)
+  values ('11111111-1111-1111-1111-111111111111', 'c0000000-0000-0000-0000-000000000002', pg_temp.ist_today() + 900, 'other',
+          '00000000-0000-0000-0000-0000000000d2');
+  raise exception 'FAIL: hearing three years ahead';
+exception when check_violation then raise notice 'ok - a hearing date is within two years';
+end $$;
+do $$
+begin
+  insert into public.hearings (org_id, case_id, hearing_date, purpose, created_by)
+  values ('11111111-1111-1111-1111-111111111111', 'c0000000-0000-0000-0000-000000000002', date '2001-01-01', 'other',
+          '00000000-0000-0000-0000-0000000000d2');
+  raise exception 'FAIL: hearing before the case existed';
+exception when check_violation then raise notice 'ok - a hearing date is not before the case was opened';
+end $$;
+do $$
+declare u text;
+begin
+  foreach u in array array['00000000-0000-0000-0000-0000000000d1', '00000000-0000-0000-0000-0000000000f1',
+                           '00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-0000000000b9'] loop
+    perform set_config('request.jwt.claim.sub', u, true);
+    begin
+      insert into public.hearings (org_id, case_id, hearing_date, purpose, created_by)
+      values ('11111111-1111-1111-1111-111111111111', 'c0000000-0000-0000-0000-000000000002', pg_temp.ist_today() + 20, 'other', u::uuid);
+      raise exception 'FAIL: % added a hearing date', u;
+    exception when insufficient_privilege or check_violation then null;
+    end;
+    begin
+      perform public.record_hearing('a1000000-0000-0000-0000-000000000002', 'x', null, null);
+      raise exception 'FAIL: % wrote up a hearing', u;
+    exception when insufficient_privilege or check_violation then null;
+    end;
+  end loop;
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000b9', true);
+  if (select count(*) from public.hearings) <> 0 then raise exception 'FAIL: another office reads the hearing diary'; end if;
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000d2', true);
+  raise notice 'ok - only the assigned drafter (or an admin) keeps the hearing diary; other offices see nothing';
+end $$;
+reset role;
+insert into public.hearings (id, org_id, case_id, hearing_date, purpose, created_by) values
+  ('a1000000-0000-0000-0000-000000000003', '11111111-1111-1111-1111-111111111111',
+   'c0000000-0000-0000-0000-000000000002', pg_temp.ist_today() - 3, 'summons', '00000000-0000-0000-0000-0000000000d2');
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000d2');
+select public.record_hearing('a1000000-0000-0000-0000-000000000003', '  Summons served; adjourned  ', pg_temp.ist_today() + 30, 'written_statement');
+select pg_temp.expect(
+  (select outcome from public.hearings where id = 'a1000000-0000-0000-0000-000000000003') = 'Summons served; adjourned'
+  and (select count(*) from public.hearings where case_id = 'c0000000-0000-0000-0000-000000000002'
+        and hearing_date = pg_temp.ist_today() + 30 and purpose = 'written_statement') = 1,
+  'writing up a date and entering the next one happen together');
+do $$
+begin
+  delete from public.hearings where id = 'a1000000-0000-0000-0000-000000000003';
+  raise exception 'FAIL: written-up hearing deleted';
+exception when insufficient_privilege then raise notice 'ok - a written-up hearing cannot be deleted';
+end $$;
+do $$
+begin
+  update public.hearings set hearing_date = pg_temp.ist_today() - 1 where id = 'a1000000-0000-0000-0000-000000000003';
+  raise exception 'FAIL: written-up hearing re-dated';
+exception when insufficient_privilege then raise notice 'ok - a written-up hearing keeps its date';
+end $$;
+do $$
+begin
+  update public.cases set status = 'disposed' where id = 'c0000000-0000-0000-0000-000000000002';
+  raise exception 'FAIL: disposed without date and result';
+exception when check_violation then raise notice 'ok - a disposal needs its date and result';
+end $$;
+do $$
+begin
+  update public.cases set status = 'disposed', disposal = 'decreed', disposed_on = pg_temp.ist_today() + 2
+   where id = 'c0000000-0000-0000-0000-000000000002';
+  raise exception 'FAIL: disposal dated in the future';
+exception when check_violation then raise notice 'ok - a disposal is not dated in the future';
+end $$;
+do $$
+begin
+  update public.cases set disposal = 'decreed', disposed_on = pg_temp.ist_today() where id = 'c0000000-0000-0000-0000-000000000002';
+  raise exception 'FAIL: disposal details on a case still in court';
+exception when check_violation then raise notice 'ok - disposal details belong to a disposed case';
+end $$;
+update public.cases set status = 'disposed', disposal = 'decreed', disposed_on = pg_temp.ist_today()
+ where id = 'c0000000-0000-0000-0000-000000000002';
+select pg_temp.expect((select status from public.cases where id = 'c0000000-0000-0000-0000-000000000002') = 'disposed',
+  'the assigned drafter records the disposal');
+do $$
+begin
+  update public.cases set disposal = 'dismissed' where id = 'c0000000-0000-0000-0000-000000000002';
+  raise exception 'FAIL: drafter changed a recorded disposal';
+exception when insufficient_privilege then raise notice 'ok - only an admin changes a recorded disposal';
+end $$;
+do $$
+begin
+  insert into public.hearings (org_id, case_id, hearing_date, purpose, created_by)
+  values ('11111111-1111-1111-1111-111111111111', 'c0000000-0000-0000-0000-000000000002', pg_temp.ist_today() + 40, 'other',
+          '00000000-0000-0000-0000-0000000000d2');
+  raise exception 'FAIL: hearing date on a disposed case';
+exception when insufficient_privilege then raise notice 'ok - a disposed case takes no more hearing dates';
+end $$;
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+update public.cases set disposal = 'settled' where id = 'c0000000-0000-0000-0000-000000000002';
+select pg_temp.expect((select disposal from public.cases where id = 'c0000000-0000-0000-0000-000000000002') = 'settled',
+  'an admin can correct a recorded disposal');
+rollback;
+
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000d2');
+insert into public.limitation_events (org_id, case_id, kind, event_date, note, created_by) values
+  ('11111111-1111-1111-1111-111111111111', 'c0000000-0000-0000-0000-000000000002', 'acknowledgment',
+   pg_temp.ist_today() - 30, 'Balance confirmation letter', '00000000-0000-0000-0000-0000000000d2');
+select pg_temp.expect((select count(*) from public.limitation_events) = 1, 'the assigned drafter records an acknowledgement');
+do $$
+begin
+  insert into public.limitation_events (org_id, case_id, kind, event_date, created_by) values
+    ('11111111-1111-1111-1111-111111111111', 'c0000000-0000-0000-0000-000000000002', 'part_payment',
+     pg_temp.ist_today() + 1, '00000000-0000-0000-0000-0000000000d2');
+  raise exception 'FAIL: part-payment dated tomorrow';
+exception when check_violation then raise notice 'ok - an acknowledgement or payment is not dated in the future';
+end $$;
+do $$
+declare u text;
+begin
+  foreach u in array array['00000000-0000-0000-0000-0000000000d1', '00000000-0000-0000-0000-0000000000f1',
+                           '00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-0000000000b9'] loop
+    perform set_config('request.jwt.claim.sub', u, true);
+    begin
+      insert into public.limitation_events (org_id, case_id, kind, event_date, created_by) values
+        ('11111111-1111-1111-1111-111111111111', 'c0000000-0000-0000-0000-000000000002', 'part_payment', pg_temp.ist_today() - 1, u::uuid);
+      raise exception 'FAIL: % recorded a limitation event', u;
+    exception when insufficient_privilege or check_violation then null;
+    end;
+  end loop;
+  if (select count(*) from public.limitation_events) <> 0 then raise exception 'FAIL: another office reads limitation events'; end if;
+  raise notice 'ok - limitation events are written by the case''s editor and hidden from other offices';
 end $$;
 rollback;
 
