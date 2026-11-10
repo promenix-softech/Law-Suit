@@ -65,6 +65,12 @@ export function nextStep(f: CaseFacts): Step {
   }
   if (f.status === "notary_stamp") return doIt(f, { id: "efiling-ready", title: "Mark the case ready for e-filing", anchor: "filing" });
   if (f.status === "efiling_ready") return doIt(f, { id: "record-filing", title: "Record the filing: e-filing number, date and court fee", anchor: "filing" });
+  // An approved case is past intake, whatever its scans look like: on to the bundle and the notary.
+  if (f.status === "approved") {
+    return f.bundleBuilt
+      ? doIt(f, { id: "notary", title: "Notary and stamp, then mark it done", anchor: "filing" })
+      : doIt(f, { id: "bundle", title: "Build the e-filing bundle", anchor: "bundle" });
+  }
   if (f.scans === 0) return doIt(f, { id: "upload", title: "Upload the bank's loan file", anchor: "documents" });
   if (f.readingNow) return { id: "reading", title: "AI is reading the scans — about a minute", anchor: "documents", who: "nobody", tone: "wait" };
   if (f.extracted === 0) return doIt(f, { id: "read", title: "Read the scans with AI", anchor: "documents" });

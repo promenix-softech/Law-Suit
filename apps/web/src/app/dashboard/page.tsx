@@ -295,7 +295,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
 
         <div className="mt-8 grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
           {/* Cases: every row opens the case */}
-          <section id="cases">
+          <section id="cases" className="min-w-0">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="text-lg font-semibold">{t("Cases")}</h2>
               <div className="flex flex-wrap gap-1.5">
@@ -307,11 +307,11 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
               </div>
             </div>
             <div className="glass-card mt-3 overflow-x-auto p-2">
-              <table className="w-full min-w-[640px] text-left text-sm">
+              <table className={`w-full text-left text-sm ${full ? "min-w-[640px]" : "min-w-[520px]"}`}>
                 <thead>
                   <tr className="label">
                     <th className="px-4 py-3 font-semibold">{t("Case")}</th>
-                    <th className="px-4 py-3 font-semibold">{t("Borrower")}</th>
+                    {full && <th className="px-4 py-3 font-semibold">{t("Borrower")}</th>}
                     <th className="px-4 py-3 font-semibold">{t("Status")}</th>
                     {!full && <th className="px-4 py-3 font-semibold">{t("Next step")}</th>}
                     {full && <th className="hidden px-4 py-3 font-semibold 2xl:table-cell">{t("Type")}</th>}
@@ -336,9 +336,10 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
                         <td className="rounded-l-xl p-0">
                           <Link href={href} className="block whitespace-nowrap px-4 py-3 font-semibold">
                             {c.case_no_internal}
+                            {!full && <span className="muted block max-w-56 truncate text-xs font-normal">{borrower ?? "—"}</span>}
                           </Link>
                         </td>
-                        <td className="p-0">{cell(borrower ?? "—")}</td>
+                        {full && <td className="p-0">{cell(borrower ?? "—")}</td>}
                         <td className="p-0">{cell(<span className={`pill whitespace-nowrap ${tone}`}>{label}</span>)}</td>
                         {!full && (
                           <td className="p-0">
@@ -371,7 +372,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
                           </td>
                         )}
                         <td className="rounded-r-xl px-3 py-2 text-right">
-                          <Link href={href} className="btn px-3 py-1 text-xs">
+                          <Link href={href} className="btn whitespace-nowrap px-3 py-1 text-xs">
                             {t("Open")} →
                           </Link>
                         </td>
@@ -391,7 +392,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
           </section>
 
           {/* Right rail: what needs doing now */}
-          <aside className={`space-y-5 ${full ? "" : "order-first xl:order-none"}`}>
+          <aside className={`min-w-0 space-y-5 ${full ? "" : "order-first xl:order-none"}`}>
             {isAdmin && full && (
               <section className="glass-card fade-up p-5">
                 <h2 className="text-lg font-semibold">{t("Quick actions")}</h2>

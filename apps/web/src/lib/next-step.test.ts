@@ -58,6 +58,11 @@ describe("nextStep", () => {
     expect(nextStep(f({ status: "disposed", hasCnr: true, hearingsToRecord: 2 }))).toMatchObject({ id: "disposed", tone: "done" });
   });
 
+  it("never sends an approved case back to intake", () => {
+    expect(nextStep(f({ status: "approved", scans: 0, extracted: 0 })).id).toBe("bundle");
+    expect(nextStep(f({ status: "approved", scans: 0, bundleBuilt: true })).id).toBe("notary");
+  });
+
   it("asks for 12A mediation only when the suit needs it", () => {
     expect(nextStep(f({ needs12A: true })).id).toBe("12a");
     expect(nextStep(f({ needs12A: true, mediation: "pending" })).id).toBe("12a-outcome");
