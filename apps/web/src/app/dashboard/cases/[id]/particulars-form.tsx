@@ -49,6 +49,22 @@ export function SuitParticulars({ initial, partyNames, loanNames }: Props) {
         </div>
       )}
 
+      {form.parties.length > 0 && (
+        <details className="space-y-2">
+          <summary className="label cursor-pointer">मराठी नाव व पत्ता — for the Marathi demand notice (optional)</summary>
+          <p className="muted text-xs">Type them as they should be printed. Left empty, the notice prints the name and address from the bank&apos;s file.</p>
+          {form.parties.map((p, i) => (
+            <div key={p.id} className="grid items-end gap-3 sm:grid-cols-3" lang="mr">
+              {field(`${partyNames[i]} — नाव`, p.nameMr ?? "", (v) => set("parties", form.parties.map((x, j) => (j === i ? { ...x, nameMr: v } : x))))}
+              {field("पत्ता", p.addressMr ?? "", (v) => set("parties", form.parties.map((x, j) => (j === i ? { ...x, addressMr: v } : x))))}
+              {p.throughName
+                ? field(`तर्फे (${p.throughName}) — नाव`, p.throughNameMr ?? "", (v) => set("parties", form.parties.map((x, j) => (j === i ? { ...x, throughNameMr: v } : x))))
+                : <span />}
+            </div>
+          ))}
+        </details>
+      )}
+
       {form.loans.map((l, i) => (
         <div key={l.id} className="glass-card space-y-3 p-4">
           <p className="font-semibold">{loanNames[i]}</p>

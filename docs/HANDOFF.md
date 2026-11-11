@@ -16,7 +16,10 @@ a person types them, code never transliterates.
   checks, RLS test that an editor can set them); inputs in the Suit particulars form;
   `Defendant.nameMr / addressMr / through.nameMr` in `packages/templates`; `demandNoticeMr.ts`
   prints the Marathi value when present, else the bank-record value; golden + unit tests.
-- Stopped at: branch restarted from the merged base; nothing written yet.
+- Stopped at: code, migration `20261112000000_party_marathi` and tests are pushed (`pnpm check`
+  and `pnpm test:db` pass). Left: `security-reviewer` sign-off (new PII columns on `parties`),
+  a line in `docs/STATUS.md`, then the owner: apply the migration to the demo database
+  **before** the merge (the case page selects the new columns), pull request, merge.
 
 ## Needs the owner
 - Delete the Satyam demo office: SQL was given in chat (Supabase SQL Editor); remove

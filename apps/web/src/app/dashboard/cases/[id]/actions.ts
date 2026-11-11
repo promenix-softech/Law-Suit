@@ -91,7 +91,7 @@ export async function recordUpload(input: z.input<typeof UploadInput>): Promise<
 }
 
 const CASE_SELECT =
-  "id, org_id, case_no_internal, status, needs_12a, suit_type, is_commercial, urgent_interim_relief, claim_amount_paise, signatory_name, signatory_designation, signatory_age, penal_interest_paise, expenses_paise, organizations(name), courts(name, district, court_type, state, header_template), bank_branches(branch_name, address, banks(name)), parties(name, role, address, position, through_capacity, through_name), loans(facility_type, account_last4, sanction_date, sanction_amount_paise, roi_bps, npa_date, outstanding_paise, interest_upto_date, application_date, purpose, executed_docs, tenure_months, created_at), notices(sent_at), mediations(outcome, report_path, report_date)";
+  "id, org_id, case_no_internal, status, needs_12a, suit_type, is_commercial, urgent_interim_relief, claim_amount_paise, signatory_name, signatory_designation, signatory_age, penal_interest_paise, expenses_paise, organizations(name), courts(name, district, court_type, state, header_template), bank_branches(branch_name, address, banks(name)), parties(name, role, address, position, through_capacity, through_name, name_mr, address_mr, through_name_mr), loans(facility_type, account_last4, sanction_date, sanction_amount_paise, roi_bps, npa_date, outstanding_paise, interest_upto_date, application_date, purpose, executed_docs, tenure_months, created_at), notices(sent_at), mediations(outcome, report_path, report_date)";
 
 type CaseRow = {
   id: string;
@@ -107,6 +107,9 @@ type PartyRow = {
   position: number;
   through_capacity: string | null;
   through_name: string | null;
+  name_mr: string | null;
+  address_mr: string | null;
+  through_name_mr: string | null;
 };
 type LoanRow = {
   facility_type: string | null;
@@ -169,7 +172,9 @@ function buildModel(kind: DocKind, c: CaseDetail, version: number, config: Offic
     name: p.name,
     role: p.role,
     address: p.address,
-    through: p.through_capacity && p.through_name ? { capacity: p.through_capacity, name: p.through_name } : null,
+    through: p.through_capacity && p.through_name ? { capacity: p.through_capacity, name: p.through_name, nameMr: p.through_name_mr } : null,
+    nameMr: p.name_mr,
+    addressMr: p.address_mr,
   }));
   // The full account number stays encrypted; drafts show the last four digits.
   const facilities: Facility[] = loans.map((l) => ({

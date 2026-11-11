@@ -8,8 +8,9 @@ import type { Block, DocModel } from "./model";
  * Demand (loan recall) notice in Marathi: the office's English notice, paragraph for paragraph,
  * in the usual shape of a Marathi advocate's notice (प्रति … विषय … महोदय … कळावे). Terms follow
  * the marathi-legal-glossary skill. Rules kept here:
- *  - names, addresses, facility names and the firm's name stay as the bank's records have them
- *    (Roman script) — they are never transliterated by code;
+ *  - a party's name and address are printed in Marathi when a person has typed the Marathi
+ *    form on the case (Defendant.nameMr / addressMr); otherwise, and for facility purposes and
+ *    the firm's name, the bank's records are printed as they are — code never transliterates;
  *  - every digit in the notice is a Devanagari digit (the owner's choice, 11 Nov 2026): dates,
  *    amounts, rates, paragraph and account numbers, PIN codes; the amount in words comes from
  *    rupeesInWordsMr();
@@ -99,12 +100,12 @@ function digits(b: Block): Block {
 function addressees(defendants: Defendant[]): Block[] {
   const multi = defendants.length > 1;
   return defendants.flatMap((d, i): Block[] => {
-    const blocks: Block[] = [{ kind: "lines", bold: true, lines: [`${multi ? `${i + 1}. ` : ""}${up(d.name)}${ROLE_MR[d.role][1]}`] }];
+    const blocks: Block[] = [{ kind: "lines", bold: true, lines: [`${multi ? `${i + 1}. ` : ""}${d.nameMr?.trim() || up(d.name)}${ROLE_MR[d.role][1]}`] }];
     if (d.through) {
       const capacity = CAPACITY_MR[d.through.capacity.trim().toLowerCase()] ?? d.through.capacity.trim();
-      blocks.push({ kind: "lines", bold: true, indent: true, lines: [`तर्फे ${capacity}`, up(d.through.name)] });
+      blocks.push({ kind: "lines", bold: true, indent: true, lines: [`तर्फे ${capacity}`, d.through.nameMr?.trim() || up(d.through.name)] });
     }
-    blocks.push({ kind: "lines", indent: multi, lines: [`पत्ता: ${d.address?.trim() ? up(d.address) : BLANK}`] });
+    blocks.push({ kind: "lines", indent: multi, lines: [`पत्ता: ${d.addressMr?.trim() || (d.address?.trim() ? up(d.address) : BLANK)}`] });
     return blocks;
   });
 }

@@ -181,7 +181,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
   const { data: c } = await supabase
     .from("cases")
     .select(
-      "id, org_id, case_no_internal, status, created_at, archived_at, archive_reason, archived_by, cnr_no, filing_no, disposed_on, disposal, disposal_note, filings(efiling_no, court_fee_paise, txn_id, filed_at, created_at), suit_type, claim_amount_paise, is_commercial, needs_12a, urgent_interim_relief, assigned_drafter, assigned_approver, courts(name, state), bank_branches(branch_name, ifsc, banks(name)), signatory_name, signatory_designation, signatory_age, penal_interest_paise, expenses_paise, parties(id, name, role, address, aadhaar_last4, position, through_capacity, through_name), loans(id, facility_type, account_last4, sanction_date, sanction_amount_paise, roi_bps, npa_date, outstanding_paise, interest_upto_date, application_date, purpose, executed_docs, tenure_months, created_at), notices(id, dispatch_mode, tracking_no, sent_at), mediations(id, authority, applied_at, outcome, report_date, report_path)",
+      "id, org_id, case_no_internal, status, created_at, archived_at, archive_reason, archived_by, cnr_no, filing_no, disposed_on, disposal, disposal_note, filings(efiling_no, court_fee_paise, txn_id, filed_at, created_at), suit_type, claim_amount_paise, is_commercial, needs_12a, urgent_interim_relief, assigned_drafter, assigned_approver, courts(name, state), bank_branches(branch_name, ifsc, banks(name)), signatory_name, signatory_designation, signatory_age, penal_interest_paise, expenses_paise, parties(id, name, role, address, aadhaar_last4, position, through_capacity, through_name, name_mr, address_mr, through_name_mr), loans(id, facility_type, account_last4, sanction_date, sanction_amount_paise, roi_bps, npa_date, outstanding_paise, interest_upto_date, application_date, purpose, executed_docs, tenure_months, created_at), notices(id, dispatch_mode, tracking_no, sent_at), mediations(id, authority, applied_at, outcome, report_date, report_path)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -832,7 +832,14 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
                 signatoryAge: c.signatory_age == null ? "" : String(c.signatory_age),
                 penalInterest: c.penal_interest_paise == null ? "" : String(Number(c.penal_interest_paise) / 100),
                 expenses: rupeesText(c.expenses_paise),
-                parties: parties.map((p) => ({ id: p.id, throughCapacity: p.through_capacity ?? "", throughName: p.through_name ?? "" })),
+                parties: parties.map((p) => ({
+                  id: p.id,
+                  throughCapacity: p.through_capacity ?? "",
+                  throughName: p.through_name ?? "",
+                  nameMr: p.name_mr ?? "",
+                  addressMr: p.address_mr ?? "",
+                  throughNameMr: p.through_name_mr ?? "",
+                })),
                 loans: [...(c.loans ?? [])]
                   .sort((a, b) => a.created_at.localeCompare(b.created_at))
                   .map((l) => ({

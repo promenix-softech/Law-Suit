@@ -1853,6 +1853,20 @@ exception when check_violation then raise notice 'ok - a withdrawn filing does n
 end $$;
 rollback;
 
+-- Marathi name and address of a party (20261112000000): same access as the rest of the row
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000d2');
+update public.parties set name_mr = 'चाचणी नाव' where case_id = 'c0000000-0000-0000-0000-000000000001';
+select pg_temp.expect((select count(*) from public.parties where name_mr is not null) = 0,
+  'an unassigned drafter cannot write a party''s Marathi name');
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000d1');
+update public.parties set name_mr = 'चाचणी नाव', address_mr = 'नमुना पत्ता, पुणे' where case_id = 'c0000000-0000-0000-0000-000000000001';
+select pg_temp.expect(
+  (select count(*) from public.parties where case_id = 'c0000000-0000-0000-0000-000000000001' and name_mr is null) = 0
+  and (select count(*) from public.parties where case_id = 'c0000000-0000-0000-0000-000000000001') > 0,
+  'the assigned drafter writes a party''s Marathi name and address');
+rollback;
+
 -- hearings, disposal and limitation events (20261109000000)
 create or replace function pg_temp.ist_today() returns date language sql as $$
   select (now() at time zone 'Asia/Kolkata')::date
