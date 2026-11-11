@@ -1,4 +1,4 @@
-import { formatRs, rupeesInWordsMr, type Paise } from "@civil-suits/domain";
+import { formatRs, rupeesInWordsMr, toDevanagariDigits, type Paise } from "@civil-suits/domain";
 import type { Defendant, PartyRole } from "./caption";
 import type { DemandNoticeInput } from "./demandNotice";
 import { BLANK, formatDateDot, pctBps } from "./format";
@@ -10,8 +10,13 @@ import type { Block, DocModel } from "./model";
  * the marathi-legal-glossary skill. Rules kept here:
  *  - names, addresses, facility names and the firm's name stay as the bank's records have them
  *    (Roman script) — they are never transliterated by code;
- *  - amounts and dates use Western digits; the amount in words comes from rupeesInWordsMr();
- *  - Acts are named by their English short titles (no Marathi statute titles are invented);
+ *  - every digit in the notice is a Devanagari digit (the owner's choice, 11 Nov 2026): dates,
+ *    amounts, rates, paragraph and account numbers, PIN codes; the amount in words comes from
+ *    rupeesInWordsMr();
+ *  - common facility names and the letterhead labels are printed in Marathi; anything else the
+ *    bank wrote is printed as written;
+ *  - an Act is named in Marathi with its English short title in brackets, in a paragraph
+ *    flagged for review (no Marathi statute title is relied on unchecked);
  *  - the bank's constitution clause of the English notice is left out (it cites an Act).
  * The wording has not yet been settled by the advocate: the notice opens with a highlighted
  * [[LEGAL_REVIEW]] line that must be removed by whoever approves the text.
@@ -45,6 +50,51 @@ export function joinVa(items: string[]): string {
 const rs = (paise: Paise): string => formatRs(paise).replace(/^Rs\./, "रु.");
 
 const up = (s: string) => s.trim().toUpperCase();
+
+/** Facility names banks use everywhere; a name not listed is printed as the bank wrote it. */
+const FACILITY_MR: Record<string, string> = {
+  "term loan": "मुदत कर्ज",
+  "cash credit": "कॅश क्रेडिट",
+  overdraft: "ओव्हरड्राफ्ट",
+  "home loan": "गृह कर्ज",
+  "housing loan": "गृह कर्ज",
+  "vehicle loan": "वाहन कर्ज",
+  "car loan": "वाहन कर्ज",
+  "personal loan": "वैयक्तिक कर्ज",
+  "education loan": "शैक्षणिक कर्ज",
+  "gold loan": "सोने तारण कर्ज",
+  "crop loan": "पीक कर्ज",
+  "kisan credit card": "किसान क्रेडिट कार्ड",
+  "mudra loan": "मुद्रा कर्ज",
+  "business loan": "व्यवसाय कर्ज",
+  loan: "कर्ज",
+};
+const facilityName = (name: string) => FACILITY_MR[name.trim().toLowerCase()] ?? name.trim();
+
+/** Devanagari digits in every line the notice prints. */
+function digits(b: Block): Block {
+  const d = toDevanagariDigits;
+  switch (b.kind) {
+    case "para":
+    case "heading":
+      return { ...b, text: d(b.text) };
+    case "lines":
+    case "center":
+    case "signature":
+      return { ...b, lines: b.lines.map(d) };
+    case "table":
+      return { ...b, head: b.head.map(d), rows: b.rows.map((r) => r.map(d)) };
+    case "list":
+    case "boxes":
+      return { ...b, items: b.items.map(d) };
+    case "fields":
+      return { ...b, rows: b.rows.map(([k, v]): [string, string] => [d(k), d(v)]) };
+    case "sign2":
+      return { ...b, left: b.left.map(d), right: b.right.map(d) };
+    default:
+      return b;
+  }
+}
 
 function addressees(defendants: Defendant[]): Block[] {
   const multi = defendants.length > 1;
@@ -86,7 +136,7 @@ export function buildDemandNoticeMr(input: DemandNoticeInput): DocModel {
     {
       kind: "para",
       legalReview: true,
-      text: "मराठी मसुदा (नमुना v1): या नोटिशीची शब्दरचना वकिलांनी तपासून मंजूर करायची आहे. मंजुरीनंतर ही ओळ काढून टाकावी.",
+      text: "मराठी मसुदा (दुसरा नमुना): या नोटिशीची शब्दरचना वकिलांनी तपासून मंजूर करायची आहे. मंजुरीनंतर ही ओळ काढून टाकावी.",
     },
     {
       kind: "lines",
@@ -114,7 +164,7 @@ export function buildDemandNoticeMr(input: DemandNoticeInput): DocModel {
       head: ["कर्ज सुविधा", "रक्कम", "व्याजदर", "मुदत", "खाते क्र."],
       widths: [30, 18, 14, 14, 24],
       rows: fs.map((f) => [
-        `${f.facilityType}${f.purpose ? ` (${f.purpose})` : ""}`,
+        `${facilityName(f.facilityType)}${f.purpose ? ` (${f.purpose})` : ""}`,
         f.sanctionAmountPaise != null ? rs(f.sanctionAmountPaise) : BLANK,
         f.rateBps != null ? pctBps(f.rateBps) : BLANK,
         f.tenureMonths ? `${f.tenureMonths} महिने` : "लागू नाही",
@@ -125,7 +175,7 @@ export function buildDemandNoticeMr(input: DemandNoticeInput): DocModel {
       `आमचे अशील कळवितात की, सदर ${facility} परतफेडीच्या हमीसाठी आपण आमच्या अशिलांच्या नावे आवश्यक ती कर्ज व तारण कागदपत्रे सही करून दिली आहेत आणि त्याद्वारे आमच्या अशिलांप्रती असलेली आपली जबाबदारी आपण मान्य व कबूल केली आहे.`,
     ),
     p(
-      `आमचे अशील कळवितात की, सदर ${account} मंजुरीच्या अटींनुसार व आपण सही करून दिलेल्या कर्ज कागदपत्रांनुसार चालविण्यात ${many ? "आली नाहीत" : "आले नाही"}. थकीत रक्कम भरण्याबाबत आमच्या अशिलांच्या अधिकाऱ्यांनी केलेल्या विनंत्यांना व स्मरणपत्रांना आपण प्रतिसाद दिलेला नाही. आपण देय रकमेचा भरणा करण्यात कसूर केल्यामुळे ${many ? "आपली" : "आपले"} ${account} रिझर्व्ह बँकेच्या मार्गदर्शक सूचनांनुसार दिनांक ${input.npaDate ? formatDateDot(input.npaDate) : BLANK} रोजी NPA म्हणून वर्गीकृत करण्यात ${many ? "आली आहेत" : "आले आहे"}.`,
+      `आमचे अशील कळवितात की, सदर ${account} मंजुरीच्या अटींनुसार व आपण सही करून दिलेल्या कर्ज कागदपत्रांनुसार चालविण्यात ${many ? "आली नाहीत" : "आले नाही"}. थकीत रक्कम भरण्याबाबत आमच्या अशिलांच्या अधिकाऱ्यांनी केलेल्या विनंत्यांना व स्मरणपत्रांना आपण प्रतिसाद दिलेला नाही. आपण देय रकमेचा भरणा करण्यात कसूर केल्यामुळे ${many ? "आपली" : "आपले"} ${account} रिझर्व्ह बँकेच्या मार्गदर्शक सूचनांनुसार दिनांक ${input.npaDate ? formatDateDot(input.npaDate) : BLANK} रोजी अनुत्पादक मालमत्ता (एनपीए) म्हणून वर्गीकृत करण्यात ${many ? "आली आहेत" : "आले आहे"}.`,
     ),
     p(
       `म्हणून या नोटिशीद्वारे आपणांस कळविण्यात येते की, ही नोटीस मिळाल्यापासून ${input.paymentDays} दिवसांचे आत आपण${input.defendants.length > 1 ? " सर्वांनी संयुक्तपणे व वैयक्तिकरीत्या" : ""} आमच्या अशिलांस दिनांक ${formatDateDot(input.claimAsOn)} रोजीची एकूण थकबाकी रक्कम ${rs(input.claimPaise)} (अक्षरी ${rupeesInWordsMr(input.claimPaise)}), तसेच त्यावर प्रत्यक्ष वसुली होईपर्यंत करारानुसार होणारे पुढील व्याज व इतर लागू शुल्क, भरावे.`,
@@ -138,7 +188,7 @@ export function buildDemandNoticeMr(input: DemandNoticeInput): DocModel {
   if (input.isCommercial) {
     blocks.push(
       p(
-        "सदर मागणी विनिर्दिष्ट मूल्याचा वाणिज्यिक वाद असल्याने, आपण हे प्रकरण मिटवू इच्छित असल्यास आमचे अशील Commercial Courts Act, 2015 च्या कलम 12A अन्वये दावापूर्व मध्यस्थीत सहभागी होण्यास तयार आहेत.",
+        "सदर मागणी विनिर्दिष्ट मूल्याचा वाणिज्यिक वाद असल्याने, आपण हे प्रकरण मिटवू इच्छित असल्यास आमचे अशील वाणिज्यिक न्यायालये अधिनियम, 2015 (Commercial Courts Act, 2015) च्या कलम 12-अ अन्वये दावापूर्व मध्यस्थीत सहभागी होण्यास तयार आहेत.",
         true,
       ),
     );
@@ -155,8 +205,8 @@ export function buildDemandNoticeMr(input: DemandNoticeInput): DocModel {
   return {
     templateId: "demand_notice.mr",
     layout: "letter",
-    version: 1,
-    effectiveFrom: "2026-11-10",
+    version: 2,
+    effectiveFrom: "2026-11-11",
     legalBasis:
       "No statutory form; Marathi rendering of the office's demand notice (civil recovery, not SARFAESI 13(2)); wording pending the advocate's approval",
     title: "",
@@ -166,11 +216,11 @@ export function buildDemandNoticeMr(input: DemandNoticeInput): DocModel {
       ? [
           office.firmName.toUpperCase(),
           ...(office.firmTagline ? [office.firmTagline] : []),
-          ...(office.address ? [office.address] : []),
-          ...(office.email ? [`E-mail: ${office.email}`] : []),
-          ...(office.contact ? [`Contact: ${office.contact}`] : []),
+          ...(office.address ? [toDevanagariDigits(office.address)] : []),
+          ...(office.email ? [`ई-मेल: ${office.email}`] : []),
+          ...(office.contact ? [`संपर्क: ${toDevanagariDigits(office.contact)}`] : []),
         ]
       : undefined,
-    blocks,
+    blocks: blocks.map(digits),
   };
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { numberToWordsMarathi, rupeesInWordsMr } from "./wordsMr";
+import { numberToWordsMarathi, rupeesInWordsMr, toDevanagariDigits } from "./wordsMr";
 
 describe("numberToWordsMarathi", () => {
   it("has a word for every number below 100", () => {
@@ -41,6 +41,14 @@ describe("numberToWordsMarathi", () => {
   it("refuses fractions and negatives", () => {
     expect(() => numberToWordsMarathi(-1)).toThrow(RangeError);
     expect(() => numberToWordsMarathi(1.5)).toThrow(RangeError);
+  });
+});
+
+describe("toDevanagariDigits", () => {
+  it("changes only the digits", () => {
+    expect(toDevanagariDigits("रु. 11,77,480/- on 30.06.2026")).toBe("रु. ११,७७,४८०/- on ३०.०६.२०२६");
+    expect(toDevanagariDigits("0123456789")).toBe("०१२३४५६७८९");
+    expect(toDevanagariDigits("XXXXXX0041 @ 10.25%")).toBe("XXXXXX००४१ @ १०.२५%");
   });
 });
 

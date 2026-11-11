@@ -43,6 +43,11 @@ export function numberToWordsMarathi(n: number): string {
   return parts.join(" ");
 }
 
+/** Western digits to Devanagari digits (0 → ०), for papers written wholly in Marathi. */
+export function toDevanagariDigits(text: string): string {
+  return text.replace(/[0-9]/g, (d) => String.fromCharCode(0x0966 + Number(d)));
+}
+
 /** e.g. 117748000 paise → "रुपये अकरा लाख सत्त्याहत्तर हजार चारशे ऐंशी फक्त". */
 export function rupeesInWordsMr(paise: Paise): string {
   assertPaise(paise);

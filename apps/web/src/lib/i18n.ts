@@ -434,6 +434,32 @@ const MR: Record<string, string> = {
   "The sheet has the same cases and columns, with account numbers masked to the last 4 digits.": "डाउनलोड केलेल्या तक्त्यात हीच प्रकरणे व रकाने असतात; खाते क्रमांकाचे फक्त शेवटचे 4 अंक दिसतात.",
   // Marathi papers
   "Demand notice in Marathi": "मराठी मागणी नोटीस",
+  // help page
+  "Help": "मदत",
+  "How it works": "हे कसं चालतं",
+  "A case moves through eight steps. The app always shows which one is next and whose turn it is.": "प्रत्येक प्रकरण आठ टप्प्यांतून जातं. पुढचा टप्पा कोणता आणि तो कोणी करायचा, हे app नेहमी दाखवतं.",
+  "Your part": "तुमचं काम",
+  "Open a case": "प्रकरण उघडा",
+  "Choose the bank branch and the court, add the borrower, and name a drafter and an approver.": "बँकेची शाखा व न्यायालय निवडा, कर्जदार जोडा आणि मसुदा लेखक व मंजूरकर्ता नेमा.",
+  "Scan the bank's papers and upload them. AI reads them in about a minute.": "बँकेचे कागद स्कॅन करून अपलोड करा. AI ते साधारण एका मिनिटात वाचतो.",
+  "Check what AI read": "AI ने वाचलेलं तपासा",
+  "Compare each value with the scan and verify it. Only verified values are used in the papers.": "प्रत्येक माहिती स्कॅनशी जुळवून तपासा. फक्त तपासलेली माहितीच कागदपत्रांत जाते.",
+  "Demand notice": "मागणी नोटीस",
+  "Generate the notice, send it, and record how and when it was sent.": "नोटीस तयार करा, पाठवा आणि ती कशी व कधी पाठवली ते नोंदवा.",
+  "Suit papers": "दाव्याची कागदपत्रे",
+  "Fill the suit particulars, then generate all the papers with one button and send them for approval.": "दाव्याचा तपशील भरा, मग एका बटणाने सर्व कागदपत्रे तयार करून मंजुरीसाठी पाठवा.",
+  "Read each paper and approve it, or send it back with a comment. Nobody can approve a paper they wrote.": "प्रत्येक कागद वाचून मंजूर करा किंवा टीपेसह परत पाठवा. स्वतः लिहिलेला कागद कोणीही स्वतः मंजूर करू शकत नाही.",
+  "Notary and e-filing": "नोटरी व ई-फायलिंग",
+  "Build the e-filing bundle, get the notary work done, file on eCourts and record the filing.": "ई-फायलिंग संच बनवा, नोटरीचं काम करून घ्या, eCourts वर दावा दाखल करा आणि त्याची नोंद करा.",
+  "Add the CNR, then each hearing date and what happened, until the suit is disposed.": "CNR टाका; मग दावा निकाली निघेपर्यंत प्रत्येक सुनावणीची तारीख आणि त्या दिवशी काय झालं ते नोंदवा.",
+  "Good to know": "लक्षात ठेवा",
+  "Every case shows its one next step at the top. Start there.": "प्रत्येक प्रकरणाच्या वर त्याचं एकच पुढचं काम दिसतं. तिथून सुरू करा.",
+  "The simple view shows only what you need now. “Show everything” opens the full page.": "सोप्या view मध्ये फक्त आत्ता लागणारं दिसतं. “सगळं दाखवा” दाबलं की पूर्ण पान उघडतं.",
+  "Press Ctrl K to find a case by its number, the borrower or the CNR.": "प्रकरण क्रमांक, कर्जदार किंवा CNR ने प्रकरण शोधण्यासाठी Ctrl K दाबा.",
+  "Amounts, interest, court fee and dates are calculated by the program, never by AI.": "रक्कम, व्याज, कोर्ट फी आणि तारखा program मोजतो; AI कधीच नाही.",
+  "Cases are never deleted. An admin can archive a case and restore it later.": "प्रकरण कधीच delete होत नाही. प्रशासक ते archive करू शकतो आणि नंतर परत आणू शकतो.",
+  "Go to my tasks": "माझ्या कामांकडे",
+  "Go to my cases": "माझ्या प्रकरणांकडे",
 };
 
 export type T = (en: string) => string;

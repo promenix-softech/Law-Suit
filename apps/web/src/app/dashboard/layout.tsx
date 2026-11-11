@@ -50,6 +50,7 @@ export default async function DashboardLayout({ children }: LayoutProps<"/dashbo
           { href: "/dashboard/billing", label: t("Billing"), icon: "₹", group: office },
         ]
       : []),
+    { href: "/dashboard/help", label: t("How it works"), icon: "?", group: work },
   ];
 
   return (
