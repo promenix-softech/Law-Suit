@@ -39,6 +39,7 @@ export default async function DashboardLayout({ children }: LayoutProps<"/dashbo
     ...(admin ? [{ href: "/dashboard/cases/new", label: t("New case"), icon: "＋", group: work }] : []),
     ...(admin || r.has("approver") ? [{ href: "/dashboard#approvals", label: t("Approvals"), icon: "✓", badge: queue, group: work }] : []),
     { href: "/dashboard/tasks", label: t("My tasks"), icon: "☰", badge: tasksOpen ?? 0, group: work },
+    ...(admin || r.has("approver") || r.has("drafter") ? [{ href: "/dashboard/reports", label: t("Reports"), icon: "▤", group: work }] : []),
     ...(admin
       ? [
           { href: "/dashboard/batches", label: t("Bulk upload"), icon: "⇪", group: work },
@@ -49,10 +50,12 @@ export default async function DashboardLayout({ children }: LayoutProps<"/dashbo
           { href: "/dashboard/billing", label: t("Billing"), icon: "₹", group: office },
         ]
       : []),
+    { href: "/dashboard/help", label: t("How it works"), icon: "?", group: work },
   ];
 
   return (
-    <div className="flex min-h-screen w-full flex-1">
+    // Phones: the section links are a strip above the page; from lg up, a rail beside it.
+    <div className="flex min-h-screen w-full flex-1 flex-col lg:flex-row">
       <SideNav items={items} />
       <div className="flex min-w-0 flex-1 flex-col">{children}</div>
     </div>

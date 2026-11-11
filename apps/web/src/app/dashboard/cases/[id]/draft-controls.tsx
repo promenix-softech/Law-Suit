@@ -28,6 +28,8 @@ export function RegenerateDraft({
   exists,
   approved,
   primary = false,
+  language = "en",
+  label,
   lang,
 }: {
   caseId: string;
@@ -35,6 +37,10 @@ export function RegenerateDraft({
   exists: boolean;
   approved: boolean;
   primary?: boolean;
+  /** Language of the paper itself (the Marathi demand notice is "mr"). */
+  language?: string;
+  /** Button text for a paper that does not exist yet; defaults to "Generate". */
+  label?: string;
   lang: Lang;
 }) {
   const t = translator(lang);
@@ -44,14 +50,14 @@ export function RegenerateDraft({
   const go = () => {
     if (approved && !window.confirm(t("This paper is approved. A regenerated version must be approved again. Continue?"))) return;
     start(async () => {
-      setResult(await generateDraft(caseId, kind));
+      setResult(await generateDraft(caseId, kind, language));
       router.refresh();
     });
   };
   return (
     <span className="inline-flex flex-col gap-1">
       <button type="button" onClick={go} disabled={pending} className={`btn px-3 py-1.5 text-xs ${primary ? "btn-primary" : ""}`}>
-        {pending ? `${t("Generating")}…` : exists ? `↻ ${t("Regenerate")}` : `✦ ${t("Generate")}`}
+        {pending ? `${t("Generating")}…` : exists ? `↻ ${t("Regenerate")}` : `✦ ${label ?? t("Generate")}`}
       </button>
       <Status result={result} />
     </span>

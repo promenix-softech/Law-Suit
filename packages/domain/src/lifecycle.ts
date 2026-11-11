@@ -33,7 +33,8 @@ const NEXT: Record<CaseStatus, readonly CaseStatus[]> = {
   approved: ["notary_stamp", "drafting"],
   notary_stamp: ["efiling_ready"],
   efiling_ready: ["filed"],
-  filed: ["listed"],
+  // A suit settled or withdrawn before its first date is disposed straight from "filed".
+  filed: ["listed", "disposed"],
   listed: ["disposed"],
   disposed: [],
 };

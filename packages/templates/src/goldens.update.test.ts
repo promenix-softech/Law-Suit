@@ -6,6 +6,7 @@ import { toPlainText, type DocModel } from "./model";
 import { buildPlaint } from "./plaint";
 import { buildAddressMemo, buildBbeCertificate, buildCourtFeeLetter, buildEfilingSheet, buildListOfDocuments, standardDocuments } from "./suitPapers";
 import { buildDemandNotice } from "./demandNotice";
+import { buildDemandNoticeMr } from "./demandNoticeMr";
 import { captionFixture, noticeFixture, officeFixture, plaintFixture } from "./testFixtures";
 import { buildVakalatnama } from "./vakalatnama";
 
@@ -38,4 +39,5 @@ it.runIf(process.env.UPDATE_GOLDEN === "1")("writes office-format goldens", () =
   );
   write("efiling_sheet.en.txt", buildEfilingSheet(plaintFixture));
   write("demand_notice.en.txt", buildDemandNotice(noticeFixture));
+  write("demand_notice.mr.txt", buildDemandNoticeMr(noticeFixture));
 });

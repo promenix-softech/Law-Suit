@@ -7,6 +7,7 @@ import type { DocModel } from "./model";
 import { buildDraftDecree, buildPlaint } from "./plaint";
 import { buildAddressMemo, buildBbeCertificate, buildCourtFeeLetter, buildEfilingSheet, buildListOfDocuments, standardDocuments } from "./suitPapers";
 import { buildDemandNotice } from "./demandNotice";
+import { buildDemandNoticeMr } from "./demandNoticeMr";
 import { captionFixture, noticeFixture, officeFixture, plaintFixture } from "./testFixtures";
 import { buildVakalatnama } from "./vakalatnama";
 
@@ -35,6 +36,7 @@ it.runIf(process.env.UPDATE_SAMPLES === "1")("writes the synthetic suit set as D
     ],
     ["09-efiling-data-sheet", buildEfilingSheet(plaintFixture)],
     ["00-demand-notice", buildDemandNotice(noticeFixture)],
+    ["00-demand-notice-marathi", buildDemandNoticeMr(noticeFixture)],
   ];
   for (const [name, d] of docs) {
     writeFileSync(new URL(`../../../docs/samples/suit-set/${name}-synthetic.docx`, import.meta.url), await renderDocx(d));

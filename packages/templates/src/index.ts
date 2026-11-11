@@ -1,6 +1,7 @@
 export * from "./model";
 export * from "./caption";
 export * from "./demandNotice";
+export * from "./demandNoticeMr";
 export * from "./plaint";
 export * from "./vakalatnama";
 export * from "./affidavit";
