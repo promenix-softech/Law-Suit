@@ -1943,6 +1943,18 @@ exception when insufficient_privilege then raise notice 'ok - a written-up heari
 end $$;
 do $$
 begin
+  update public.hearings set outcome = null where id = 'a1000000-0000-0000-0000-000000000003';
+  raise exception 'FAIL: outcome cleared to reopen a written-up hearing';
+exception when insufficient_privilege then raise notice 'ok - the outcome of a written-up hearing cannot be cleared';
+end $$;
+do $$
+begin
+  update public.hearings set outcome = 'Rewritten history' where id = 'a1000000-0000-0000-0000-000000000003';
+  raise exception 'FAIL: drafter rewrote a hearing outcome';
+exception when insufficient_privilege then raise notice 'ok - only an admin corrects what was written for a hearing';
+end $$;
+do $$
+begin
   update public.cases set status = 'disposed' where id = 'c0000000-0000-0000-0000-000000000002';
   raise exception 'FAIL: disposed without date and result';
 exception when check_violation then raise notice 'ok - a disposal needs its date and result';
@@ -1982,6 +1994,18 @@ select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
 update public.cases set disposal = 'settled' where id = 'c0000000-0000-0000-0000-000000000002';
 select pg_temp.expect((select disposal from public.cases where id = 'c0000000-0000-0000-0000-000000000002') = 'settled',
   'an admin can correct a recorded disposal');
+rollback;
+
+-- removing the only date un-lists the case (20261111000000)
+begin;
+update public.cases set status = 'filed' where id = 'c0000000-0000-0000-0000-000000000002';
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000d2');
+insert into public.hearings (id, org_id, case_id, hearing_date, purpose, created_by) values
+  ('a1000000-0000-0000-0000-000000000009', '11111111-1111-1111-1111-111111111111',
+   'c0000000-0000-0000-0000-000000000002', pg_temp.ist_today() + 12, 'first_date', '00000000-0000-0000-0000-0000000000d2');
+delete from public.hearings where id = 'a1000000-0000-0000-0000-000000000009';
+select pg_temp.expect((select status from public.cases where id = 'c0000000-0000-0000-0000-000000000002') = 'filed',
+  'a case whose only hearing date is removed is filed again, not listed');
 rollback;
 
 begin;

@@ -70,12 +70,12 @@ export function reportRow(c: ReportCase): string[] {
 }
 
 /**
- * One CSV cell. Every cell is quoted. A cell a spreadsheet would run as a formula (it starts with
- * = + - @, a tab or a carriage return) gets a leading apostrophe, so a borrower name typed as
+ * One CSV cell. Every cell is quoted. A cell a spreadsheet would run as a formula (its first character after any
+ * leading white space is = + - or @) gets a leading apostrophe, so a borrower name typed as
  * "=HYPERLINK(...)" stays text. A plain negative amount is left as a number.
  */
 export function csvCell(value: string): string {
-  const risky = /^[=+\-@\t\r]/.test(value) && !/^-\d+(\.\d+)?$/.test(value);
+  const risky = /^\s*[=+\-@]/.test(value) && !/^-\d+(\.\d+)?$/.test(value);
   return `"${(risky ? `'${value}` : value).replaceAll('"', '""')}"`;
 }
 

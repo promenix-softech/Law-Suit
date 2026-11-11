@@ -431,7 +431,7 @@ const MR: Record<string, string> = {
   "Total claim": "एकूण दावा रक्कम",
   "Branch": "शाखा",
   "Stage": "टप्पा",
-  "The sheet has the same cases and columns, with account numbers masked to the last 4 digits.": "डाउनलोड केलेल्या तक्त्यात हीच प्रकरणे व रकाने असतात; खाते क्रमांकाचे फक्त शेवटचे 4 अंक दिसतात.",
+  "The sheet has the same cases, and also the opening date, the notice date and the last 4 digits of the account number.": "डाउनलोड केलेल्या तक्त्यात हीच प्रकरणे असतात; शिवाय प्रकरण उघडल्याची तारीख, नोटीसची तारीख आणि खाते क्रमांकाचे शेवटचे 4 अंक असतात.",
   // Marathi papers
   "Demand notice in Marathi": "मराठी मागणी नोटीस",
   // help page

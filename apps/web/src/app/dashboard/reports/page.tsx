@@ -123,7 +123,7 @@ export default async function ReportsPage({ searchParams }: PageProps<"/dashboar
             </tbody>
           </table>
         </div>
-        <p className="muted text-xs">{t("The sheet has the same cases and columns, with account numbers masked to the last 4 digits.")}</p>
+        <p className="muted text-xs">{t("The sheet has the same cases, and also the opening date, the notice date and the last 4 digits of the account number.")}</p>
       </main>
     </>
   );

@@ -65,6 +65,8 @@ describe("csvCell", () => {
     expect(csvCell("@SUM(A1)")).toBe("\"'@SUM(A1)\"");
     expect(csvCell("-cmd|' /C calc'!A0")).toBe("\"'-cmd|' /C calc'!A0\"");
     expect(csvCell("\t=1+1")).toBe("\"'\t=1+1\"");
+    expect(csvCell(" =1+1")).toBe("\"' =1+1\"");
+    expect(csvCell("\n@x")).toBe("\"'\n@x\"");
   });
 
   it("keeps a plain negative amount as a number", () => {
