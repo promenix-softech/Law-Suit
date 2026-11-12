@@ -19,7 +19,19 @@ const ParticularsInput = z.object({
   signatoryAge: text(3),
   penalInterest: text(20),
   expenses: text(20),
-  parties: z.array(z.object({ id: z.uuid(), throughCapacity: text(50), throughName: text(200) })).max(30),
+  parties: z
+    .array(
+      z.object({
+        id: z.uuid(),
+        throughCapacity: text(50),
+        throughName: text(200),
+        // Marathi forms for papers written in Marathi; typed by a person, never transliterated.
+        nameMr: text(200).default(""),
+        addressMr: text(500).default(""),
+        throughNameMr: text(200).default(""),
+      }),
+    )
+    .max(30),
   loans: z
     .array(z.object({ id: z.uuid(), applicationDate: text(20), purpose: text(200), tenureMonths: text(3), executedDocs: text(12_000) }))
     .max(10),
@@ -75,7 +87,13 @@ export async function saveParticulars(input: ParticularsForm): Promise<ActionRes
   for (const p of v.parties) {
     const { error } = await supabase
       .from("parties")
-      .update({ through_capacity: p.throughCapacity || null, through_name: p.throughName || null })
+      .update({
+        through_capacity: p.throughCapacity || null,
+        through_name: p.throughName || null,
+        name_mr: p.nameMr || null,
+        address_mr: p.addressMr || null,
+        through_name_mr: p.throughName ? p.throughNameMr || null : null,
+      })
       .eq("id", p.id)
       .eq("case_id", v.caseId);
     if (error) return { ok: false, error: "You cannot edit the parties of this case." };

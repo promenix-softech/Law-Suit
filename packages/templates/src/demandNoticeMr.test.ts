@@ -26,6 +26,20 @@ describe("buildDemandNoticeMr (Marathi demand notice)", () => {
     expect(t).toContain("(जामीनदार)");
   });
 
+  it("prints a party in Marathi when the Marathi name and address were typed in", () => {
+    const [first, ...rest] = noticeFixture.defendants;
+    const t = text({
+      defendants: [
+        { ...first!, nameMr: "मे. नमुना ॲग्रो ट्रेडर्स", addressMr: "गाळा 0, चाचणी मार्केट यार्ड, नाशिक 422000", through: { ...first!.through!, nameMr: "किरण चाचणी पवार" } },
+        ...rest,
+      ],
+    });
+    expect(t).toContain("१. मे. नमुना ॲग्रो ट्रेडर्स");
+    expect(t).toContain("   तर्फे भागीदार\n   किरण चाचणी पवार");
+    expect(t).toContain("पत्ता: गाळा ०, चाचणी मार्केट यार्ड, नाशिक ४२२०००");
+    expect(t).toContain("२. KIRAN TEST PAWAR (जामीनदार)");
+  });
+
   it("names each addressee's role and tabulates every facility", () => {
     const t = text();
     expect(t).toContain("नोटीस घेणार क्र. १ हे कर्जदार आहेत आणि नोटीस घेणार क्र. २ व ३ हे जामीनदार आहेत");

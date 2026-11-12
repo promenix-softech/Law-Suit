@@ -18,7 +18,10 @@ export interface Defendant {
   role: PartyRole;
   address?: string | null;
   /** A firm or company sued through a natural person: "Through its Proprietor" + name. */
-  through?: { capacity: string; name: string } | null;
+  through?: { capacity: string; name: string; nameMr?: string | null } | null;
+  /** Name and address in Marathi, typed by a person; used by papers written in Marathi. */
+  nameMr?: string | null;
+  addressMr?: string | null;
 }
 
 export interface CaptionInput {
