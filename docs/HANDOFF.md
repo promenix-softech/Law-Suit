@@ -9,12 +9,7 @@ Supabase project `ohdtudvmcahdnqnhfqzp`.
 
 ## Pending
 
-### 1. Branch ready for a pull request (13 Nov) — waiting on the owner
-- Safer uploads + typed text (security review PASS), phone fixes, e2e tests per role with a CI
-  job on a local Supabase stack (8/8 pass locally from a fresh stack; security review PASS). `pnpm check` passes. No migration, no
-  database step: a merge only redeploys the site.
-- Left: the owner says whether to open the pull request and merge. Then watch the new `e2e`
-  CI job's first run (it pulls the Supabase images in the runner).
+Nothing in flight.
 
 ## Needs the owner
 - Type a Marathi name and address on a demo case (Suit particulars → "मराठी नाव व पत्ता") and
@@ -30,3 +25,5 @@ Supabase project `ohdtudvmcahdnqnhfqzp`.
   migrations `20261109000000`, `20261109010000`, `20261111000000` are on the demo database.
 - #34 merged (Marathi name / address of a party, `task-resumer`, this file); migration
   `20261112000000` is on the demo database.
+- #35 merged (no file names in storage, `cleanText`, phone fixes, e2e per role with CI job
+  `e2e` on a local Supabase stack — 8/8 green in CI). No database step.
