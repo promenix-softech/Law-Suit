@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { beforeAll, describe, expect, it } from "vitest";
 import { decryptText, encryptText } from "../crypto";
-import { htmlToText, normaliseStatus, ocrErrorMessage, pagesFromResults } from "./sarvam";
+import { htmlToText, localBaseUrl, normaliseStatus, ocrErrorMessage, pagesFromResults } from "./sarvam";
 
 beforeAll(() => {
   process.env.FIELD_ENCRYPTION_KEY = randomBytes(32).toString("base64");
@@ -126,5 +126,17 @@ describe("ocrErrorMessage", () => {
     expect(ocrErrorMessage({ statusCode: 402 })).toMatch(/credits/);
     expect(ocrErrorMessage({ statusCode: 403 })).toMatch(/key/);
     expect(ocrErrorMessage(new Error("socket hang up sk_secret"))).not.toContain("sk_");
+  });
+});
+
+describe("localBaseUrl", () => {
+  it("honours only a loopback stand-in, never another host", () => {
+    expect(localBaseUrl("http://127.0.0.1:4010")).toBe("http://127.0.0.1:4010");
+    expect(localBaseUrl("http://localhost:4010")).toBe("http://localhost:4010");
+    expect(localBaseUrl("https://evil.example")).toBeUndefined();
+    expect(localBaseUrl("http://127.0.0.1@evil.example")).toBeUndefined();
+    expect(localBaseUrl("http://10.0.0.5:4010")).toBeUndefined();
+    expect(localBaseUrl("not a url")).toBeUndefined();
+    expect(localBaseUrl(undefined)).toBeUndefined();
   });
 });

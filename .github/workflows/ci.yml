@@ -42,11 +42,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - name: Password for the synthetic users of this run
+      - name: Password and field-encryption key for this run only
         run: |
           pw="$(openssl rand -hex 16)"
+          key="$(openssl rand -base64 32)"
           echo "::add-mask::$pw"
-          { echo "DEMO_PASSWORD=$pw"; echo "E2E_PASSWORD=$pw"; } >> "$GITHUB_ENV"
+          echo "::add-mask::$key"
+          { echo "DEMO_PASSWORD=$pw"; echo "E2E_PASSWORD=$pw"; echo "FIELD_ENCRYPTION_KEY=$key"; } >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4

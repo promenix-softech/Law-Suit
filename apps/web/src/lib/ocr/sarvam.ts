@@ -15,11 +15,25 @@ export type OcrStatus = "running" | (typeof TERMINAL)[number];
 /** Planning figure from docs/plan.md (₹0.50/page); used for usage_events until billing reconciles. */
 export const COST_PAISE_PER_PAGE = 50;
 
+/**
+ * SARVAM_BASE_URL is only for tests against a local stand-in, so only a loopback address is
+ * honoured: a wrong value in production must not send the key and the files to another host.
+ */
+export function localBaseUrl(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  try {
+    const u = new URL(raw);
+    return u.protocol === "http:" && (u.hostname === "127.0.0.1" || u.hostname === "localhost") ? raw : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function client(): SarvamAIClient {
   const apiSubscriptionKey = process.env.SARVAM_API_KEY;
   if (!apiSubscriptionKey) throw new Error("SARVAM_API_KEY is not set");
-  // SARVAM_BASE_URL is only for tests against a local mock; production uses the SDK default.
-  return new SarvamAIClient({ apiSubscriptionKey, ...(process.env.SARVAM_BASE_URL ? { baseUrl: process.env.SARVAM_BASE_URL } : {}) });
+  const baseUrl = localBaseUrl(process.env.SARVAM_BASE_URL);
+  return new SarvamAIClient({ apiSubscriptionKey, ...(baseUrl ? { baseUrl } : {}) });
 }
 
 export async function startDigitise(file: { data: Blob; filename: string; contentType: string }, language: OcrLanguage) {

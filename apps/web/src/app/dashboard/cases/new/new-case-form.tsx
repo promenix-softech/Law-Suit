@@ -1,7 +1,9 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import type { BankClaimForum, CourtOption } from "@civil-suits/domain";
 import { createCase, type FormState } from "../../admin-actions";
+import { CourtPicker } from "./court-picker";
 
 type Opt = { id: string; label: string };
 type Person = { id: string; name: string };
@@ -35,16 +37,20 @@ export function NewCaseForm({
   courts,
   drafters,
   approvers,
+  officeForum,
 }: {
   suggestedNo: string;
   branches: Opt[];
-  courts: Opt[];
+  courts: CourtOption[];
   drafters: Person[];
   approvers: Person[];
+  officeForum: BankClaimForum;
 }) {
   const [state, action, pending] = useActionState<FormState, FormData>(createCase, {});
   const [drafter, setDrafter] = useState("");
   const [approver, setApprover] = useState("");
+  const [courtId, setCourtId] = useState("");
+  const [urgent, setUrgent] = useState(false);
   const clash = drafter && drafter === approver;
 
   return (
@@ -55,11 +61,12 @@ export function NewCaseForm({
           <input name="caseNo" defaultValue={suggestedNo} required className="input-glass mt-2" />
         </label>
         <label className="flex items-end gap-2 pb-2.5 text-sm">
-          <input type="checkbox" name="urgent" className="accent-violet-500" /> Urgent interim relief (no 12A mediation)
+          <input type="checkbox" name="urgent" checked={urgent} onChange={(e) => setUrgent(e.target.checked)} className="accent-violet-500" /> Urgent interim relief (no 12A mediation)
         </label>
         <Select name="branchId" label="Bank branch" options={branches} />
-        <Select name="courtId" label="Court" options={courts} />
       </div>
+      {/* The amount is not known yet: every court of the district, Pune by default. */}
+      <CourtPicker courts={courts} claimPaise={null} urgent={urgent} officeForum={officeForum} value={courtId} onChange={setCourtId} />
 
       <div className="grid gap-5 sm:grid-cols-2">
         <label className="block">

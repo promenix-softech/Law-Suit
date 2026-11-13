@@ -9,12 +9,20 @@ Supabase project `ohdtudvmcahdnqnhfqzp`.
 
 ## Pending
 
-### 1. Branch ready for a pull request (13 Nov) — waiting on the owner
-- Safer uploads + typed text (security review PASS), phone fixes, e2e tests per role with a CI
-  job on a local Supabase stack (8/8 pass locally from a fresh stack; security review PASS). `pnpm check` passes. No migration, no
-  database step: a merge only redeploys the site.
-- Left: the owner says whether to open the pull request and merge. Then watch the new `e2e`
-  CI job's first run (it pulls the Supabase images in the runner).
+### 1. Open a case from the bank's file — in progress (owner's ask, 13 Nov)
+Owner: "click → upload the bank document → AI fills everything → only review → case opens;
+editable; where to file decided by law; Pune court by default, other districts selectable; keep
+it very easy to use."
+- Done and pushed: `chooseCourt` + 36 districts (packages/domain, tests); migrations
+  `20261114000000_case_intake` (bucket `case-intake`, table `case_intakes`, quota) and
+  `20261114010000_case_intake_discard` with RLS tests; server actions
+  `apps/web/src/app/dashboard/cases/new/intake-actions.ts`; `lib/extract/intake.ts` (tests);
+  case creation shared in `lib/new-case.ts`.
+- UI done and pushed (`new-case-chooser.tsx`, `intake-flow.tsx`, `court-picker.tsx`); e2e with a
+  Sarvam stand-in, 10/10 from a fresh stack; `pnpm check` passes; STATUS updated.
+- Security review FAIL → fixed (commit 48b745c, migration `20261114020000_case_intake_claim`);
+  re-review PASS (14 Nov). Owner said yes: the three migrations are on the demo DB (14 Nov).
+  Left: PR → green CI → merge → check the new-case page on the live site as admin.
 
 ## Needs the owner
 - Type a Marathi name and address on a demo case (Suit particulars → "मराठी नाव व पत्ता") and
@@ -30,3 +38,5 @@ Supabase project `ohdtudvmcahdnqnhfqzp`.
   migrations `20261109000000`, `20261109010000`, `20261111000000` are on the demo database.
 - #34 merged (Marathi name / address of a party, `task-resumer`, this file); migration
   `20261112000000` is on the demo database.
+- #35 merged (no file names in storage, `cleanText`, phone fixes, e2e per role with CI job
+  `e2e` on a local Supabase stack — 8/8 green in CI). No database step.
