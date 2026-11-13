@@ -12,7 +12,7 @@ jobs:
   app:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -27,7 +27,7 @@ jobs:
   worker:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libreoffice-writer-nogui ghostscript qpdf poppler-utils ocrmypdf tesseract-ocr-eng
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
@@ -47,7 +47,7 @@ jobs:
           pw="$(openssl rand -hex 16)"
           echo "::add-mask::$pw"
           { echo "DEMO_PASSWORD=$pw"; echo "E2E_PASSWORD=$pw"; } >> "$GITHUB_ENV"
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -85,5 +85,5 @@ jobs:
     env:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: bash scripts/test-db.sh
