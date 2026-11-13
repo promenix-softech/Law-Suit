@@ -37,6 +37,41 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @civil-suits/worker test
 
+  # Each role end to end: a local Supabase stack (all migrations), synthetic seed, the built app.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Password for the synthetic users of this run
+        run: |
+          pw="$(openssl rand -hex 16)"
+          echo "::add-mask::$pw"
+          { echo "DEMO_PASSWORD=$pw"; echo "E2E_PASSWORD=$pw"; } >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 3.1.0
+      - name: Local Supabase stack
+        run: supabase start -x studio,imgproxy,edge-runtime,logflare,vector,supavisor,realtime,mailpit,postgres-meta
+      - name: Point the app at it
+        run: |
+          eval "$(supabase status -o env | grep -E '^(API_URL|PUBLISHABLE_KEY|SECRET_KEY)=')"
+          {
+            echo "NEXT_PUBLIC_SUPABASE_URL=$API_URL"
+            echo "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$PUBLISHABLE_KEY"
+            echo "SUPABASE_SECRET_KEY=$SECRET_KEY"
+          } >> "$GITHUB_ENV"
+      - run: pnpm --filter web seed:demo
+      - run: pnpm --filter web build
+      - run: pnpm --filter web exec playwright install --with-deps chromium
+      - run: pnpm --filter web e2e
+
   db:
     runs-on: ubuntu-latest
     services:

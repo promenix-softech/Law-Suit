@@ -9,24 +9,21 @@ Supabase project `ohdtudvmcahdnqnhfqzp`.
 
 ## Pending
 
-### 1. Safer uploads, typed text, phone case list — done on the branch (13 Nov)
-- Committed and pushed; security review PASS; `pnpm check` passes. No migration.
-- Left: the owner decides on a pull request and merge (code only, no database step).
-
-### 2. Next without the owner (agreed 13 Nov)
-- Phone tap targets and the approver's queue by case: done (same branch).
-- e2e per role in CI (needs a local Supabase stack in the runner).
+### 1. Branch ready for a pull request (13 Nov) — waiting on the owner
+- Safer uploads + typed text (security review PASS), phone fixes, e2e tests per role with a CI
+  job on a local Supabase stack (8/8 pass locally from a fresh stack; security review PASS). `pnpm check` passes. No migration, no
+  database step: a merge only redeploys the site.
+- Left: the owner says whether to open the pull request and merge. Then watch the new `e2e`
+  CI job's first run (it pulls the Supabase images in the runner).
 
 ## Needs the owner
-- Delete the Satyam demo office: SQL was given in chat (Supabase SQL Editor); remove
-  `satyam.civilsuits.promenix.in` in Vercel.
 - Type a Marathi name and address on a demo case (Suit particulars → "मराठी नाव व पत्ता") and
   generate the Marathi notice once, to see it printed.
 - Marathi notice wording to the advocate; then drop the review line (new template version).
-- Hearing / limitation buttons were not clicked on the live site yet (rules are covered by the
-  RLS tests): add one hearing date on a filed demo case to confirm.
-- Before real data: Pro plan in Mumbai with backups, demo passwords, MFA, error tracking
-  (see "Before real client data" in `docs/STATUS.md`).
+
+## Owner's own list before launch (do not raise again — owner, 13 Nov)
+- Delete the Satyam demo office and its Vercel domain; move the database to a Mumbai Pro project;
+  the demo password stays as it is until then. Everything on the site is demo data.
 
 ## Done
 - #33 merged (hearings, limitation events, report, Marathi notice v2, simple view, help page);

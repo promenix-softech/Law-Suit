@@ -210,6 +210,15 @@
 - [x] Security review: FAIL (4 findings: check-before-clean, a slow regex, extra folders, leftover invisible characters) → fixed → FAIL (one-line text not re-checked) → fixed → PASS
 - [x] UX check of the live site as admin, drafter, approver and field, desktop and phone (`ux-roles` script, read-only): no page errors, no page-wide sideways scroll. Fixed: on a phone the simple-view case list squeezed the next step into a cut-off column (now under the status), "Bbe certificate" → "Bankers' Books certificate" (`docLabel`), "Review →" no longer wraps. Then: every button is at least 40 px high on touch screens (were 30 px in the top bar, section strip and filter chips), and the approval list has one row per case naming its papers (was 7 rows for 2 cases) — checked locally on a phone viewport against the demo DB
 
+## End-to-end tests per role (13 Nov)
+- [x] `apps/web/e2e/roles.spec.ts` (Playwright 1.63): wrong password refused; admin sees all 10 cases and the admin tools; drafter1 sees only their 5 cases and gets 404 on drafter2's; approver sees all 10 and the approval list; field staff see only their 4 tasks, a case page sends them to tasks, other cases 404, reports closed; an uploaded scan is stored under a generated name (checked in `storage.objects`); the drafter of a filed suit enters the first hearing date and the case becomes "Listed" (first time the hearing buttons were exercised end to end); phone: no sideways scroll, no button under 40 px. 8/8 pass locally from a fresh stack
+- [x] Security review of the e2e setup and the CSP change: PASS (hosted CSP byte-identical; the job uses no secrets and cannot reach a hosted project). Advisories applied: the local stack's password policy (12+, letters and digits), and `playwright.config.ts` refuses a non-local Supabase URL
+- [x] Runs against a **local** Supabase stack (`supabase start`, `supabase/config.toml`): all 48 migrations apply cleanly to a fresh Supabase Postgres 17; synthetic seed (`seed:demo`, now also sets the firm code); CI job `e2e` with a random password per run. `next.config.ts` lets a build pointed at `http://127.0.0.1`/`localhost` talk to that stack; hosted builds keep the same CSP
+- Seed fix: supabase-js returns rows from insert/upsert only with `select()`, so the seed failed on a fresh project
+
+## Owner's decisions (13 Nov)
+- The site is not launched; all data is demo data. Before launch the owner deletes the Satyam demo office and its domain, and moves the database to Mumbai (new Pro project). The demo password is kept as it is on purpose until then. Not to be raised again before launch
+
 ## Filing record: notary → e-filing → CNR (3 Nov)
 - [x] Case page "Filing" section after approval: mark notary / stamp done (plaint locks), mark ready for e-filing (needs the bundle), record the filing (e-filing no., date, court fee paid — prefilled from the computed fee — and payment / GRN id) → case `filed`, then the court's CNR and filing / registration number
 - [x] CNR validated in code (`packages/domain/src/cnr.ts`, tests) and in the DB (`20261103000000_filing_record`: 16-character eCourts shape, unique per office, only once filed); RLS tests
