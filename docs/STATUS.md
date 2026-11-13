@@ -216,6 +216,8 @@
 - [x] Runs against a **local** Supabase stack (`supabase start`, `supabase/config.toml`): all 48 migrations apply cleanly to a fresh Supabase Postgres 17; synthetic seed (`seed:demo`, now also sets the firm code); CI job `e2e` with a random password per run. `next.config.ts` lets a build pointed at `http://127.0.0.1`/`localhost` talk to that stack; hosted builds keep the same CSP
 - Seed fix: supabase-js returns rows from insert/upsert only with `select()`, so the seed failed on a fresh project
 
+- [x] Live after #35 (13 Nov): approval list by case, phone case list. The touch-screen button rule (`globals.css`) was missing from the first production build — the live CSS was the new build minus exactly that rule — and appeared after a **Redeploy without the build cache**; buttons on phones now measure 40 px live. If a `globals.css` change does not show on the live site, redeploy without the build cache (Vercel → Deployments → ⋯ → Redeploy → untick "Use existing Build Cache")
+
 ## Owner's decisions (13 Nov)
 - The site is not launched; all data is demo data. Before launch the owner deletes the Satyam demo office and its domain, and moves the database to Mumbai (new Pro project). The demo password is kept as it is on purpose until then. Not to be raised again before launch
 
