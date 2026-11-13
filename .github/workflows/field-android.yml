@@ -45,7 +45,7 @@ jobs:
         run: rm -f "$RUNNER_TEMP/field.jks"
       - name: Rename APK
         run: cp apps/field-android/app/build/outputs/apk/release/app-release.apk CivilSuitsField.apk
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: CivilSuitsField-apk
           path: CivilSuitsField.apk
