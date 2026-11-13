@@ -93,6 +93,8 @@ export interface CourtChoice {
   suggested: CourtOption | null;
   /** What the advocate still has to confirm, or what is missing. */
   notes: string[];
+  /** The same notes as flags, so a screen can word them in its own language. */
+  flags: { place: boolean; drtBench: boolean; noCourt: boolean; several: boolean };
 }
 
 const COURT_WORD: Record<RecoveryForum, string> = { civil: "civil court", commercial: "commercial court", drt: "Debts Recovery Tribunal" };
@@ -118,6 +120,7 @@ export function chooseCourt(input: CourtChoiceInput): CourtChoice {
       candidates,
       suggested: candidates.find((c) => c.courtType === "civil") ?? candidates[0] ?? null,
       notes: [PLACE_NOTE],
+      flags: { place: true, drtBench: false, noCourt: false, several: false },
     };
   }
 
@@ -141,6 +144,7 @@ export function chooseCourt(input: CourtChoiceInput): CourtChoice {
           : `${amount}: a civil suit.`;
 
   const notes: string[] = [];
+  const flags = { place: false, drtBench: false, noCourt: false, several: false };
   let candidates: CourtOption[];
   let suggested: CourtOption | null;
   if (courtType === "drt") {
@@ -148,18 +152,34 @@ export function chooseCourt(input: CourtChoiceInput): CourtChoice {
     candidates = drts;
     suggested = drts.find((c) => sameDistrict(c.district, input.district)) ?? null;
     notes.push(DRT_NOTE);
-    if (!drts.length) notes.push("No Debts Recovery Tribunal in the office's court list — add it under Banks & courts.");
+    flags.drtBench = true;
+    if (!drts.length) {
+      notes.push("No Debts Recovery Tribunal in the office's court list — add it under Banks & courts.");
+      flags.noCourt = true;
+    }
   } else {
     candidates = inDistrict.filter((c) => c.courtType === courtType).sort(byName);
     suggested = candidates[0] ?? null;
     notes.push(PLACE_NOTE);
+    flags.place = true;
     if (!candidates.length) {
+      flags.noCourt = true;
       notes.push(`No ${COURT_WORD[courtType]} for ${input.district} in the office's court list — add it under Banks & courts, or pick another district.`);
     } else if (candidates.length > 1) {
+      flags.several = true;
       notes.push(
         "[[LEGAL_REVIEW]] More than one such court in the district: which one hears this amount depends on its pecuniary limits; the advocate confirms.",
       );
     }
   }
-  return { courtType, suitType: courtType === "drt" ? null : route.suitType, needs12A: courtType !== "drt" && route.needs12A, reason, candidates, suggested, notes };
+  return {
+    courtType,
+    suitType: courtType === "drt" ? null : route.suitType,
+    needs12A: courtType !== "drt" && route.needs12A,
+    reason,
+    candidates,
+    suggested,
+    notes,
+    flags,
+  };
 }
