@@ -9,7 +9,8 @@ Supabase project `ohdtudvmcahdnqnhfqzp`.
 
 ## Pending
 
-Nothing in flight.
+- Marathi labels for the new-case page: done and pushed on the work branch (no database step);
+  waiting for the owner to say whether to open the PR and merge.
 
 ## Needs the owner
 - Try "New case → From the bank's file" once with a synthetic loan file: the first run against

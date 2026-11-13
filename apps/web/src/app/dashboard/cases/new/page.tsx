@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { TopBar } from "@/components/top-bar";
 import type { CourtOption } from "@civil-suits/domain";
+import { getT } from "@/lib/lang";
 import { loadOfficeConfig } from "@/lib/office-profile";
 import { peopleWithRole } from "@/lib/people";
 import { createClient } from "@/lib/supabase/server";
@@ -28,6 +29,7 @@ export default async function NewCasePage() {
     peopleWithRole(supabase, "approver"),
     loadOfficeConfig(supabase),
   ]);
+  const { lang, t } = await getT();
   const roleNames = (roles ?? []).map((r) => r.role as string);
   if (!roleNames.includes("admin")) redirect("/dashboard");
 
@@ -39,11 +41,11 @@ export default async function NewCasePage() {
       <TopBar org={one(profile?.organizations as Rel<{ name: string }>)?.name} name={profile?.full_name} roles={roleNames} />
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 pb-16 pt-8">
         <Link href="/dashboard" className="muted text-sm hover:underline">
-          ← Dashboard
+          ← {t("Dashboard")}
         </Link>
-        <h1 className="fade-up mt-2 text-3xl font-semibold tracking-tight">Open a new case</h1>
+        <h1 className="fade-up mt-2 text-3xl font-semibold tracking-tight">{t("Open a new case")}</h1>
         <p className="muted fade-up mt-1 text-sm">
-          Start from the bank&apos;s file and let the AI fill the form — or type it in.
+          {t("Start from the bank's file and let the AI fill the form — or type it in.")}
         </p>
         <div className="glass-card fade-up mt-6 p-6 sm:p-8" style={{ animationDelay: "80ms" }}>
           <NewCaseChooser
@@ -63,6 +65,7 @@ export default async function NewCasePage() {
             drafters={drafters}
             approvers={approvers}
             officeForum={config?.settings.forum ?? "summary_suit"}
+            lang={lang}
           />
         </div>
       </main>

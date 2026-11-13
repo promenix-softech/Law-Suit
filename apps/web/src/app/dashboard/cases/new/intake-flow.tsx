@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { BankClaimForum, CourtOption } from "@civil-suits/domain";
 import { needsOwnTick, type IntakeField } from "@/lib/extract/intake";
+import { translator, type Lang, type T } from "@/lib/i18n";
 import { createClient } from "@/lib/supabase/client";
 import { uploadName } from "@/lib/upload-name";
 import { CourtPicker } from "./court-picker";
@@ -36,11 +37,11 @@ function paiseOf(v: string | undefined): number | null {
   return Number.isFinite(n) && n > 0 ? Math.round(n * 100) : null;
 }
 
-function Confidence({ c }: { c: number | null }) {
+function Confidence({ c, t }: { c: number | null; t: T }) {
   if (c == null) return null;
   const pct = Math.round(c * 100);
   const tone = c >= 0.85 ? "pill-green" : c >= 0.6 ? "pill-amber" : "pill-red";
-  return <span className={`pill ${tone} px-2 py-0 text-[11px]`}>{pct}% sure</span>;
+  return <span className={`pill ${tone} px-2 py-0 text-[11px]`}>{pct}% {t("sure")}</span>;
 }
 
 export function IntakeFlow({
@@ -53,6 +54,7 @@ export function IntakeFlow({
   approvers,
   officeForum,
   onTypeInstead,
+  lang = "en",
 }: {
   orgId: string;
   userId: string;
@@ -63,7 +65,9 @@ export function IntakeFlow({
   approvers: Person[];
   officeForum: BankClaimForum;
   onTypeInstead: () => void;
+  lang?: Lang;
 }) {
+  const t = translator(lang);
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
   const [phase, setPhase] = useState<"pick" | "reading" | "review">("pick");
@@ -105,18 +109,18 @@ export function IntakeFlow({
   async function onUpload() {
     const file = input.current?.files?.[0];
     setError(null);
-    if (!file) return setError("Choose the bank's file first.");
-    if (!ALLOWED.includes(file.type)) return setError("Only PDF, JPG or PNG files.");
-    if (file.size > MAX_BYTES) return setError("The file is larger than 25 MB.");
+    if (!file) return setError(t("Choose the bank's file first."));
+    if (!ALLOWED.includes(file.type)) return setError(t("Only PDF, JPG or PNG files."));
+    if (file.size > MAX_BYTES) return setError(t("The file is larger than 25 MB."));
     const name = uploadName(file.type);
-    if (!name) return setError("Only PDF, JPG or PNG files.");
+    if (!name) return setError(t("Only PDF, JPG or PNG files."));
     setBusy(true);
     try {
       const path = `${orgId}/${userId}/${name}`;
       const up = await createClient().storage.from("case-intake").upload(path, file, { contentType: file.type });
-      if (up.error) return setError("Upload was not allowed. Only an admin can open cases.");
+      if (up.error) return setError(t("Upload was not allowed. Only an admin can open cases."));
       const started = await startIntake(path);
-      if (!started.ok) return setError(started.error);
+      if (!started.ok) return setError(t(started.error));
       setIntakeId(started.intakeId);
       setPhase("reading");
       for (let i = 0; i < POLL_LIMIT; i++) {
@@ -125,18 +129,18 @@ export function IntakeFlow({
         const r = await readIntake(started.intakeId);
         if (!r.ok) {
           await discardIntake(started.intakeId); // the file does not stay behind
-          setError(r.error);
+          setError(t(r.error));
           setPhase("pick");
           return;
         }
         if (r.done) {
-          if (r.failed) setNotice(`${r.failed} Type the values in below — the file will still be kept with the case.`);
+          if (r.failed) setNotice(`${t(r.failed)} ${t("Type the values in below — the file will still be kept with the case.")}`);
           showFields(r.fields);
           return;
         }
       }
       await discardIntake(started.intakeId);
-      setError("The AI is taking too long. Try again in a minute, or type the case in.");
+      setError(t("The AI is taking too long. Try again in a minute, or type the case in."));
       setPhase("pick");
     } finally {
       setBusy(false);
@@ -172,7 +176,7 @@ export function IntakeFlow({
         fields: fields.map((f) => ({ key: f.key, value: values[f.key] ?? "", checked: !!ticks[f.key] })),
       });
       if (!r.ok) {
-        setError(r.error);
+        setError(t(r.error));
         setFieldErrors(r.fieldErrors ?? {});
         if (r.caseId) setOpenedCaseId(r.caseId);
         return;
@@ -187,9 +191,9 @@ export function IntakeFlow({
     return (
       <div className="space-y-4">
         <ol className="muted flex flex-wrap gap-3 text-xs">
-          <li className="font-semibold text-current">① Upload the bank&apos;s file</li>
-          <li>② Check what the AI read</li>
-          <li>③ Open the case</li>
+          <li className="font-semibold text-current">① {t("Upload the bank's file")}</li>
+          <li>② {t("Check what the AI read")}</li>
+          <li>③ {t("Open the case")}</li>
         </ol>
         {phase === "pick" ? (
           <>
@@ -202,24 +206,26 @@ export function IntakeFlow({
                 onChange={(e) => setFileName(e.target.files?.[0]?.name ?? null)}
               />
               <span className="block text-3xl">📄</span>
-              <span className="mt-2 block font-semibold">{fileName ? fileName.slice(0, 40) : "Choose the bank's loan file"}</span>
-              <span className="muted mt-1 block text-xs">PDF, JPG or PNG · up to 10 pages · the AI reads it in about a minute</span>
+              <span className="mt-2 block font-semibold">{fileName ? fileName.slice(0, 40) : t("Choose the bank's loan file")}</span>
+              <span className="muted mt-1 block text-xs">{t("PDF, JPG or PNG · up to 10 pages · the AI reads it in about a minute")}</span>
             </label>
             {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
             <div className="flex flex-wrap items-center justify-between gap-3">
               <button type="button" onClick={onTypeInstead} className="muted text-sm hover:underline">
-                Type the case in instead
+                {t("Type the case in instead")}
               </button>
               <button type="button" onClick={onUpload} disabled={busy || !fileName} className="btn btn-primary px-6 py-3">
-                {busy ? "Uploading…" : "✦ Read it with AI"}
+                {busy ? t("Uploading…") : `✦ ${t("Read it with AI")}`}
               </button>
             </div>
           </>
         ) : (
           <div className="rounded-2xl border border-current/10 p-8 text-center" role="status">
             <span className="block text-3xl">✦</span>
-            <p className="mt-2 font-semibold">The AI is reading the file…</p>
-            <p className="muted mt-1 text-sm">{seconds}s · usually under a minute. Nothing is saved to a case until you open it.</p>
+            <p className="mt-2 font-semibold">{t("The AI is reading the file…")}</p>
+            <p className="muted mt-1 text-sm">
+              {seconds}s · {t("usually under a minute. Nothing is saved to a case until you open it.")}
+            </p>
           </div>
         )}
       </div>
@@ -243,10 +249,10 @@ export function IntakeFlow({
       <div key={f.key} className="rounded-xl border border-current/10 p-3" data-field={f.key}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <label htmlFor={`f-${f.key}`} className="label">
-            {f.label}
+            {t(f.label)}
           </label>
           <span className="flex items-center gap-2">
-            <Confidence c={f.confidence} />
+            <Confidence c={f.confidence} t={t} />
             <label className="flex items-center gap-1.5 text-sm">
               <input
                 type="checkbox"
@@ -256,7 +262,7 @@ export function IntakeFlow({
                 className="h-5 w-5 accent-violet-500"
                 aria-label={`${f.label} checked`}
               />
-              Checked
+              {t("Checked")}
             </label>
           </span>
         </div>
@@ -282,9 +288,17 @@ export function IntakeFlow({
             className="input-glass mt-2"
           />
         )}
-        {f.asRead && f.asRead !== v && <p className="muted mt-1 text-xs">As read: {f.asRead}</p>}
-        {!f.asRead && <p className="muted mt-1 text-xs">Not found in the file — type it if you have it.</p>}
-        {f.problem && <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">Not accepted as read: {f.problem}</p>}
+        {f.asRead && f.asRead !== v && (
+          <p className="muted mt-1 text-xs">
+            {t("As read")}: {f.asRead}
+          </p>
+        )}
+        {!f.asRead && <p className="muted mt-1 text-xs">{t("Not found in the file — type it if you have it.")}</p>}
+        {f.problem && (
+          <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+            {t("Not accepted as read")}: {t(f.problem)}
+          </p>
+        )}
         {fieldErrors[f.key] && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{fieldErrors[f.key]}</p>}
       </div>
     );
@@ -293,23 +307,28 @@ export function IntakeFlow({
   return (
     <div className="space-y-6">
       <ol className="muted flex flex-wrap gap-3 text-xs">
-        <li>① Upload ✓</li>
-        <li className="font-semibold text-current">② Check what the AI read</li>
-        <li>③ Open the case</li>
+        <li>① {t("Upload")} ✓</li>
+        <li className="font-semibold text-current">② {t("Check what the AI read")}</li>
+        <li>③ {t("Open the case")}</li>
       </ol>
       {notice && <p className="rounded-xl bg-amber-500/10 p-3 text-sm">{notice}</p>}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="muted text-sm">
-          Compare each value with the file and tick it. Change anything that is wrong. Unticked values go to the drafter to check.
+          {t("Compare each value with the file and tick it. Change anything that is wrong. Unticked values go to the drafter to check.")}
         </p>
         <button type="button" onClick={onViewFile} className="btn px-4 py-2 text-sm">
-          👁 Open the file
+          👁 {t("Open the file")}
         </button>
       </div>
 
       <p className="rounded-xl bg-violet-500/10 p-3 text-sm" data-testid="intake-summary">
-        The AI filled <strong>{found.length}</strong> of {fields.length} values. Ticked: <strong>{tickedCount}</strong>.
-        {toTick > 0 && <> Check and tick the <strong>{toTick}</strong> amounts, dates and numbers one by one.</>}
+        {t("Values filled by the AI")}: <strong>{found.length}</strong> / {fields.length} · {t("Ticked")}: <strong>{tickedCount}</strong>.
+        {toTick > 0 && (
+          <>
+            {" "}
+            {t("Amounts, dates and numbers to check and tick one by one")}: <strong>{toTick}</strong>.
+          </>
+        )}
       </p>
 
       {GROUPS.map((g) => {
@@ -317,7 +336,7 @@ export function IntakeFlow({
         if (!list.length) return null;
         return (
           <section key={g.title} className="space-y-3">
-            <h3 className="font-semibold">{g.title}</h3>
+            <h3 className="font-semibold">{t(g.title)}</h3>
             {list.map(row)}
           </section>
         );
@@ -326,24 +345,24 @@ export function IntakeFlow({
       {missing.length > 0 && (
         <details className="space-y-3 rounded-xl border border-current/10 p-3">
           <summary className="cursor-pointer text-sm font-semibold">
-            Not found in the file ({missing.length}) — add them if you have them
+            {t("Not found in the file")} ({missing.length}) — {t("add them if you have them")}
           </summary>
           <div className="mt-3 space-y-3">{missing.map(row)}</div>
         </details>
       )}
 
       <section className="space-y-4 rounded-2xl border border-current/10 p-4">
-        <h3 className="font-semibold">③ Case details</h3>
+        <h3 className="font-semibold">③ {t("Case details")}</h3>
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block">
-            <span className="label">Internal case no.</span>
+            <span className="label">{t("Internal case no.")}</span>
             <input value={caseNo} onChange={(e) => setCaseNo(e.target.value)} className="input-glass mt-2" />
           </label>
           <label className="block">
-            <span className="label">Bank branch</span>
+            <span className="label">{t("Bank branch")}</span>
             <select value={branchId} onChange={(e) => setBranchId(e.target.value)} className="input-glass mt-2">
               <option value="" disabled>
-                Choose…
+                {t("Choose…")}
               </option>
               {branches.map((b) => (
                 <option key={b.id} value={b.id}>
@@ -353,17 +372,17 @@ export function IntakeFlow({
             </select>
           </label>
         </div>
-        <CourtPicker courts={courts} claimPaise={claimPaise} urgent={urgent} officeForum={officeForum} value={courtId} onChange={setCourtId} />
+        <CourtPicker courts={courts} claimPaise={claimPaise} urgent={urgent} officeForum={officeForum} value={courtId} onChange={setCourtId} lang={lang} />
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={urgent} onChange={(e) => setUrgent(e.target.checked)} className="h-5 w-5 accent-violet-500" />
-          Urgent interim relief (no 12A mediation)
+          {t("Urgent interim relief (no 12A mediation)")}
         </label>
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block">
-            <span className="label">Drafter</span>
+            <span className="label">{t("Drafter")}</span>
             <select value={drafterId} onChange={(e) => setDrafterId(e.target.value)} className="input-glass mt-2">
               <option value="" disabled>
-                Choose…
+                {t("Choose…")}
               </option>
               {drafters.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -373,10 +392,10 @@ export function IntakeFlow({
             </select>
           </label>
           <label className="block">
-            <span className="label">Approver</span>
+            <span className="label">{t("Approver")}</span>
             <select value={approverId} onChange={(e) => setApproverId(e.target.value)} className="input-glass mt-2">
               <option value="" disabled>
-                Choose…
+                {t("Choose…")}
               </option>
               {approvers.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -386,17 +405,17 @@ export function IntakeFlow({
             </select>
           </label>
         </div>
-        {clash && <p className="text-sm text-red-600 dark:text-red-400">Drafter and approver must be different people (maker–checker).</p>}
-        {!borrowerOk && <p className="text-sm text-amber-700 dark:text-amber-300">Check and tick the borrower&apos;s name — the case is opened in that name.</p>}
+        {clash && <p className="text-sm text-red-600 dark:text-red-400">{t("Drafter and approver must be different people (maker–checker).")}</p>}
+        {!borrowerOk && <p className="text-sm text-amber-700 dark:text-amber-300">{t("Check and tick the borrower's name — the case is opened in that name.")}</p>}
         {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
         {openedCaseId && (
           <a href={`/dashboard/cases/${openedCaseId}`} className="btn btn-primary px-4 py-2 text-sm">
-            Open the case →
+            {t("Open the case")} →
           </a>
         )}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <button type="button" onClick={onStartAgain} className="muted text-sm hover:underline">
-            Start again with another file
+            {t("Start again with another file")}
           </button>
           <button
             type="button"
@@ -404,10 +423,14 @@ export function IntakeFlow({
             disabled={busy || !!openedCaseId || !!clash || !borrowerOk || !branchId || !courtId || !drafterId || !approverId}
             className="btn btn-primary px-6 py-3"
           >
-            {busy ? "Opening…" : "Open case"}
+            {busy ? t("Opening…") : t("Open case")}
           </button>
         </div>
-        {unticked > 0 && <p className="muted text-xs">{unticked} value(s) not ticked will go to the drafter to check on the case page.</p>}
+        {unticked > 0 && (
+          <p className="muted text-xs">
+            {t("Values not ticked, for the drafter to check on the case page")}: {unticked}
+          </p>
+        )}
       </section>
     </div>
   );

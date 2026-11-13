@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { BankClaimForum, CourtOption } from "@civil-suits/domain";
+import { translator, type Lang } from "@/lib/i18n";
 import { IntakeFlow, type BranchOption } from "./intake-flow";
 import { NewCaseForm } from "./new-case-form";
 
@@ -17,7 +18,9 @@ export function NewCaseChooser(props: {
   drafters: Person[];
   approvers: Person[];
   officeForum: BankClaimForum;
+  lang: Lang;
 }) {
+  const t = translator(props.lang);
   const [mode, setMode] = useState<"choose" | "file" | "typed">("choose");
 
   if (mode === "file") return <IntakeFlow {...props} onTypeInstead={() => setMode("typed")} />;
@@ -25,7 +28,7 @@ export function NewCaseChooser(props: {
     return (
       <div className="space-y-4">
         <button type="button" onClick={() => setMode("file")} className="muted text-sm hover:underline">
-          ← Use the bank&apos;s file instead (the AI fills the form)
+          ← {t("Use the bank's file instead (the AI fills the form)")}
         </button>
         <NewCaseForm
           suggestedNo={props.suggestedNo}
@@ -34,6 +37,7 @@ export function NewCaseChooser(props: {
           drafters={props.drafters}
           approvers={props.approvers}
           officeForum={props.officeForum}
+          lang={props.lang}
         />
       </div>
     );
@@ -46,14 +50,14 @@ export function NewCaseChooser(props: {
         className="glass-card rounded-2xl border-2 border-violet-400/60 p-6 text-left transition hover:border-violet-500"
       >
         <span className="text-3xl">✦</span>
-        <span className="mt-3 block text-lg font-semibold">From the bank&apos;s file</span>
-        <span className="muted mt-1 block text-sm">Upload the loan file. The AI fills the form; you check it and open the case.</span>
-        <span className="pill pill-green mt-3 inline-block text-xs">Recommended</span>
+        <span className="mt-3 block text-lg font-semibold">{t("From the bank's file")}</span>
+        <span className="muted mt-1 block text-sm">{t("Upload the loan file. The AI fills the form; you check it and open the case.")}</span>
+        <span className="pill pill-green mt-3 inline-block text-xs">{t("Recommended")}</span>
       </button>
       <button type="button" onClick={() => setMode("typed")} className="glass-card rounded-2xl p-6 text-left transition hover:border-violet-400">
         <span className="text-3xl">⌨</span>
-        <span className="mt-3 block text-lg font-semibold">Type it in</span>
-        <span className="muted mt-1 block text-sm">Case number, branch, court, borrower and team. Add the file later from the case page.</span>
+        <span className="mt-3 block text-lg font-semibold">{t("Type it in")}</span>
+        <span className="muted mt-1 block text-sm">{t("Case number, branch, court, borrower and team. Add the file later from the case page.")}</span>
       </button>
     </div>
   );

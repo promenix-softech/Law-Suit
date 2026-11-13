@@ -71,6 +71,13 @@ describe("chooseCourt", () => {
     const c = chooseCourt({ ...base, claimPaise: rupees(5_00_000), district: "Nashik" });
     expect(c.suggested).toBeNull();
     expect(c.notes.join(" ")).toContain("No commercial court for Nashik");
+    expect(c.flags).toEqual({ place: true, drtBench: false, noCourt: true, several: false });
+  });
+
+  it("gives the notes as flags too, for screens in other languages", () => {
+    expect(chooseCourt({ ...base, claimPaise: rupees(20_00_000) }).flags).toEqual({ place: false, drtBench: true, noCourt: false, several: false });
+    const two = [...COURTS, { id: "pune-civil-2", name: "Civil Judge Junior Division, Pune", district: "Pune", courtType: "civil" as const }];
+    expect(chooseCourt({ ...base, courts: two, claimPaise: rupees(1_00_000) }).flags.several).toBe(true);
   });
 
   it("amount not known yet: every court of the district, civil first", () => {

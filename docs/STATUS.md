@@ -229,7 +229,9 @@
 - [x] The three migrations (`20261114000000`, `…010000`, `…020000`) applied to the demo DB before the merge (owner approved, 14 Nov); checked: private bucket, forced RLS, 3 table + 3 storage policies, claim column, 5 triggers
 - [x] Live check (read-only, desktop + phone): both ways offered, typed-in form defaults to Pune with the Pune civil court, the file way shows the upload step, no page errors; CI e2e 10/10
 - [ ] Owner: one run with a synthetic loan file against the real Sarvam API (the tests used a stand-in)
-- [ ] Later: Marathi labels for the new-case page; the worker sweep runs only once the worker has a VPS (until then each admin's next upload sweeps their own leftovers)
+- [x] Marathi labels for the new-case page (chooser, upload, review, typed-in form, court picker). The "where to file" box is built in Marathi from the same decision in code (`chooseCourt` now also returns `flags`), not translated text; summary suit / commercial suit stay in English per the glossary (†). Checked in Marathi mode on desktop and phone; e2e 10/10 (English).
+- [ ] Later: the worker sweep runs only once the worker has a VPS (until then each admin's next upload sweeps their own leftovers)
+- [ ] Advocate: confirm the Marathi "where to file" lines (CPC s.20 place, DRT bench, several courts) along with the other Marathi wording
 
 ## Owner's decisions (13 Nov)
 - The site is not launched; all data is demo data. Before launch the owner deletes the Satyam demo office and its domain, and moves the database to Mumbai (new Pro project). The demo password is kept as it is on purpose until then. Not to be raised again before launch
