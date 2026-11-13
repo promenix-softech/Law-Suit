@@ -18,11 +18,10 @@ it very easy to use."
   `20261114010000_case_intake_discard` with RLS tests; server actions
   `apps/web/src/app/dashboard/cases/new/intake-actions.ts`; `lib/extract/intake.ts` (tests);
   case creation shared in `lib/new-case.ts`.
-- Left: UI on `/dashboard/cases/new` (two ways: from the file / type it in; review form with
-  ticks, as-read text, confidence, file link; district select default Pune + court picked by
-  `chooseCourt`; same picker on the typed-in form), e2e (Sarvam mock), `pnpm check`,
-  `security-reviewer`, STATUS. Then the owner: apply both migrations to the demo DB **before**
-  the merge, PR, merge.
+- UI done and pushed (`new-case-chooser.tsx`, `intake-flow.tsx`, `court-picker.tsx`); e2e with a
+  Sarvam stand-in, 10/10 from a fresh stack; `pnpm check` passes; STATUS updated.
+- Left: `security-reviewer` result (running 14 Nov), fixes if any. Then the owner: apply both
+  migrations to the demo DB **before** the merge, PR, merge.
 
 ## Needs the owner
 - Type a Marathi name and address on a demo case (Suit particulars → "मराठी नाव व पत्ता") and
