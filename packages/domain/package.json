@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "typescript": "^5",
+    "typescript": "^7",
     "vitest": "^4"
   }
 }
