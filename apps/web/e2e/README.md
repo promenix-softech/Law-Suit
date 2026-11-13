@@ -27,7 +27,10 @@ pnpm --filter web seed:demo && pnpm --filter web build && pnpm --filter web e2e
 ```
 
 - `supabase start` applies every migration in `supabase/migrations` to a fresh database (a check in
-  itself); `supabase db reset` starts over.
+  itself). The tests write (a hearing date, an upload, a new case), so before running them again
+  locally: `supabase db reset` and `pnpm --filter web seed:demo`. CI starts fresh every time.
+- `e2e/sarvam-mock.mjs` stands in for Sarvam (synthetic answers, no network); Playwright starts it
+  and points the app at it with `SARVAM_BASE_URL`.
 - `-x …` leaves out services the app does not use. Where `public.ecr.aws` is blocked, set
   `SUPABASE_INTERNAL_IMAGE_REGISTRY=docker.io` to pull the same images from Docker Hub.
 - A build pointed at `http://127.0.0.1` / `http://localhost` lets the page talk to that stack

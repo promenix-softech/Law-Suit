@@ -9,7 +9,20 @@ Supabase project `ohdtudvmcahdnqnhfqzp`.
 
 ## Pending
 
-Nothing in flight.
+### 1. Open a case from the bank's file — in progress (owner's ask, 13 Nov)
+Owner: "click → upload the bank document → AI fills everything → only review → case opens;
+editable; where to file decided by law; Pune court by default, other districts selectable; keep
+it very easy to use."
+- Done and pushed: `chooseCourt` + 36 districts (packages/domain, tests); migrations
+  `20261114000000_case_intake` (bucket `case-intake`, table `case_intakes`, quota) and
+  `20261114010000_case_intake_discard` with RLS tests; server actions
+  `apps/web/src/app/dashboard/cases/new/intake-actions.ts`; `lib/extract/intake.ts` (tests);
+  case creation shared in `lib/new-case.ts`.
+- Left: UI on `/dashboard/cases/new` (two ways: from the file / type it in; review form with
+  ticks, as-read text, confidence, file link; district select default Pune + court picked by
+  `chooseCourt`; same picker on the typed-in form), e2e (Sarvam mock), `pnpm check`,
+  `security-reviewer`, STATUS. Then the owner: apply both migrations to the demo DB **before**
+  the merge, PR, merge.
 
 ## Needs the owner
 - Type a Marathi name and address on a demo case (Suit particulars → "मराठी नाव व पत्ता") and
