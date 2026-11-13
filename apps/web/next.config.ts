@@ -3,6 +3,20 @@ import type { NextConfig } from "next";
 const isDev = process.env.NODE_ENV !== "production";
 
 /**
+ * A build pointed at a local Supabase test stack (end-to-end tests: http://127.0.0.1:54321) may
+ * talk to it; nothing else over plain http. Hosted builds use https://*.supabase.co only.
+ */
+const localSupabase = (() => {
+  try {
+    const u = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "");
+    return u.protocol === "http:" && (u.hostname === "127.0.0.1" || u.hostname === "localhost") ? u.origin : null;
+  } catch {
+    return null;
+  }
+})();
+const supabaseSrc = `https://*.supabase.co${localSupabase ? ` ${localSupabase}` : ""}`;
+
+/**
  * Content-Security-Policy. Next.js injects inline bootstrap scripts, so script-src needs
  * 'unsafe-inline' until we move to nonces; everything else is locked to our origin and Supabase.
  * Uploads go browser → Supabase Storage directly (bucket size and MIME limits apply there).
@@ -11,15 +25,15 @@ const csp = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https://*.supabase.co",
+  `img-src 'self' data: blob: ${supabaseSrc}`,
   "font-src 'self' data:",
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
+  `connect-src 'self' ${supabaseSrc} wss://*.supabase.co`,
   "frame-src 'none'",
   "frame-ancestors 'none'",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",
-  ...(isDev ? [] : ["upgrade-insecure-requests"]),
+  ...(isDev || localSupabase ? [] : ["upgrade-insecure-requests"]),
 ].join("; ");
 
 const securityHeaders = [

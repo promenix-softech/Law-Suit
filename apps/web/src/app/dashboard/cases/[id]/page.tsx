@@ -18,7 +18,8 @@ import { TopBar } from "@/components/top-bar";
 import type { T } from "@/lib/i18n";
 import { getT } from "@/lib/lang";
 import { createClient } from "@/lib/supabase/server";
-import { caseStatus, draftStatus, fmtDate, title, todayIST } from "@/lib/ui";
+import { caseStatus, docLabel, draftStatus, fmtDate, title, todayIST } from "@/lib/ui";
+import { fileLabel } from "@/lib/upload-name";
 import { getViewMode } from "@/lib/view-mode";
 import { ViewToggle } from "@/components/view-toggle";
 import { DecideDraft, GenerateAll, MediationOutcome, MediationStart, NoticeForm, SubmitAll, SubmitDraft, UploadScan } from "./case-actions";
@@ -781,7 +782,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
             {docs?.map((d) => (
               <li key={d.id} className="row-hover flex flex-wrap items-center justify-between gap-3 rounded-xl px-3 py-2 text-sm">
                 <a className="min-w-0 flex-1 truncate py-1 hover:underline" href={signed.get(d.storage_path)} target="_blank" rel="noreferrer">
-                  📄 {d.storage_path.split("/").pop()?.replace(/^\d+-/, "")}{" "}
+                  📄 {fileLabel(d.storage_path)}{" "}
                   <span className="muted">· {fmtDate(d.created_at)}</span>
                 </a>
                 {signed.get(d.storage_path) && (
@@ -881,7 +882,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
               <SubmitAll
                 lang={lang}
                 // Returned papers go back one by one, after the approver's comments are dealt with.
-                drafts={allDrafts.filter((d) => d.status === "draft" && d.current_version > 0).map((d) => ({ id: d.id, label: title(d.doc_kind) }))}
+                drafts={allDrafts.filter((d) => d.status === "draft" && d.current_version > 0).map((d) => ({ id: d.id, label: docLabel(d.doc_kind) }))}
               />
               {/* The demand notice also has a Marathi template; it is drafted and approved like any other paper. */}
               {!allDrafts.some((d) => d.doc_kind === "demand_notice" && d.language === "mr") && (
@@ -898,7 +899,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
             </div>
           )}
           <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
-            {[...paperDrafts.map((p) => ({ kind: p.kind as string, label: p.label, draft: p.draft })), ...otherDrafts.map((d) => ({ kind: d.doc_kind as string, label: title(d.doc_kind), draft: d }))].map(
+            {[...paperDrafts.map((p) => ({ kind: p.kind as string, label: p.label, draft: p.draft })), ...otherDrafts.map((d) => ({ kind: d.doc_kind as string, label: docLabel(d.doc_kind), draft: d }))].map(
               ({ kind, label, draft: d }) => {
                 const vs = [...(d?.draft_versions ?? [])].sort((a, b) => b.version - a.version);
                 const latest = vs[0];
@@ -931,7 +932,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <p className="font-semibold">
-                          {title(d.doc_kind)} <span className="muted text-xs uppercase">{d.language}</span>
+                          {docLabel(d.doc_kind)} <span className="muted text-xs uppercase">{d.language}</span>
                         </p>
                         <p className="muted text-xs">
                           v{latest.version} · {fmtDate(latest.created_at)}
@@ -949,7 +950,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
 
                     {/* Reading the paper comes first */}
                     <div className="mt-4 flex flex-wrap items-center gap-2">
-                      {url && <DraftPreview url={url} heading={`${c.case_no_internal} · ${title(d.doc_kind)} v${latest.version}`} lang={lang} />}
+                      {url && <DraftPreview url={url} heading={`${c.case_no_internal} · ${docLabel(d.doc_kind)} v${latest.version}`} lang={lang} />}
                       {url && (
                         <a className="btn px-3 py-1 text-xs" href={url}>
                           ⬇ DOCX
@@ -987,7 +988,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
                             approved={approvedNow}
                             lang={lang}
                           />
-                          <EditDraftText draftId={d.id} heading={`${c.case_no_internal} · ${title(d.doc_kind)}`} approved={approvedNow} lang={lang} />
+                          <EditDraftText draftId={d.id} heading={`${c.case_no_internal} · ${docLabel(d.doc_kind)}`} approved={approvedNow} lang={lang} />
                           <CorrectDraft orgId={c.org_id} caseId={c.id} draftId={d.id} approved={approvedNow} lang={lang} />
                         </>
                       )}
@@ -1007,7 +1008,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
                               </span>
                               {v.docx_path && signed.get(v.docx_path) && (
                                 <>
-                                  <DraftPreview url={signed.get(v.docx_path)!} heading={`${c.case_no_internal} · ${title(d.doc_kind)} v${v.version}`} lang={lang} />
+                                  <DraftPreview url={signed.get(v.docx_path)!} heading={`${c.case_no_internal} · ${docLabel(d.doc_kind)} v${v.version}`} lang={lang} />
                                   <a className="btn px-2 py-0.5 text-xs" href={signed.get(v.docx_path)}>
                                     ⬇ DOCX
                                   </a>
@@ -1041,7 +1042,7 @@ export default async function CasePage({ params }: PageProps<"/dashboard/cases/[
             canEdit && (
               <BundleForm
                 caseId={c.id}
-                documents={(docs ?? []).map((d) => ({ id: d.id, name: d.storage_path.split("/").pop()!.replace(/^\d+-/, "") }))}
+                documents={(docs ?? []).map((d) => ({ id: d.id, name: `${fileLabel(d.storage_path)} · ${fmtDate(d.created_at)}` }))}
               />
             )
           ) : (

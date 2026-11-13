@@ -94,7 +94,8 @@
 - [x] CI: `permissions: contents: read`; Dependabot (npm, actions, docker); `security.yml` (pnpm audit, gitleaks, no-PHP, client-secret grep, CodeQL on public repos)
 - [ ] Owner: Supabase → Auth → enable leaked-password protection; confirm public sign-ups are off
 - [ ] Worker sandbox before real data: run soffice/gs/ocrmypdf as a separate uid in bwrap/nsjail with no network and RLIMITs; per-bundle page budget (plan: 1,000) and per-job wall clock
-- [ ] Upload names: store as `<ts>-<uuid>.<ext>` (original names can carry borrower names); atomic OCR start (partial unique index)
+- [x] Upload names: stored as `<ts>-<uuid>.<ext>` (13 Nov, see below)
+- [ ] Atomic OCR start (partial unique index)
 
 ## Done (domain, 24 Oct)
 - [x] Live at https://civilsuits.promenix.in (Hostinger CNAME → Vercel); production redirects every other host (old `civil-suits*.vercel.app` links) there with a 308 via `CANONICAL_HOST`; website APK opens the new address
@@ -185,7 +186,7 @@
 - [x] Full-screen reader (`components/draft-preview.tsx`): book view with two pages side by side (one on phones) and a 3D page turn, scroll view, zoom 50–300 %, full screen, page slider, keyboard (← → Home End + − 0 Esc), swipe, focus kept inside the dialog, reduced-motion respected; Marathi labels
 - [x] A4 pagination in the browser (`lib/preview/paginate.ts`): docx-preview only breaks at explicit page breaks, so generated papers came as one long page; blocks are measured and dealt onto pages, tables break between rows, a lead-in line ending in ":" stays with what follows, "Page N of M" filled in. Layout maths and pagination planning unit-tested (`lib/preview/*.test.ts`); checked in a browser on all ten sample papers (plaint 6 pages, decree 5, the rest 1–2). The uploaded DOCX is still sanitised before it touches the page
 
-## In court, limitation, reports, Marathi notice, simple view (10 Nov) — NOT yet applied to the demo DB
+## In court, limitation, reports, Marathi notice, simple view (10 Nov) — live (#33, #34)
 - [x] Hearing diary after filing (`hearings`, migration `20261109000000`): dates only for a suit in court, by the case's editor; the first date lists the case; an outcome only once the date has come; a written-up date is never deleted or re-dated; `record_hearing()` writes up a date and enters the next one in one transaction. Disposal (date, result, note) on the case: needed for `disposed`, refused on any other status, changed afterwards by an admin only; `filed → disposed` allowed (lifecycle + SQL). Domain: `hearings.ts` (diary, date checks), tests; RLS tests incl. who may write
 - [x] Limitation events (`limitation_events`): written acknowledgement / part-payment, never dated in the future; watch date recomputed in code (`limitationWatch` in `deadlines.ts`: an event made while the period runs restarts the three years, a late one is shown as not extending it) — [[LEGAL_REVIEW]]: a watch date for the office, the advocate confirms the real date
 - [x] Case page: Hearings and Limitation cards; next step continues through CNR, hearing dates and disposal; an approved case is no longer sent back to "upload the loan file". Dashboard: court dates and unwritten hearings in the deadline list
@@ -195,9 +196,28 @@
 - [x] Fixes (migration `20261109010000`): ten RLS policies evaluate `auth.uid()` once per statement instead of once per row; indexes on the foreign keys the app joins by; a bulk-upload split cannot add pages to an archived case; an admin's filing correction keeps the date in range; CI runs the DB tests on Postgres 17 (the live version); `pnpm check` = what CI's app job runs
 - [x] Audit of the SECURITY DEFINER functions callable by signed-in users (Supabase advisor): `verify_audit_chain`, `billable_suit_packs`, `update_office_settings`, `confirm_batch` check role and office themselves; `ai_quota_ok` takes its limits from the caller, so it is a courtesy check for the app's own server actions, not a control (OCR jobs are started only by server actions)
 - [x] Security review (FAIL → fixed, migration `20261111000000`): a written-up hearing keeps its date and outcome (clearing the outcome reopened it to deletion and re-dating), only an admin corrects its text; removing the last date un-lists the case; hearing and disposal dates are bounded by the filing; after an admin rewind the old diary can be cleared and a case is listed only with a date entered after the current filing; CSV cells are checked after leading white space. Also: Marathi notice v2 with Devanagari digits (owner, 11 Nov), `/dashboard/help`
-- [ ] **Deploy order:** apply `20261109000000`, `20261109010000` and `20261111000000` to the demo DB *before* merging — the case page and the report select the new columns
+- [x] Deployed (#33): `20261109000000`, `20261109010000` and `20261111000000` applied to the demo DB before the merge; checked live as admin (dashboard, a filed case, report, CSV, help)
+- [x] Marathi name and address of a party (#34, migration `20261112000000_party_marathi`): `parties.name_mr / address_mr / through_name_mr`, typed by a person in the Suit particulars form ("मराठी नाव व पत्ता"), never transliterated by code; `demand_notice.mr` prints them when present, else the bank-record value; RLS test, template test; security review PASS; on the demo DB and checked live (block present on a case page; not yet filled in or printed live)
+- [x] `task-resumer` agent + `docs/HANDOFF.md`: interrupted work is picked up from the repository; a scheduled check-in every three hours
 - [ ] Owner: the Marathi notice wording to the advocate (the sample file); then remove the review line in the template (new version)
-- [ ] Not done yet: email / WhatsApp reminders (needs a mail key on the server), hearing dates from eCourts (no public API — manual entry), e2e test in CI (needs a Supabase stack in the runner), nonce-based CSP, upload names without the original file name, nightly audit-chain check (needs the worker / a scheduler)
+- [ ] Not done yet: email / WhatsApp reminders (needs a mail key on the server), hearing dates from eCourts (no public API — manual entry), e2e test in CI (needs a Supabase stack in the runner), nonce-based CSP, nightly audit-chain check (needs the worker / a scheduler)
+
+## Safer uploads and typed text (13 Nov)
+- [x] Uploaded files (scans, mediation reports, hand-corrected Word files) are stored as `<ms>-<uuid>.<ext>`: the person's file name, which can carry a borrower's name or account number, is not kept. The server refuses any other name; new files show as "PDF" / "Photo" with their date, older files keep their names (`lib/upload-name.ts`, tests)
+- [x] `cleanText` in `packages/domain` (tests): NFC, no control / format / invisible / direction characters or blank fillers (joiners inside Marathi words kept), single spaces, linear time. Used for the new-case borrower, the suit-particulars form (incl. the Marathi name and address) and extracted fields; names must contain a letter (`hasLetter`)
+- [x] Extracted values are cleaned **before** the injection check, and a one-line text field is checked again as stored (a control character or line breaks could otherwise hide a link or an instruction); tests
+- [x] Upload paths must be exactly `{org}/{case}/{folder}/<generated name>` (no extra folders that could carry a name)
+- [x] Security review: FAIL (4 findings: check-before-clean, a slow regex, extra folders, leftover invisible characters) → fixed → FAIL (one-line text not re-checked) → fixed → PASS
+- [x] UX check of the live site as admin, drafter, approver and field, desktop and phone (`ux-roles` script, read-only): no page errors, no page-wide sideways scroll. Fixed: on a phone the simple-view case list squeezed the next step into a cut-off column (now under the status), "Bbe certificate" → "Bankers' Books certificate" (`docLabel`), "Review →" no longer wraps. Then: every button is at least 40 px high on touch screens (were 30 px in the top bar, section strip and filter chips), and the approval list has one row per case naming its papers (was 7 rows for 2 cases) — checked locally on a phone viewport against the demo DB
+
+## End-to-end tests per role (13 Nov)
+- [x] `apps/web/e2e/roles.spec.ts` (Playwright 1.63): wrong password refused; admin sees all 10 cases and the admin tools; drafter1 sees only their 5 cases and gets 404 on drafter2's; approver sees all 10 and the approval list; field staff see only their 4 tasks, a case page sends them to tasks, other cases 404, reports closed; an uploaded scan is stored under a generated name (checked in `storage.objects`); the drafter of a filed suit enters the first hearing date and the case becomes "Listed" (first time the hearing buttons were exercised end to end); phone: no sideways scroll, no button under 40 px. 8/8 pass locally from a fresh stack
+- [x] Security review of the e2e setup and the CSP change: PASS (hosted CSP byte-identical; the job uses no secrets and cannot reach a hosted project). Advisories applied: the local stack's password policy (12+, letters and digits), and `playwright.config.ts` refuses a non-local Supabase URL
+- [x] Runs against a **local** Supabase stack (`supabase start`, `supabase/config.toml`): all 48 migrations apply cleanly to a fresh Supabase Postgres 17; synthetic seed (`seed:demo`, now also sets the firm code); CI job `e2e` with a random password per run. `next.config.ts` lets a build pointed at `http://127.0.0.1`/`localhost` talk to that stack; hosted builds keep the same CSP
+- Seed fix: supabase-js returns rows from insert/upsert only with `select()`, so the seed failed on a fresh project
+
+## Owner's decisions (13 Nov)
+- The site is not launched; all data is demo data. Before launch the owner deletes the Satyam demo office and its domain, and moves the database to Mumbai (new Pro project). The demo password is kept as it is on purpose until then. Not to be raised again before launch
 
 ## Filing record: notary → e-filing → CNR (3 Nov)
 - [x] Case page "Filing" section after approval: mark notary / stamp done (plaint locks), mark ready for e-filing (needs the bundle), record the filing (e-filing no., date, court fee paid — prefilled from the computed fee — and payment / GRN id) → case `filed`, then the court's CNR and filing / registration number
@@ -222,7 +242,8 @@
 ## Next (Phase 1)
 - [ ] Owner: VPS for the worker (Docker), service-role key there only; run converters without network before real data
 - [ ] TOTP MFA for admin and approver (plan C4) — on hold at owner's request
-- [ ] Demand notice in Marathi (needs † glossary terms confirmed)
+- [x] Demand notice in Marathi (v2, Devanagari digits; wording with the advocate — see 10 Nov section)
+- [ ] Plaint, vakalatnama and affidavit in Marathi (with the advocate's wording; statutory text is not drafted by us)
 - [ ] BBE 2026 certificate (needs gazette text)
 - [ ] Worker (Docker on VPS): DOCX→PDF/A, OCRmyPDF; needs a VPS
 **Next milestone:** Phase 1 demo (end of week 4) — single-case upload → OCR → review → drafts → PDF/A
@@ -247,11 +268,11 @@
 - [ ] NDA signed with client; receive 1 redacted sample file + format preferences
 - [ ] Create a separate Supabase project `civil-suits-dev` (Mumbai, ap-south-1) in org "promenix-softech's Org" and apply the migration. **Blocked:** the free plan allows 2 active projects and both slots are taken (`niwaraa`, `promenix-softech's Project`). One must be paused/deleted, or the org upgraded to Pro.
 - [x] Vercel project `civil-suits` (team "Manoj") created separately from `homigo` / `promenix-website`; root `apps/web`, framework Next.js, functions in bom1 (Mumbai). Env vars (Supabase URL/keys, API keys) to be set by the owner in Vercel → Settings → Environment Variables.
-- [ ] Synthetic fixture generator: 10 fake cases → scanned-look 100-page PDF
-- [ ] Auth (Supabase Auth + TOTP for admin/approver) and role dashboards
-- [ ] Upload → storage → `documents`; worker skeleton (Docker: LibreOffice, OCRmyPDF, qpdf)
-- [ ] Sarvam OCR + Haiku classification + Sonnet extraction behind one AI module with cost logging
-- [ ] First templates (1 bank, EN + MR): demand notice, plaint, vakalatnama, affidavit/SOT, BBE 2026 certificate draft
+- [x] Synthetic scanned loan files (slice 8: `synthetic-scans`)
+- [x] Auth and role dashboards (TOTP for admin/approver on hold at owner's request)
+- [x] Upload → storage → `documents`; worker (slice 8; not running until there is a VPS)
+- [x] Sarvam OCR + extraction with cost logging (slices 5–6); page classification in code (slice 11). Claude Haiku / Sonnet not wired: no Anthropic key
+- [x] Templates in English: demand notice, plaint, vakalatnama, affidavit/SOT, BBE certificate (1891 Act wording, flagged); Marathi demand notice. Open: BBE 2026 wording (gazette), Marathi pleadings
 - [ ] Time-and-motion study of 3–5 suits with client clerk
 
 ## Before real client data (found 9 Nov)

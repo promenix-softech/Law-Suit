@@ -20,6 +20,7 @@ if (!url || !secret || !password || password.length < 12) {
 const db = createClient(url, secret, { auth: { persistSession: false } });
 const ORG_NAME = "Nirmal Nyay Associates (Demo)";
 const DOMAIN = "demo.civilsuits.test";
+const FIRM_CODE = "nirmal";
 
 const USERS = [
   { key: "admin", name: "Asha Demo Admin", role: "admin" },
@@ -58,16 +59,19 @@ async function ensureUser(email: string): Promise<string> {
 }
 
 async function main() {
-  let org = (await must(db.from("organizations").select("id").eq("name", ORG_NAME), "org lookup"))[0];
-  if (!org) org = await must(db.from("organizations").insert({ name: ORG_NAME }).select("id").single(), "org insert");
+  let org = (await must(db.from("organizations").select("id, slug").eq("name", ORG_NAME), "org lookup"))[0];
+  if (!org) org = await must(db.from("organizations").insert({ name: ORG_NAME, slug: FIRM_CODE }).select("id, slug").single(), "org insert");
   const orgId = org.id as string;
+  // People sign in under the office's firm code; an office made before codes existed gets this one.
+  if (!org.slug) await must(db.from("organizations").update({ slug: FIRM_CODE }).eq("id", orgId).select("id"), "firm code");
 
   const ids: Record<string, string> = {};
   for (const u of USERS) {
     const id = await ensureUser(`${u.key}@${DOMAIN}`);
     ids[u.key] = id;
-    await must(db.from("profiles").upsert({ id, org_id: orgId, full_name: u.name }), "profile");
-    await must(db.from("user_roles").upsert({ user_id: id, org_id: orgId, role: u.role }), "role");
+    // supabase-js returns rows from an upsert only when asked to (select).
+    await must(db.from("profiles").upsert({ id, org_id: orgId, full_name: u.name }).select("id"), "profile");
+    await must(db.from("user_roles").upsert({ user_id: id, org_id: orgId, role: u.role }).select("user_id"), "role");
   }
 
   const bank = await must(
@@ -139,16 +143,16 @@ async function main() {
     await must(db.from("parties").insert({
       org_id: orgId, case_id: c.id, role: "borrower", name: BORROWERS[i]!, address: "Synthetic address, Pune",
       aadhaar_last4: String(1000 + i),
-    }), "party");
+    }).select("id"), "party");
     await must(db.from("loans").insert({
       org_id: orgId, case_id: c.id, account_last4: String(4000 + i), facility_type: "Term Loan",
       sanction_date: "2023-06-15", sanction_amount_paise: principal, roi_bps: 1050, npa_date: "2025-03-31",
       outstanding_paise: interest.totalPaise, interest_upto_date: "2026-10-20",
-    }), "loan");
+    }).select("id"), "loan");
     if (i % 3 === 0) {
       await must(db.from("tasks").insert({
         org_id: orgId, case_id: c.id, assignee_id: ids.field, role: "field", kind: "collect_docs",
-      }), "task");
+      }).select("id"), "task");
     }
   }
 

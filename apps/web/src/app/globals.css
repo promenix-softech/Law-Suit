@@ -206,6 +206,12 @@ body {
     opacity: 0.5;
     cursor: not-allowed;
   }
+  /* Touch screens: every button is at least 40 px high, an easy target for a thumb. */
+  @media (pointer: coarse) {
+    .btn {
+      min-height: 2.5rem;
+    }
+  }
   .btn:focus-visible,
   .input-glass:focus-visible {
     outline: none;

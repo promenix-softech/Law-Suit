@@ -1,4 +1,4 @@
-import { checkModelOutput, formatINR, rupees, stripInvisible } from "@civil-suits/domain";
+import { checkModelOutput, cleanText, formatINR, rupees } from "@civil-suits/domain";
 
 /**
  * Loan-file fields we ask the extractor for, and how each value is validated and normalised
@@ -187,15 +187,21 @@ export function parseMonths(raw: string): number | null {
 }
 
 export function normalise(kind: FieldKind, raw: string): Normalised {
-  // Values come from a model reading an untrusted scan: hidden characters are dropped, and
-  // anything that reads like instructions or carries links is never accepted automatically.
-  const s = stripInvisible(raw).trim();
+  // Values come from a model reading an untrusted scan: hidden and control characters are
+  // dropped FIRST, so the check below sees exactly the text that is stored ("ht\u0001tps" would
+  // otherwise pass as harmless and become a link once cleaned), and anything that reads like
+  // instructions or carries links is never accepted automatically.
+  const s = cleanText(raw, { multiline: true }).trim();
   if (!s) return { ok: false, reason: "Empty" };
   const guard = checkModelOutput(s);
   if (!guard.ok) return { ok: false, reason: "Suspicious text — check the scan" };
   switch (kind) {
-    case "text":
-      return s.length <= 300 ? { ok: true, stored: s.replace(/\s+/g, " ") } : { ok: false, reason: "Too long" };
+    case "text": {
+      // Stored as one line: check that line too ("i\ng\nn\no\nr\ne …" reads as words once joined).
+      const t = cleanText(s);
+      if (!checkModelOutput(t).ok) return { ok: false, reason: "Suspicious text — check the scan" };
+      return t.length > 300 ? { ok: false, reason: "Too long" } : t ? { ok: true, stored: t } : { ok: false, reason: "Empty" };
+    }
     case "date": {
       const d = parseDate(s);
       return d ? { ok: true, stored: d } : { ok: false, reason: "Not a valid date" };
