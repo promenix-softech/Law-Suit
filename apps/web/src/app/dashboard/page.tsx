@@ -194,6 +194,16 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
 
   const isAdmin = roleNames.includes("admin");
   const approvalQueue = isApprover || isAdmin ? queue : [];
+  // One row per case in the approval list (a suit set sends six papers at once); the papers are named in it.
+  const approvalCases = [
+    ...approvalQueue
+      .reduce((m, d) => {
+        const row = m.get(d.case_id) ?? { caseId: d.case_id, caseNo: one(d.cases as Rel<{ case_no_internal: string }>)?.case_no_internal, kinds: [] as string[] };
+        row.kinds.push(d.doc_kind);
+        return m.set(d.case_id, row);
+      }, new Map<string, { caseId: string; caseNo?: string; kinds: string[] }>())
+      .values(),
+  ];
   const VIEWS: Record<string, string> = {
     all: t("All"),
     action: t("Needs action"),
@@ -453,11 +463,18 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
                   {!!approvalQueue.length && <span className="pill pill-amber">{approvalQueue.length}</span>}
                 </div>
                 <div className="mt-3 space-y-2">
-                  {approvalQueue.map((d) => (
-                    <Link key={d.id} href={`/dashboard/cases/${d.case_id}`} className="row-hover flex items-center justify-between gap-2 rounded-xl px-2 py-2.5">
-                      <span>
-                        <span className="font-semibold">{one(d.cases as Rel<{ case_no_internal: string }>)?.case_no_internal}</span>
-                        <span className="muted text-sm"> · {t(docLabel(d.doc_kind))}</span>
+                  {approvalCases.map((g) => (
+                    <Link key={g.caseId} href={`/dashboard/cases/${g.caseId}`} className="row-hover flex items-center justify-between gap-2 rounded-xl px-2 py-2.5">
+                      <span className="min-w-0">
+                        <span className="font-semibold">{g.caseNo}</span>
+                        {g.kinds.length > 1 && <span className="pill pill-amber ml-2 px-2 py-0 text-xs">{g.kinds.length}</span>}
+                        <span className="muted block truncate text-sm">
+                          {g.kinds
+                            .slice(0, 2)
+                            .map((k) => t(docLabel(k)))
+                            .join(", ")}
+                          {g.kinds.length > 2 && ` +${g.kinds.length - 2}`}
+                        </span>
                       </span>
                       <span className="btn btn-primary shrink-0 whitespace-nowrap px-3 py-1 text-xs">{t("Review")} →</span>
                     </Link>

@@ -14,8 +14,8 @@ Supabase project `ohdtudvmcahdnqnhfqzp`.
 - Left: the owner decides on a pull request and merge (code only, no database step).
 
 ### 2. Next without the owner (agreed 13 Nov)
-- Phone tap targets (top bar, filter chips ≥ 40 px); group the approver's queue by case.
-- e2e per role in CI.
+- Phone tap targets and the approver's queue by case: done (same branch).
+- e2e per role in CI (needs a local Supabase stack in the runner).
 
 ## Needs the owner
 - Delete the Satyam demo office: SQL was given in chat (Supabase SQL Editor); remove
