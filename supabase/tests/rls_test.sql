@@ -1914,12 +1914,24 @@ exception when check_violation then raise notice 'ok - an intake is linked to it
 end $$;
 select pg_temp.expect(not public.ai_quota_ok(1, 1000) and public.ai_quota_ok(5, 1000),
   'the AI quota counts files read for new cases');
+insert into public.case_intakes (id, org_id, storage_path, provider_job_id) values
+  ('1a000000-0000-0000-0000-000000000002', '11111111-1111-1111-1111-111111111111',
+   '11111111-1111-1111-1111-111111111111/00000000-0000-0000-0000-00000000000a/1794000000002-3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b.pdf', 'job-2');
+update public.case_intakes set status = 'discarded' where id = '1a000000-0000-0000-0000-000000000002';
+select pg_temp.expect((select status from public.case_intakes where id = '1a000000-0000-0000-0000-000000000002') = 'discarded',
+  'an upload can be dropped while the AI is still reading it (20261114010000)');
+do $$
+begin
+  update public.case_intakes set status = 'read' where id = '1a000000-0000-0000-0000-000000000002';
+  raise exception 'FAIL: discarded intake revived';
+exception when check_violation then raise notice 'ok - a dropped upload stays dropped';
+end $$;
 delete from storage.objects where bucket_id = 'case-intake';
 select pg_temp.expect((select count(*) from storage.objects where bucket_id = 'case-intake') = 0,
   'the admin removes their intake file');
 delete from public.case_intakes;
 reset role;
-select pg_temp.expect((select count(*) from public.case_intakes) = 1, 'intake rows are never deleted (the quota counts them)');
+select pg_temp.expect((select count(*) from public.case_intakes) = 2, 'intake rows are never deleted (the quota counts them)');
 
 select pg_temp.act_as('00000000-0000-0000-0000-0000000000d1');
 select pg_temp.expect((select count(*) from public.case_intakes) = 0, 'a drafter does not see the admin''s intakes');
