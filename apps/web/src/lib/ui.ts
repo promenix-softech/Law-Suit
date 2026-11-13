@@ -40,3 +40,23 @@ export const fmtDate = (d: string | null | undefined) =>
 export const todayIST = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 
 export const title = (s: string) => s.replaceAll("_", " ").replace(/^\w/, (c) => c.toUpperCase());
+
+const DOC_LABEL: Record<string, string> = {
+  demand_notice: "Demand notice",
+  plaint: "Plaint",
+  vakalatnama: "Vakalatnama",
+  affidavit: "Affidavit",
+  statement_of_truth: "Statement of truth",
+  original_application: "Original Application",
+  interim_application: "Interim application",
+  address_memo: "Address memo",
+  list_of_documents: "List of documents",
+  bbe_certificate: "Bankers' Books certificate",
+  draft_decree: "Draft decree",
+  court_fee_letter: "Court-fee letter",
+  efiling_sheet: "E-filing data sheet",
+  mediation_application: "12A mediation application",
+};
+
+/** A paper's name as people say it ("Bankers' Books certificate", not "Bbe certificate"). */
+export const docLabel = (kind: string) => DOC_LABEL[kind] ?? title(kind);

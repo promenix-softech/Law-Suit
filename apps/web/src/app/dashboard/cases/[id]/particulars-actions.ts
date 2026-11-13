@@ -2,14 +2,22 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { commercialCheck, particularsOfClaim, suitRoute } from "@civil-suits/domain";
+import { cleanText, commercialCheck, hasLetter, particularsOfClaim, suitRoute } from "@civil-suits/domain";
 import { parseAmountPaise, parseDate } from "@/lib/extract/fields";
 import { parseDocumentLines } from "@/lib/particulars";
 import { loadOfficeConfig, OFFICE_CONFIG_ERROR } from "@/lib/office-profile";
 import { createClient } from "@/lib/supabase/server";
 import type { ActionResult } from "./actions";
 
-const text = (max: number) => z.string().trim().max(max);
+/** Typed or pasted text, cleaned (control and invisible characters, spacing) before the length check. */
+const text = (max: number, multiline = false) =>
+  z
+    .string()
+    .max(max + 1000)
+    .transform((s) => cleanText(s, { multiline }))
+    .pipe(z.string().max(max));
+/** An optional name: empty, or at least one letter (not only marks, digits or blanks). */
+const name = (max: number) => text(max).refine((s) => s === "" || hasLetter(s), "A name needs letters");
 const LOCKED: string[] = ["in_approval", "approved", "notary_stamp", "efiling_ready", "filed", "listed", "disposed"];
 
 const ParticularsInput = z.object({
@@ -24,16 +32,16 @@ const ParticularsInput = z.object({
       z.object({
         id: z.uuid(),
         throughCapacity: text(50),
-        throughName: text(200),
+        throughName: name(200),
         // Marathi forms for papers written in Marathi; typed by a person, never transliterated.
-        nameMr: text(200).default(""),
+        nameMr: name(200).default(""),
         addressMr: text(500).default(""),
-        throughNameMr: text(200).default(""),
+        throughNameMr: name(200).default(""),
       }),
     )
     .max(30),
   loans: z
-    .array(z.object({ id: z.uuid(), applicationDate: text(20), purpose: text(200), tenureMonths: text(3), executedDocs: text(12_000) }))
+    .array(z.object({ id: z.uuid(), applicationDate: text(20), purpose: text(200), tenureMonths: text(3), executedDocs: text(12_000, true) }))
     .max(10),
 });
 export type ParticularsForm = z.infer<typeof ParticularsInput>;
@@ -46,7 +54,10 @@ export type ParticularsForm = z.infer<typeof ParticularsInput>;
  */
 export async function saveParticulars(input: ParticularsForm): Promise<ActionResult> {
   const parsed = ParticularsInput.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Check the particulars." };
+  if (!parsed.success) {
+    const noLetters = parsed.error.issues.some((i) => i.message === "A name needs letters");
+    return { ok: false, error: noLetters ? "A name needs letters — it cannot be only digits, marks or blanks." : "Check the particulars." };
+  }
   const v = parsed.data;
 
   const age = v.signatoryAge ? Number(v.signatoryAge) : null;

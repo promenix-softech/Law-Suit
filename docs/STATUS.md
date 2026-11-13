@@ -94,7 +94,8 @@
 - [x] CI: `permissions: contents: read`; Dependabot (npm, actions, docker); `security.yml` (pnpm audit, gitleaks, no-PHP, client-secret grep, CodeQL on public repos)
 - [ ] Owner: Supabase → Auth → enable leaked-password protection; confirm public sign-ups are off
 - [ ] Worker sandbox before real data: run soffice/gs/ocrmypdf as a separate uid in bwrap/nsjail with no network and RLIMITs; per-bundle page budget (plan: 1,000) and per-job wall clock
-- [ ] Upload names: store as `<ts>-<uuid>.<ext>` (original names can carry borrower names); atomic OCR start (partial unique index)
+- [x] Upload names: stored as `<ts>-<uuid>.<ext>` (13 Nov, see below)
+- [ ] Atomic OCR start (partial unique index)
 
 ## Done (domain, 24 Oct)
 - [x] Live at https://civilsuits.promenix.in (Hostinger CNAME → Vercel); production redirects every other host (old `civil-suits*.vercel.app` links) there with a 308 via `CANONICAL_HOST`; website APK opens the new address
@@ -199,7 +200,15 @@
 - [x] Marathi name and address of a party (#34, migration `20261112000000_party_marathi`): `parties.name_mr / address_mr / through_name_mr`, typed by a person in the Suit particulars form ("मराठी नाव व पत्ता"), never transliterated by code; `demand_notice.mr` prints them when present, else the bank-record value; RLS test, template test; security review PASS; on the demo DB and checked live (block present on a case page; not yet filled in or printed live)
 - [x] `task-resumer` agent + `docs/HANDOFF.md`: interrupted work is picked up from the repository; a scheduled check-in every three hours
 - [ ] Owner: the Marathi notice wording to the advocate (the sample file); then remove the review line in the template (new version)
-- [ ] Not done yet: email / WhatsApp reminders (needs a mail key on the server), hearing dates from eCourts (no public API — manual entry), e2e test in CI (needs a Supabase stack in the runner), nonce-based CSP, upload names without the original file name, nightly audit-chain check (needs the worker / a scheduler)
+- [ ] Not done yet: email / WhatsApp reminders (needs a mail key on the server), hearing dates from eCourts (no public API — manual entry), e2e test in CI (needs a Supabase stack in the runner), nonce-based CSP, nightly audit-chain check (needs the worker / a scheduler)
+
+## Safer uploads and typed text (13 Nov)
+- [x] Uploaded files (scans, mediation reports, hand-corrected Word files) are stored as `<ms>-<uuid>.<ext>`: the person's file name, which can carry a borrower's name or account number, is not kept. The server refuses any other name; new files show as "PDF" / "Photo" with their date, older files keep their names (`lib/upload-name.ts`, tests)
+- [x] `cleanText` in `packages/domain` (tests): NFC, no control / format / invisible / direction characters or blank fillers (joiners inside Marathi words kept), single spaces, linear time. Used for the new-case borrower, the suit-particulars form (incl. the Marathi name and address) and extracted fields; names must contain a letter (`hasLetter`)
+- [x] Extracted values are cleaned **before** the injection check, and a one-line text field is checked again as stored (a control character or line breaks could otherwise hide a link or an instruction); tests
+- [x] Upload paths must be exactly `{org}/{case}/{folder}/<generated name>` (no extra folders that could carry a name)
+- [x] Security review: FAIL (4 findings: check-before-clean, a slow regex, extra folders, leftover invisible characters) → fixed → FAIL (one-line text not re-checked) → fixed → PASS
+- [x] UX check of the live site as admin, drafter, approver and field, desktop and phone (`ux-roles` script, read-only): no page errors, no page-wide sideways scroll. Fixed: on a phone the simple-view case list squeezed the next step into a cut-off column (now under the status), "Bbe certificate" → "Bankers' Books certificate" (`docLabel`), "Review →" no longer wraps. Open: tap targets in the top bar / filter chips are under 32 px high on phones; the approver's queue lists every paper (7 rows for 2 cases)
 
 ## Filing record: notary → e-filing → CNR (3 Nov)
 - [x] Case page "Filing" section after approval: mark notary / stamp done (plaint locks), mark ready for e-filing (needs the bundle), record the filing (e-filing no., date, court fee paid — prefilled from the computed fee — and payment / GRN id) → case `filed`, then the court's CNR and filing / registration number
@@ -224,7 +233,8 @@
 ## Next (Phase 1)
 - [ ] Owner: VPS for the worker (Docker), service-role key there only; run converters without network before real data
 - [ ] TOTP MFA for admin and approver (plan C4) — on hold at owner's request
-- [ ] Demand notice in Marathi (needs † glossary terms confirmed)
+- [x] Demand notice in Marathi (v2, Devanagari digits; wording with the advocate — see 10 Nov section)
+- [ ] Plaint, vakalatnama and affidavit in Marathi (with the advocate's wording; statutory text is not drafted by us)
 - [ ] BBE 2026 certificate (needs gazette text)
 - [ ] Worker (Docker on VPS): DOCX→PDF/A, OCRmyPDF; needs a VPS
 **Next milestone:** Phase 1 demo (end of week 4) — single-case upload → OCR → review → drafts → PDF/A
@@ -249,11 +259,11 @@
 - [ ] NDA signed with client; receive 1 redacted sample file + format preferences
 - [ ] Create a separate Supabase project `civil-suits-dev` (Mumbai, ap-south-1) in org "promenix-softech's Org" and apply the migration. **Blocked:** the free plan allows 2 active projects and both slots are taken (`niwaraa`, `promenix-softech's Project`). One must be paused/deleted, or the org upgraded to Pro.
 - [x] Vercel project `civil-suits` (team "Manoj") created separately from `homigo` / `promenix-website`; root `apps/web`, framework Next.js, functions in bom1 (Mumbai). Env vars (Supabase URL/keys, API keys) to be set by the owner in Vercel → Settings → Environment Variables.
-- [ ] Synthetic fixture generator: 10 fake cases → scanned-look 100-page PDF
-- [ ] Auth (Supabase Auth + TOTP for admin/approver) and role dashboards
-- [ ] Upload → storage → `documents`; worker skeleton (Docker: LibreOffice, OCRmyPDF, qpdf)
-- [ ] Sarvam OCR + Haiku classification + Sonnet extraction behind one AI module with cost logging
-- [ ] First templates (1 bank, EN + MR): demand notice, plaint, vakalatnama, affidavit/SOT, BBE 2026 certificate draft
+- [x] Synthetic scanned loan files (slice 8: `synthetic-scans`)
+- [x] Auth and role dashboards (TOTP for admin/approver on hold at owner's request)
+- [x] Upload → storage → `documents`; worker (slice 8; not running until there is a VPS)
+- [x] Sarvam OCR + extraction with cost logging (slices 5–6); page classification in code (slice 11). Claude Haiku / Sonnet not wired: no Anthropic key
+- [x] Templates in English: demand notice, plaint, vakalatnama, affidavit/SOT, BBE certificate (1891 Act wording, flagged); Marathi demand notice. Open: BBE 2026 wording (gazette), Marathi pleadings
 - [ ] Time-and-motion study of 3–5 suits with client clerk
 
 ## Before real client data (found 9 Nov)

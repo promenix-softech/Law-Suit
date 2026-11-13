@@ -4,9 +4,9 @@ import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { translator, type Lang } from "@/lib/i18n";
 import { createClient } from "@/lib/supabase/client";
+import { DOCX_MIME, uploadName } from "@/lib/upload-name";
 import { generateDraft, recordCorrection, type ActionResult, type DocKind } from "./actions";
 
-const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const MAX_BYTES = 10 * 1024 * 1024;
 
 function Status({ result }: { result: ActionResult | null }) {
@@ -98,8 +98,8 @@ export function CorrectDraft({
     setBusy(true);
     setResult(null);
     try {
-      const safe = file.name.replace(/[^A-Za-z0-9._-]+/g, "_").slice(-60);
-      const path = `${orgId}/${caseId}/drafts/corrected-${Date.now()}-${safe}`;
+      // The person's file name is not kept (it can carry the borrower's name).
+      const path = `${orgId}/${caseId}/drafts/${uploadName(DOCX_MIME)}`;
       const up = await createClient().storage.from("case-files").upload(path, file, { contentType: DOCX_MIME });
       if (up.error) return setResult({ ok: false, error: t("Upload not allowed for this case.") });
       const r = await recordCorrection({ draftId, path, note });

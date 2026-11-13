@@ -5,6 +5,7 @@ import { scanForInjection, stripInvisible } from "@civil-suits/domain";
 import { decryptText } from "@/lib/crypto";
 import { createClient } from "@/lib/supabase/server";
 import { fmtDate } from "@/lib/ui";
+import { fileLabel } from "@/lib/upload-name";
 
 export const metadata = { title: "OCR text — Civil Suits" };
 
@@ -53,7 +54,7 @@ export default async function DocumentTextPage({ params }: PageProps<"/dashboard
             )}
           </div>
           <p className="muted mt-1 text-sm">
-            {doc.storage_path.split("/").pop()?.replace(/^\d+-/, "")} · uploaded {fmtDate(doc.created_at)}
+            {fileLabel(doc.storage_path)} · uploaded {fmtDate(doc.created_at)}
             {job && ` · ${job.language === "mr-IN" ? "Marathi" : "English"} OCR, ${fmtDate(job.updated_at)}`}
           </p>
         </div>

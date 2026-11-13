@@ -9,7 +9,13 @@ Supabase project `ohdtudvmcahdnqnhfqzp`.
 
 ## Pending
 
-Nothing in flight.
+### 1. Safer uploads, typed text, phone case list — done on the branch (13 Nov)
+- Committed and pushed; security review PASS; `pnpm check` passes. No migration.
+- Left: the owner decides on a pull request and merge (code only, no database step).
+
+### 2. Next without the owner (agreed 13 Nov)
+- Phone tap targets (top bar, filter chips ≥ 40 px); group the approver's queue by case.
+- e2e per role in CI.
 
 ## Needs the owner
 - Delete the Satyam demo office: SQL was given in chat (Supabase SQL Editor); remove

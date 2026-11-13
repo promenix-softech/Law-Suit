@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { cleanText, hasLetter } from "@civil-suits/domain";
 import { createClient } from "@/lib/supabase/server";
 
 export type FormState = { error?: string };
@@ -12,8 +13,13 @@ const NewCase = z
     caseNo: z.string().trim().min(3).max(40).regex(/^[A-Za-z0-9/_-]+$/, "Use letters, digits, / - _ only"),
     branchId: z.uuid({ message: "Choose a bank branch" }),
     courtId: z.uuid({ message: "Choose a court" }),
-    borrowerName: z.string().trim().min(2).max(200),
-    borrowerAddress: z.string().trim().max(500).optional(),
+    // Pasted names and addresses lose control and invisible characters before they are stored.
+    borrowerName: z
+      .string()
+      .max(1200)
+      .transform((s) => cleanText(s))
+      .pipe(z.string().min(2).max(200).refine(hasLetter, "Enter the borrower's name")),
+    borrowerAddress: z.string().max(1500).transform((s) => cleanText(s)).pipe(z.string().max(500)).optional(),
     facilityType: z.string().trim().max(100).optional(),
     drafterId: z.uuid({ message: "Choose a drafter" }),
     approverId: z.uuid({ message: "Choose an approver" }),
@@ -74,7 +80,7 @@ export async function createCase(_prev: FormState, form: FormData): Promise<Form
     role: "borrower",
     position: 1,
     name: v.borrowerName,
-    address: v.borrowerAddress ?? null,
+    address: v.borrowerAddress || null,
   });
   if (v.facilityType) await supabase.from("loans").insert({ org_id: me.org_id, case_id: c.id, facility_type: v.facilityType });
 

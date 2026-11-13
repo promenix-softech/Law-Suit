@@ -7,7 +7,7 @@ import type { T } from "@/lib/i18n";
 import { getT } from "@/lib/lang";
 import { createClient } from "@/lib/supabase/server";
 import { STATUS_NEXT } from "@/lib/next-step";
-import { caseStatus, fmtDate, title, todayIST } from "@/lib/ui";
+import { caseStatus, docLabel, fmtDate, title, todayIST } from "@/lib/ui";
 import { getViewMode } from "@/lib/view-mode";
 import { ViewToggle } from "@/components/view-toggle";
 
@@ -307,17 +307,18 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
               </div>
             </div>
             <div className="glass-card mt-3 overflow-x-auto p-2">
-              <table className={`w-full text-left text-sm ${full ? "min-w-[640px]" : "min-w-[520px]"}`}>
+              {/* Simple view on a phone: no sideways scrolling; the next step sits under the status. */}
+              <table className={`w-full text-left text-sm ${full ? "min-w-[640px]" : "sm:min-w-[520px]"}`}>
                 <thead>
                   <tr className="label">
                     <th className="px-4 py-3 font-semibold">{t("Case")}</th>
                     {full && <th className="px-4 py-3 font-semibold">{t("Borrower")}</th>}
                     <th className="px-4 py-3 font-semibold">{t("Status")}</th>
-                    {!full && <th className="px-4 py-3 font-semibold">{t("Next step")}</th>}
+                    {!full && <th className="hidden px-4 py-3 font-semibold sm:table-cell">{t("Next step")}</th>}
                     {full && <th className="hidden px-4 py-3 font-semibold 2xl:table-cell">{t("Type")}</th>}
                     {full && <th className="px-4 py-3 text-right font-semibold">{t("Claim")}</th>}
                     {full && <th className="px-4 py-3 text-right font-semibold">{view === "archived" ? t("Archived") : t("Age")}</th>}
-                    <th className="px-4 py-3" />
+                    <th className={`px-4 py-3 ${full ? "" : "hidden sm:table-cell"}`} />
                   </tr>
                 </thead>
                 <tbody>
@@ -325,6 +326,11 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
                     const [label, tone] = caseStatus(c.status, t);
                     const borrower = [...(c.parties ?? [])].sort((a, b) => a.position - b.position)[0]?.name;
                     const href = `/dashboard/cases/${c.id}`;
+                    const next = c.archived_at
+                      ? t("Archived")
+                      : nextHearing.has(c.id) && (c.status === "filed" || c.status === "listed")
+                        ? `${t("Court date")} ${fmtDate(nextHearing.get(c.id))}`
+                        : t(STATUS_NEXT[c.status as CaseStatus] ?? "");
                     // Each cell is a full-size link, so a click anywhere on the row opens the case.
                     const cell = (content: React.ReactNode, cls = "") => (
                       <Link href={href} tabIndex={-1} className={`block px-4 py-3 ${cls}`}>
@@ -340,19 +346,15 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
                           </Link>
                         </td>
                         {full && <td className="p-0">{cell(borrower ?? "—")}</td>}
-                        <td className="p-0">{cell(<span className={`pill whitespace-nowrap ${tone}`}>{label}</span>)}</td>
-                        {!full && (
-                          <td className="p-0">
-                            {cell(
-                              c.archived_at
-                                ? t("Archived")
-                                : nextHearing.has(c.id) && (c.status === "filed" || c.status === "listed")
-                                  ? `${t("Court date")} ${fmtDate(nextHearing.get(c.id))}`
-                                  : t(STATUS_NEXT[c.status as CaseStatus] ?? ""),
-                              "muted",
-                            )}
-                          </td>
-                        )}
+                        <td className="p-0">
+                          {cell(
+                            <>
+                              <span className={`pill whitespace-nowrap ${tone}`}>{label}</span>
+                              {!full && next && <span className="muted mt-1.5 block text-xs sm:hidden">{next}</span>}
+                            </>,
+                          )}
+                        </td>
+                        {!full && <td className="hidden p-0 sm:table-cell">{cell(next, "muted")}</td>}
                         {full && (
                           <td className="hidden p-0 2xl:table-cell">
                             {cell(c.is_commercial ? t("Commercial") : c.suit_type === "summary_o37" ? t("Summary (O.37)") : t("Ordinary"), "muted")}
@@ -371,7 +373,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
                             )}
                           </td>
                         )}
-                        <td className="rounded-r-xl px-3 py-2 text-right">
+                        <td className={`rounded-r-xl px-3 py-2 text-right ${full ? "" : "hidden sm:table-cell"}`}>
                           <Link href={href} className="btn whitespace-nowrap px-3 py-1 text-xs">
                             {t("Open")} →
                           </Link>
@@ -455,9 +457,9 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
                     <Link key={d.id} href={`/dashboard/cases/${d.case_id}`} className="row-hover flex items-center justify-between gap-2 rounded-xl px-2 py-2.5">
                       <span>
                         <span className="font-semibold">{one(d.cases as Rel<{ case_no_internal: string }>)?.case_no_internal}</span>
-                        <span className="muted text-sm"> · {title(d.doc_kind)}</span>
+                        <span className="muted text-sm"> · {t(docLabel(d.doc_kind))}</span>
                       </span>
-                      <span className="btn btn-primary px-3 py-1 text-xs">{t("Review")} →</span>
+                      <span className="btn btn-primary shrink-0 whitespace-nowrap px-3 py-1 text-xs">{t("Review")} →</span>
                     </Link>
                   ))}
                   {!approvalQueue.length && <p className="muted text-sm">{t("Nothing waiting for approval.")}</p>}

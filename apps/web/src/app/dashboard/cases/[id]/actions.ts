@@ -35,6 +35,7 @@ import { loadOfficeConfig, OFFICE_CONFIG_ERROR, type OfficeConfig } from "@/lib/
 import { readExecutedDocs } from "@/lib/particulars";
 import { createClient } from "@/lib/supabase/server";
 import { todayIST } from "@/lib/ui";
+import { isCaseUpload } from "@/lib/upload-name";
 
 export type ActionResult = { ok: true; message: string } | { ok: false; error: string };
 
@@ -65,7 +66,9 @@ export async function recordUpload(input: z.input<typeof UploadInput>): Promise<
 
   const { data: c } = await supabase.from("cases").select("id, org_id, status").eq("id", caseId).single();
   if (!c) return { ok: false, error: "Case not found." };
-  if (!path.startsWith(`${c.org_id}/${caseId}/scans/`)) return { ok: false, error: "Invalid storage path." };
+  if (!isCaseUpload(path, c.org_id, caseId, "scans", ["pdf", "jpg", "png"])) {
+    return { ok: false, error: "Invalid storage path. Reload the page and upload again." };
+  }
 
   const { data: doc, error } = await supabase
     .from("documents")
@@ -383,7 +386,9 @@ export async function recordMediationOutcome(input: z.infer<typeof MediationOutc
   if (!supabase) return { ok: false, error: "Database is not configured." };
   const { data: c } = await supabase.from("cases").select("id, org_id, status").eq("id", caseId).single();
   if (!c) return { ok: false, error: "Case not found." };
-  if (!reportPath.startsWith(`${c.org_id}/${caseId}/mediation/`)) return { ok: false, error: "Invalid report path." };
+  if (!isCaseUpload(reportPath, c.org_id, caseId, "mediation", ["pdf", "jpg", "png"])) {
+    return { ok: false, error: "Invalid report path. Reload the page and upload again." };
+  }
 
   const { data: updated, error } = await supabase
     .from("mediations")
@@ -532,7 +537,9 @@ export async function recordCorrection(input: z.input<typeof CorrectionInput>): 
     .single();
   const c = one(d?.cases ?? null) as CaseRow | null;
   if (!d || !c) return { ok: false, error: "Draft not found." };
-  if (!path.startsWith(`${d.org_id}/${d.case_id}/drafts/`) || !path.endsWith(".docx")) return { ok: false, error: "Invalid file path." };
+  if (!isCaseUpload(path, d.org_id, d.case_id, "drafts", ["docx"])) {
+    return { ok: false, error: "Invalid file path. Reload the page and upload again." };
+  }
   if (d.status === "in_approval") return { ok: false, error: "This paper is with the approver. Ask for it back before correcting it." };
   if (SUIT_KINDS.has(d.doc_kind) && SUIT_LOCKED.includes(c.status)) return { ok: false, error: SUIT_LOCKED_ERROR };
   // The person recording the file must be the one who uploaded it: they become its author.

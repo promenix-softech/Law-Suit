@@ -4,6 +4,7 @@ import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { translator, type Lang } from "@/lib/i18n";
 import { createClient } from "@/lib/supabase/client";
+import { uploadName } from "@/lib/upload-name";
 import {
   decideDraft,
   generateDraft,
@@ -32,10 +33,14 @@ function checkFile(file: File | undefined): string | null {
   return null;
 }
 
-/** Uploads straight to storage as the signed-in user; storage RLS decides if it is allowed. */
+/**
+ * Uploads straight to storage as the signed-in user; storage RLS decides if it is allowed.
+ * The person's file name is not kept (it can carry the borrower's name): see `uploadName`.
+ */
 async function uploadToCase(orgId: string, caseId: string, folder: "scans" | "mediation", file: File) {
-  const safe = file.name.replace(/[^A-Za-z0-9._-]+/g, "_").slice(-80);
-  const path = `${orgId}/${caseId}/${folder}/${Date.now()}-${safe}`;
+  const name = uploadName(file.type);
+  if (!name) return null;
+  const path = `${orgId}/${caseId}/${folder}/${name}`;
   const { error } = await createClient().storage.from("case-files").upload(path, file, { contentType: file.type });
   return error ? null : path;
 }
