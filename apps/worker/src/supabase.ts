@@ -251,6 +251,29 @@ export async function purgeBatchOriginals(sb: SupabaseClient, days = Number(proc
   return removed;
 }
 
+/**
+ * "Open a case from the bank's file" leaves the file in `case-intake/{org}/{user}/` only for the
+ * minutes the admin takes to review it. Anything older than `hours` was abandoned: the file is
+ * deleted (with or without an intake row — a tab closed mid-way leaves none) and unfinished
+ * intakes are marked discarded. Rows are kept: the AI quota counts them.
+ */
+export async function purgeIntakeLeftovers(sb: SupabaseClient, hours = Number(process.env.INTAKE_KEEP_HOURS ?? 24)): Promise<number> {
+  const cutoff = new Date(Date.now() - hours * 3_600_000).toISOString();
+  const bucket = sb.storage.from("case-intake");
+  let removed = 0;
+  const { data: orgs } = await bucket.list("", { limit: 1000 });
+  for (const org of orgs ?? []) {
+    const { data: users } = await bucket.list(org.name, { limit: 1000 });
+    for (const user of users ?? []) {
+      const { data: files } = await bucket.list(`${org.name}/${user.name}`, { limit: 1000 });
+      const old = (files ?? []).filter((f) => f.created_at && f.created_at < cutoff).map((f) => `${org.name}/${user.name}/${f.name}`);
+      if (old.length && !(await bucket.remove(old)).error) removed += old.length;
+    }
+  }
+  await sb.from("case_intakes").update({ status: "discarded" }).in("status", ["reading", "read", "failed"]).lt("created_at", cutoff);
+  return removed;
+}
+
 /** Case exports carry every file and party name of a case; they are removed after `days`. */
 export async function expireExports(sb: SupabaseClient, days = Number(process.env.EXPORT_KEEP_DAYS ?? 7)): Promise<number> {
   const cutoff = new Date(Date.now() - days * 86_400_000).toISOString();

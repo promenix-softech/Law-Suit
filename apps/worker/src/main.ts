@@ -1,7 +1,7 @@
 import { JobError, runJob } from "./jobs";
 import { ToolError } from "./tools";
 import { applyBatch, splitBatch } from "./intake";
-import { claim, claimBatch, complete, expireExports, fail, failBatch, purgeBatchOriginals, serviceClient, supabaseDb, supabaseIntakeDb as intakeDb, supabaseStore } from "./supabase";
+import { claim, claimBatch, complete, expireExports, fail, failBatch, purgeBatchOriginals, purgeIntakeLeftovers, serviceClient, supabaseDb, supabaseIntakeDb as intakeDb, supabaseStore } from "./supabase";
 
 const IDLE_MS = Number(process.env.POLL_INTERVAL_MS ?? 5000);
 let stopping = false;
@@ -48,6 +48,8 @@ async function main() {
       if (removed) log("exports expired", { count: removed });
       const purged = await purgeBatchOriginals(sb).catch(() => 0);
       if (purged) log("batch originals purged", { count: purged });
+      const leftovers = await purgeIntakeLeftovers(sb).catch(() => 0);
+      if (leftovers) log("intake leftovers removed", { count: leftovers });
     }
     let job;
     try {

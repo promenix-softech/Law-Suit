@@ -77,6 +77,7 @@ export function IntakeFlow({
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [seconds, setSeconds] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [openedCaseId, setOpenedCaseId] = useState<string | null>(null);
 
   // Case details
   const [caseNo, setCaseNo] = useState(suggestedNo);
@@ -123,6 +124,7 @@ export function IntakeFlow({
         setSeconds((i + 1) * (POLL_MS / 1000));
         const r = await readIntake(started.intakeId);
         if (!r.ok) {
+          await discardIntake(started.intakeId); // the file does not stay behind
           setError(r.error);
           setPhase("pick");
           return;
@@ -133,6 +135,7 @@ export function IntakeFlow({
           return;
         }
       }
+      await discardIntake(started.intakeId);
       setError("The AI is taking too long. Try again in a minute, or type the case in.");
       setPhase("pick");
     } finally {
@@ -171,6 +174,7 @@ export function IntakeFlow({
       if (!r.ok) {
         setError(r.error);
         setFieldErrors(r.fieldErrors ?? {});
+        if (r.caseId) setOpenedCaseId(r.caseId);
         return;
       }
       router.push(`/dashboard/cases/${r.caseId}`);
@@ -385,6 +389,11 @@ export function IntakeFlow({
         {clash && <p className="text-sm text-red-600 dark:text-red-400">Drafter and approver must be different people (maker–checker).</p>}
         {!borrowerOk && <p className="text-sm text-amber-700 dark:text-amber-300">Check and tick the borrower&apos;s name — the case is opened in that name.</p>}
         {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+        {openedCaseId && (
+          <a href={`/dashboard/cases/${openedCaseId}`} className="btn btn-primary px-4 py-2 text-sm">
+            Open the case →
+          </a>
+        )}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <button type="button" onClick={onStartAgain} className="muted text-sm hover:underline">
             Start again with another file
@@ -392,7 +401,7 @@ export function IntakeFlow({
           <button
             type="button"
             onClick={onOpen}
-            disabled={busy || !!clash || !borrowerOk || !branchId || !courtId || !drafterId || !approverId}
+            disabled={busy || !!openedCaseId || !!clash || !borrowerOk || !branchId || !courtId || !drafterId || !approverId}
             className="btn btn-primary px-6 py-3"
           >
             {busy ? "Opening…" : "Open case"}

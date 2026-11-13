@@ -1901,6 +1901,24 @@ begin
   raise exception 'FAIL: intake file changed';
 exception when insufficient_privilege then raise notice 'ok - an intake keeps its file and job';
 end $$;
+do $$
+begin
+  update public.case_intakes set status = 'used', case_id = 'c0000000-0000-0000-0000-000000000001'
+    where id = '1a000000-0000-0000-0000-000000000001';
+  raise exception 'FAIL: case opened from an unclaimed intake';
+exception when check_violation then raise notice 'ok - an intake is claimed before its case is opened (20261114020000)';
+end $$;
+update public.case_intakes set opening_at = now() where id = '1a000000-0000-0000-0000-000000000001';
+do $$
+begin
+  update public.case_intakes set opening_at = now() + interval '1 minute' where id = '1a000000-0000-0000-0000-000000000001';
+  raise exception 'FAIL: intake claimed twice';
+exception when check_violation then raise notice 'ok - an intake is claimed only once (no second case from one file)';
+end $$;
+update public.case_intakes set opening_at = null where id = '1a000000-0000-0000-0000-000000000001';
+select pg_temp.expect((select opening_at from public.case_intakes where id = '1a000000-0000-0000-0000-000000000001') is null,
+  'a claim is released when nothing was opened');
+update public.case_intakes set opening_at = now() where id = '1a000000-0000-0000-0000-000000000001';
 update public.case_intakes set status = 'used', case_id = 'c0000000-0000-0000-0000-000000000001'
   where id = '1a000000-0000-0000-0000-000000000001';
 select pg_temp.expect(
@@ -1942,8 +1960,33 @@ begin
   raise exception 'FAIL: drafter used the intake area';
 exception when insufficient_privilege then raise notice 'ok - only admins open cases from a file';
 end $$;
+reset role;
+-- a second admin of the same office, and the other office's admin
+insert into auth.users (id, email) values ('00000000-0000-0000-0000-0000000000a2', 'admin2@example.test');
+insert into public.profiles (id, org_id, full_name) values ('00000000-0000-0000-0000-0000000000a2', '11111111-1111-1111-1111-111111111111', 'Admin Two');
+insert into public.user_roles (user_id, org_id, role) values ('00000000-0000-0000-0000-0000000000a2', '11111111-1111-1111-1111-111111111111', 'admin');
+insert into storage.objects (bucket_id, name) values
+  ('case-intake', '11111111-1111-1111-1111-111111111111/00000000-0000-0000-0000-00000000000a/1794000000009-3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b.pdf');
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000a2');
+select pg_temp.expect((select count(*) from public.case_intakes) = 0
+  and (select count(*) from storage.objects where bucket_id = 'case-intake') = 0,
+  'another admin of the same office sees neither the intakes nor the files of the first');
+do $$
+begin
+  insert into storage.objects (bucket_id, name) values
+    ('case-intake', '11111111-1111-1111-1111-111111111111/00000000-0000-0000-0000-00000000000a/1794000000010-3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b.pdf');
+  raise exception 'FAIL: second admin wrote into the first admin''s intake folder';
+exception when insufficient_privilege then raise notice 'ok - another admin of the same office cannot write into the first admin''s folder';
+end $$;
+delete from storage.objects where bucket_id = 'case-intake';
 select pg_temp.act_as('00000000-0000-0000-0000-0000000000b9');
 select pg_temp.expect((select count(*) from public.case_intakes) = 0, 'another office sees no intakes');
+select pg_temp.expect((select count(*) from storage.objects where bucket_id = 'case-intake') = 0,
+  'another office sees no intake files');
+delete from storage.objects where bucket_id = 'case-intake';
+reset role;
+select pg_temp.expect((select count(*) from storage.objects where bucket_id = 'case-intake') = 1,
+  'neither the second admin nor the other office could delete the first admin''s file');
 rollback;
 
 -- Marathi name and address of a party (20261112000000): same access as the rest of the row

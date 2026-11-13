@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { canTransition, type CaseStatus } from "@civil-suits/domain";
+import { decryptText, encryptText } from "@/lib/crypto";
 import { encodeField } from "@/lib/extract/stored";
 import { extractionSchema, FIELD_BY_KEY, FIELDS, normalise } from "@/lib/extract/fields";
 import { intakeFields, needsOwnTick, type IntakeField } from "@/lib/extract/intake";
@@ -40,6 +41,50 @@ async function adminContext(): Promise<{ supabase: Supabase; me: Me } | { error:
   return { supabase, me: { userId: auth.user.id, orgId: me.org_id as string } };
 }
 
+/** Files left in the intake area longer than this were abandoned (an intake takes minutes). */
+const LEFTOVER_MS = 24 * 3600 * 1000;
+
+/**
+ * The provider's job id is stored encrypted with the server's key: a value written straight into
+ * the table through the API cannot point the server at another office's job.
+ */
+const sealJob = (jobId: string) => encryptText(`job:${jobId}`);
+function openJob(sealed: string): string | null {
+  try {
+    const plain = decryptText(sealed);
+    return plain.startsWith("job:") ? plain.slice(4) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Removes the admin's own intake file (best effort; the leftover sweeps catch what this misses). */
+async function drop(supabase: Supabase, path: string) {
+  await supabase.storage.from(BUCKET).remove([path]);
+}
+
+/**
+ * The admin's own leftovers older than a day: abandoned intakes are discarded and their files
+ * deleted, and files that never got an intake row (the tab was closed mid-way) are deleted.
+ * Runs before each new upload; the worker sweeps every office the same way.
+ */
+async function sweepOwnLeftovers(supabase: Supabase, me: Me) {
+  const cutoff = new Date(Date.now() - LEFTOVER_MS).toISOString();
+  const { data: stale } = await supabase
+    .from("case_intakes")
+    .select("id, storage_path")
+    .in("status", ["reading", "read", "failed"])
+    .lt("created_at", cutoff)
+    .limit(50);
+  for (const row of stale ?? []) {
+    await drop(supabase, row.storage_path);
+    await supabase.from("case_intakes").update({ status: "discarded" }).eq("id", row.id);
+  }
+  const { data: files } = await supabase.storage.from(BUCKET).list(`${me.orgId}/${me.userId}`, { limit: 100 });
+  const old = (files ?? []).filter((f) => f.created_at && f.created_at < cutoff).map((f) => `${me.orgId}/${me.userId}/${f.name}`);
+  if (old.length) await supabase.storage.from(BUCKET).remove(old);
+}
+
 /** The admin's own intake file: `{org}/{user}/<generated name>` and nothing else. */
 function isOwnIntakePath(path: string, me: Me): boolean {
   const parts = path.split("/");
@@ -57,29 +102,34 @@ export async function startIntake(path: string): Promise<IntakeResult> {
   if ("error" in ctx) return { ok: false, error: ctx.error };
   const { supabase, me } = ctx;
   if (typeof path !== "string" || !isOwnIntakePath(path, me)) return { ok: false, error: "Upload the file again." };
+  await sweepOwnLeftovers(supabase, me).catch(() => undefined);
+  const fail = async (error: string): Promise<IntakeResult> => {
+    await drop(supabase, path);
+    return { ok: false, error };
+  };
 
   const { data: withinQuota } = await supabase.rpc("ai_quota_ok", {
     per_user_hour: Number(process.env.AI_JOBS_PER_USER_HOUR ?? 60),
     per_org_day: Number(process.env.AI_JOBS_PER_ORG_DAY ?? 1000),
   });
-  if (!withinQuota) return { ok: false, error: "AI reading limit reached for now. Try again later, or type the case in." };
+  if (!withinQuota) return fail("AI reading limit reached for now. Try again later, or type the case in.");
 
   const { data: blob, error } = await supabase.storage.from(BUCKET).download(path);
-  if (error || !blob) return { ok: false, error: "Could not read the uploaded file." };
+  if (error || !blob) return fail("Could not read the uploaded file.");
   const ext = path.split(".").pop()!;
 
   let jobId: string;
   try {
     jobId = (await startExtract({ data: blob, filename: `scan.${ext}`, contentType: MIME[ext]! }, extractionSchema())).jobId;
   } catch (e) {
-    return { ok: false, error: ocrErrorMessage(e) };
+    return fail(ocrErrorMessage(e));
   }
   const { data: row, error: insErr } = await supabase
     .from("case_intakes")
-    .insert({ org_id: me.orgId, storage_path: path, provider_job_id: jobId })
+    .insert({ org_id: me.orgId, storage_path: path, provider_job_id: sealJob(jobId) })
     .select("id")
     .single();
-  if (insErr || !row) return { ok: false, error: "Could not record the reading." };
+  if (insErr || !row) return fail("Could not record the reading.");
   return { ok: true, intakeId: row.id as string, done: false };
 }
 
@@ -93,12 +143,14 @@ export async function readIntake(intakeId: string): Promise<IntakeResult> {
   if (!intake) return { ok: false, error: "This upload is no longer available. Start again." };
   if (intake.status === "used" || intake.status === "discarded") return { ok: false, error: "This upload was already used or discarded." };
 
+  const jobId = openJob(intake.provider_job_id);
+  if (!jobId) return { ok: false, error: "This upload cannot be read. Start again." };
   const empty = () => intakeFields({}, {});
   if (intake.status === "failed") return { ok: true, intakeId, done: true, fields: empty(), pages: intake.pages, failed: "The AI could not read this file." };
 
   try {
     if (intake.status === "reading") {
-      const st = await jobStatus(intake.provider_job_id);
+      const st = await jobStatus(jobId);
       if (st.status === "running") return { ok: true, intakeId, done: false };
       if (st.status !== "completed" && st.status !== "partially_completed") {
         await supabase.from("case_intakes").update({ status: "failed", pages: st.pagesSucceeded ?? 0 }).eq("id", intakeId);
@@ -106,7 +158,7 @@ export async function readIntake(intakeId: string): Promise<IntakeResult> {
       }
       await supabase.from("case_intakes").update({ status: "read", pages: st.pagesSucceeded ?? st.pagesTotal ?? 0 }).eq("id", intakeId);
     }
-    const { result, annotations } = await jobExtraction(intake.provider_job_id);
+    const { result, annotations } = await jobExtraction(jobId);
     return { ok: true, intakeId, done: true, fields: intakeFields(result, annotations), pages: intake.pages };
   } catch (e) {
     return { ok: false, error: ocrErrorMessage(e) };
@@ -153,7 +205,9 @@ const OpenInput = z.object({
     .max(FIELDS.length),
 });
 
-export type OpenResult = { ok: true; caseId: string; message: string } | { ok: false; error: string; fieldErrors?: Record<string, string> };
+export type OpenResult =
+  | { ok: true; caseId: string; message: string }
+  | { ok: false; error: string; fieldErrors?: Record<string, string>; caseId?: string };
 
 /**
  * Step 3: the reviewed values open the case. Ticked values are stored as verified by this admin
@@ -168,8 +222,13 @@ export async function openCaseFromIntake(input: z.input<typeof OpenInput>): Prom
   if ("error" in ctx) return { ok: false, error: ctx.error };
   const { supabase, me } = ctx;
 
-  const { data: intake } = await supabase.from("case_intakes").select("id, storage_path, status, pages").eq("id", intakeId).maybeSingle();
+  const { data: intake } = await supabase
+    .from("case_intakes")
+    .select("id, storage_path, status, provider_job_id, opening_at")
+    .eq("id", intakeId)
+    .maybeSingle();
   if (!intake || (intake.status !== "read" && intake.status !== "failed")) return { ok: false, error: "This upload is no longer available. Start again." };
+  if (intake.opening_at) return { ok: false, error: "A case is already being opened from this file. Look for it on the dashboard." };
 
   // Every value is re-checked in code; a ticked value that does not validate stops the opening.
   const fieldErrors: Record<string, string> = {};
@@ -194,10 +253,27 @@ export async function openCaseFromIntake(input: z.input<typeof OpenInput>): Prom
   });
   if (!head.success) return { ok: false, error: head.error.issues[0]?.message ?? "Check the case details." };
 
+  // One file opens one case: claim the intake first (a double click or a retry finds it claimed).
+  const { data: claimed } = await supabase
+    .from("case_intakes")
+    .update({ opening_at: new Date().toISOString() })
+    .eq("id", intakeId)
+    .is("opening_at", null)
+    .in("status", ["read", "failed"])
+    .select("id");
+  if (!claimed?.length) return { ok: false, error: "A case is already being opened from this file. Look for it on the dashboard." };
+
   const made = await insertCase(supabase, head.data);
-  if ("error" in made) return { ok: false, error: made.error };
+  if ("error" in made) {
+    await supabase.from("case_intakes").update({ opening_at: null }).eq("id", intakeId); // nothing was opened
+    return { ok: false, error: made.error };
+  }
   const caseId = made.caseId;
-  const partial = (what: string): OpenResult => ({ ok: false, error: `The case was opened, but ${what}. Open it from the dashboard to finish.` });
+  const partial = (what: string): OpenResult => ({
+    ok: false,
+    caseId,
+    error: `The case was opened, but ${what}. Open the case and upload the file there.`,
+  });
 
   // The file moves into the case's scans, under a new generated name.
   const { data: blob } = await supabase.storage.from(BUCKET).download(intake.storage_path);
@@ -206,12 +282,21 @@ export async function openCaseFromIntake(input: z.input<typeof OpenInput>): Prom
   const scanPath = `${me.orgId}/${caseId}/scans/${uploadName(MIME[ext]!)}`;
   const up = await supabase.storage.from("case-files").upload(scanPath, blob, { contentType: MIME[ext]! });
   if (up.error) return partial("the bank's file could not be moved into it");
+  // Pages billed come from the provider, not from the row (which the browser could write).
+  const jobId = openJob(intake.provider_job_id);
+  let pages = 0;
+  try {
+    if (jobId) pages = (await jobStatus(jobId)).pagesSucceeded ?? 0;
+  } catch {
+    pages = 0;
+  }
   const sha256 = createHash("sha256").update(Buffer.from(await blob.arrayBuffer())).digest("hex");
-  const { data: doc } = await supabase
+  const { data: doc, error: docErr } = await supabase
     .from("documents")
-    .insert({ org_id: me.orgId, case_id: caseId, storage_path: scanPath, sha256, doc_type: "scan", page_count: intake.pages })
+    .insert({ org_id: me.orgId, case_id: caseId, storage_path: scanPath, sha256, doc_type: "scan", page_count: pages || null })
     .select("id")
     .single();
+  if (docErr || !doc) return partial("the bank's file could not be recorded in it");
 
   const now = new Date().toISOString();
   const rows = [...values].map(([key, v]) => ({
@@ -220,7 +305,7 @@ export async function openCaseFromIntake(input: z.input<typeof OpenInput>): Prom
     field_key: key,
     value_enc: encodeField({ raw: v.raw, stored: v.stored, reason: v.reason }),
     confidence: null,
-    document_id: doc?.id ?? null,
+    document_id: doc.id,
     verified_by: v.checked ? me.userId : null,
     verified_at: v.checked ? now : null,
     verified_method: v.checked ? (needsOwnTick(FIELD_BY_KEY.get(key)!.kind) ? "single" : "bulk") : null,
@@ -230,13 +315,13 @@ export async function openCaseFromIntake(input: z.input<typeof OpenInput>): Prom
     if (error) return partial("the values could not be saved");
   }
 
-  if (intake.pages) {
+  if (pages) {
     await supabase.from("usage_events").insert({
       org_id: me.orgId,
       case_id: caseId,
       kind: "ocr_page",
-      qty: intake.pages,
-      cost_paise: intake.pages * EXTRACT_COST_PAISE_PER_PAGE,
+      qty: pages,
+      cost_paise: pages * EXTRACT_COST_PAISE_PER_PAGE,
       meta: { provider: "sarvam", pipeline: "extract", intake: intakeId },
     });
   }
@@ -253,8 +338,10 @@ export async function openCaseFromIntake(input: z.input<typeof OpenInput>): Prom
 
   const applied = [...values.values()].some((v) => v.checked) ? await applyVerifiedFields(caseId) : null;
 
-  await supabase.storage.from(BUCKET).remove([intake.storage_path]);
-  await supabase.from("case_intakes").update({ status: "used", case_id: caseId }).eq("id", intakeId);
+  // The intake is "used" once its file is gone; if the delete fails, the intake stays claimed (no
+  // second case can come from it) and the leftover sweeps delete the file within a day.
+  const { error: rmErr } = await supabase.storage.from(BUCKET).remove([intake.storage_path]);
+  if (!rmErr) await supabase.from("case_intakes").update({ status: "used", case_id: caseId }).eq("id", intakeId);
 
   revalidatePath("/dashboard");
   const left = [...values.values()].filter((v) => !v.checked).length;
