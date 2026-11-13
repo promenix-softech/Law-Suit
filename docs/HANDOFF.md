@@ -21,8 +21,8 @@ it very easy to use."
 - UI done and pushed (`new-case-chooser.tsx`, `intake-flow.tsx`, `court-picker.tsx`); e2e with a
   Sarvam stand-in, 10/10 from a fresh stack; `pnpm check` passes; STATUS updated.
 - Security review FAIL → fixed (commit 48b745c, migration `20261114020000_case_intake_claim`);
-  re-review PASS (14 Nov). Waiting on the owner: apply the three migrations to the demo DB
-  **before** the merge, then PR and merge.
+  re-review PASS (14 Nov). Owner said yes: the three migrations are on the demo DB (14 Nov).
+  Left: PR → green CI → merge → check the new-case page on the live site as admin.
 
 ## Needs the owner
 - Type a Marathi name and address on a demo case (Suit particulars → "मराठी नाव व पत्ता") and

@@ -218,7 +218,7 @@
 
 - [x] Live after #35 (13 Nov): approval list by case, phone case list. The touch-screen button rule (`globals.css`) was missing from the first production build — the live CSS was the new build minus exactly that rule — and appeared after a **Redeploy without the build cache**; buttons on phones now measure 40 px live. If a `globals.css` change does not show on the live site, redeploy without the build cache (Vercel → Deployments → ⋯ → Redeploy → untick "Use existing Build Cache")
 
-## Open a case from the bank's file (14 Nov) — on the branch, migrations NOT yet on the demo DB
+## Open a case from the bank's file (14 Nov) — migrations on the demo DB; PR open
 - [x] Owner's ask: upload the bank's file → the AI fills the form → only review → open the case; editable; where to file decided by law; Pune court by default, other districts selectable; very easy to use
 - [x] `/dashboard/cases/new`: two ways — "From the bank's file" (recommended) or "Type it in". From the file: upload → Sarvam extract (AI quota) → one review page (value, text as read, % sure, a tick per value; money, dates, rates, account numbers, tenure and document lists ticked one by one; values not found folded away; "Open the file") → case details → Open case. Nothing reaches the case tables before "Open case"
 - [x] Opening: every value re-checked in code (`normalise`: cleaned, injection-checked); ticked values stored as verified by the admin (`single` / `bulk`) and applied by the case page's own code (`applyVerifiedFields`: loan, borrower, claim, commercial / 12A); unticked values wait for the drafter. The file moves into the case's scans under a generated name; usage logged; the intake row records the case
@@ -226,7 +226,7 @@
 - [x] Migrations `20261114000000_case_intake` (private bucket `case-intake` `{org}/{user}/<name>`, admin's own files only; table `case_intakes`, own rows, status only forward, never deleted; AI quota counts it) and `20261114010000_case_intake_discard`; RLS tests (16 checks)
 - [x] e2e `new-case.spec.ts` with a local Sarvam stand-in (`e2e/sarvam-mock.mjs`): file → review → open → case in the Pune civil court as a summary suit, file stored under a generated name; typed-in form defaults to Pune. 10/10 e2e pass from a fresh stack
 - [x] Security review FAIL (files with borrowers' data could be left behind) → fixed: the file is deleted on every failure, a timed-out or failed reading is discarded, each upload sweeps the admin's own leftovers older than a day and the worker sweeps every office (`purgeIntakeLeftovers`); one file opens one case (claim first, migration `20261114020000_case_intake_claim`); the provider's job id is stored encrypted and billed pages come from the provider; `SARVAM_BASE_URL` only for a loopback host; RLS tests for a second admin and the other office. Re-review: PASS (left as is, low: the quota check can be overshot by parallel calls of one admin; sweeps read one page of listings)
-- [ ] Owner: apply the three migrations (`20261114000000`, `…010000`, `…020000`) to the demo DB **before** the merge (the bucket must exist)
+- [x] The three migrations (`20261114000000`, `…010000`, `…020000`) applied to the demo DB before the merge (owner approved, 14 Nov); checked: private bucket, forced RLS, 3 table + 3 storage policies, claim column, 5 triggers
 - [ ] Later: Marathi labels for the new-case page; the worker sweep runs only once the worker has a VPS (until then each admin's next upload sweeps their own leftovers)
 
 ## Owner's decisions (13 Nov)
