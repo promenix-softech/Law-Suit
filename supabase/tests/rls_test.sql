@@ -267,6 +267,79 @@ begin
   reset role;
 end $$;
 
+-- OCR start is atomic: a scan has at most one job starting or running in each pipeline
+begin;
+do $$
+declare
+  org constant uuid := '11111111-1111-1111-1111-111111111111';
+  doc constant uuid := 'e0000000-0000-0000-0000-000000000002';
+  claim uuid;
+begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000d2', true);
+  set local role authenticated;
+
+  insert into public.ocr_jobs (org_id, document_id, language, status, created_at)
+  values (org, doc, 'en-IN', 'starting', now() - interval '1 day') returning id into claim;
+  if (select created_at from public.ocr_jobs where id = claim) < now() - interval '1 minute' then
+    raise exception 'FAIL: a job was back-dated on insert';
+  end if;
+  raise notice 'ok - a job is claimed before the paid call, at the database''s time';
+
+  begin
+    insert into public.ocr_jobs (org_id, document_id, language, status) values (org, doc, 'en-IN', 'starting');
+    raise exception 'FAIL: a second start was claimed for the same scan';
+  exception when unique_violation then
+    raise notice 'ok - a second start for the same scan is refused while one is starting';
+  end;
+
+  insert into public.ocr_jobs (org_id, document_id, pipeline, language, status) values (org, doc, 'extract', 'auto', 'starting');
+  raise notice 'ok - the other pipeline can start beside it';
+
+  begin
+    update public.ocr_jobs set status = 'running' where id = claim;
+    raise exception 'FAIL: a job runs without the provider''s job id';
+  exception when check_violation then
+    raise notice 'ok - a running job carries the provider''s job id';
+  end;
+  update public.ocr_jobs set status = 'running', provider_job_id = 'job-claim' where id = claim;
+
+  begin
+    insert into public.ocr_jobs (org_id, document_id, provider_job_id, language) values (org, doc, 'job-dup', 'en-IN');
+    raise exception 'FAIL: a second job runs for the same scan';
+  exception when unique_violation then
+    raise notice 'ok - a second job for the same scan is refused while one is running';
+  end;
+
+  begin
+    update public.ocr_jobs set provider_job_id = 'job-other' where id = claim;
+    raise exception 'FAIL: the provider''s job id was replaced';
+  exception when insufficient_privilege then
+    raise notice 'ok - the provider''s job id is written once';
+  end;
+  begin
+    update public.ocr_jobs set created_by = '00000000-0000-0000-0000-0000000000a1' where id = claim;
+    raise exception 'FAIL: a job was passed to another person';
+  exception when insufficient_privilege then
+    raise notice 'ok - a job stays with the person who started it';
+  end;
+  update public.ocr_jobs set created_at = now() - interval '2 days' where id = claim;
+  if (select created_at from public.ocr_jobs where id = claim) < now() - interval '1 minute' then
+    raise exception 'FAIL: a job was back-dated later';
+  end if;
+  raise notice 'ok - a job cannot be back-dated out of the quota';
+
+  update public.ocr_jobs set status = 'completed' where id = claim;
+  begin
+    update public.ocr_jobs set status = 'running' where id = claim;
+    raise exception 'FAIL: a finished job was started again';
+  exception when check_violation then
+    raise notice 'ok - a finished job is not started again';
+  end;
+  insert into public.ocr_jobs (org_id, document_id, language, status) values (org, doc, 'en-IN', 'starting');
+  raise notice 'ok - a new job can start once the last one has finished';
+end $$;
+rollback;
+
 -- assignment: the drafter cannot pick their own approver; the admin can re-assign
 do $$
 begin
@@ -1071,9 +1144,9 @@ rollback;
 
 -- AI spend guard
 begin;
-insert into public.ocr_jobs (org_id, document_id, provider_job_id, language, created_by)
+insert into public.ocr_jobs (org_id, document_id, provider_job_id, language, status, created_by)
 select '11111111-1111-1111-1111-111111111111', 'e0000000-0000-0000-0000-000000000002', 'rl-' || g, 'en-IN',
-       '00000000-0000-0000-0000-0000000000d2'
+       'completed', '00000000-0000-0000-0000-0000000000d2'
 from generate_series(1, 3) g;
 select pg_temp.act_as('00000000-0000-0000-0000-0000000000d2');
 select pg_temp.expect(public.ai_quota_ok(5, 100) and not public.ai_quota_ok(3, 100) and not public.ai_quota_ok(5, 3),

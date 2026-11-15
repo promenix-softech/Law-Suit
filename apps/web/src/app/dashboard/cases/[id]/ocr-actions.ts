@@ -22,6 +22,18 @@ import type { ActionResult } from "./actions";
 
 const MIME: Record<string, string> = { pdf: "application/pdf", jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png" };
 
+type Pipeline = "digitise" | "extract";
+
+const ALREADY_RUNNING = "A job is already running for this document.";
+const START_UNFINISHED = "The start did not finish. Try again.";
+
+/**
+ * A job row is written before the paid call, as a claim ("starting"). If the server stops between
+ * the claim and the call, the claim would block the scan for ever, so it is freed after this long —
+ * longer than any request can run, so a start that is still on its way is never freed.
+ */
+const STALE_START_MS = 15 * 60 * 1000;
+
 type Supabase = NonNullable<Awaited<ReturnType<typeof createClient>>>;
 type Scan = { doc: { id: string; org_id: string; case_id: string }; file: { data: Blob; filename: string; contentType: string } };
 
@@ -29,20 +41,29 @@ type Scan = { doc: { id: string; org_id: string; case_id: string }; file: { data
  * Loads a stored scan for an AI job, after checking the caller may edit the case (so no
  * credits are spent on a request RLS would reject) and that no job is already running.
  */
-async function loadScan(supabase: Supabase, documentId: string, pipeline: "digitise" | "extract"): Promise<Scan | string> {
+async function loadScan(supabase: Supabase, documentId: string, pipeline: Pipeline): Promise<Scan | string> {
   const { data: doc } = await supabase.from("documents").select("id, org_id, case_id, storage_path").eq("id", documentId).single();
   if (!doc?.case_id) return "Document not found.";
 
   const { data: allowed } = await supabase.rpc("can_edit_case", { c_id: doc.case_id });
   if (!allowed) return "You cannot process documents for this case.";
 
+  // Frees a claim whose start never finished, then an early answer without reading the file.
+  // This count is only a courtesy: what stops a second job is the claim in `startJob`.
+  await supabase
+    .from("ocr_jobs")
+    .update({ status: "failed", error: START_UNFINISHED })
+    .eq("document_id", documentId)
+    .eq("pipeline", pipeline)
+    .eq("status", "starting")
+    .lt("created_at", new Date(Date.now() - STALE_START_MS).toISOString());
   const { count } = await supabase
     .from("ocr_jobs")
     .select("id", { count: "exact", head: true })
     .eq("document_id", documentId)
     .eq("pipeline", pipeline)
-    .eq("status", "running");
-  if (count) return "A job is already running for this document.";
+    .in("status", ["starting", "running"]);
+  if (count) return ALREADY_RUNNING;
 
   // Paid API: per-user hourly and per-office daily caps (env overrides, DB counts).
   const { data: withinQuota } = await supabase.rpc("ai_quota_ok", {
@@ -60,15 +81,36 @@ async function loadScan(supabase: Supabase, documentId: string, pipeline: "digit
   return { doc: { id: doc.id, org_id: doc.org_id, case_id: doc.case_id }, file: { data: blob, filename: `scan.${ext}`, contentType } };
 }
 
-async function recordJob(supabase: Supabase, scan: Scan, pipeline: "digitise" | "extract", jobId: string, status: string, language: string) {
-  const { error } = await supabase.from("ocr_jobs").insert({
-    org_id: scan.doc.org_id,
-    document_id: scan.doc.id,
-    pipeline,
-    provider_job_id: jobId,
-    language,
-    status,
-  });
+/**
+ * Starts a paid job exactly once per scan and pipeline. The job row is written first, as a claim:
+ * the database lets only one job per scan and pipeline be starting or running (unique index), so
+ * of two requests at the same moment one gets the claim and the other is told a job is running —
+ * before anything is sent to the provider. Returns an error message, or null when the job runs.
+ */
+async function startJob(
+  supabase: Supabase,
+  scan: Scan,
+  pipeline: Pipeline,
+  language: string,
+  call: () => Promise<{ jobId: string; status: string }>,
+): Promise<string | null> {
+  const { data: claim, error: refused } = await supabase
+    .from("ocr_jobs")
+    .insert({ org_id: scan.doc.org_id, document_id: scan.doc.id, pipeline, language, status: "starting" })
+    .select("id")
+    .single();
+  if (refused?.code === "23505") return ALREADY_RUNNING;
+  if (refused || !claim) return "Could not record the job.";
+
+  let job: { jobId: string; status: string };
+  try {
+    job = await call();
+  } catch (e) {
+    const message = ocrErrorMessage(e);
+    await supabase.from("ocr_jobs").update({ status: "failed", error: message }).eq("id", claim.id);
+    return message;
+  }
+  const { error } = await supabase.from("ocr_jobs").update({ provider_job_id: job.jobId, status: job.status }).eq("id", claim.id);
   return error ? "Could not record the job." : null;
 }
 
@@ -87,13 +129,7 @@ export async function startOcr(input: z.infer<typeof StartInput>): Promise<Actio
   const scan = await loadScan(supabase, parsed.data.documentId, "digitise");
   if (typeof scan === "string") return { ok: false, error: scan };
 
-  let job: { jobId: string; status: string };
-  try {
-    job = await startDigitise(scan.file, parsed.data.language);
-  } catch (e) {
-    return { ok: false, error: ocrErrorMessage(e) };
-  }
-  const err = await recordJob(supabase, scan, "digitise", job.jobId, job.status, parsed.data.language);
+  const err = await startJob(supabase, scan, "digitise", parsed.data.language, () => startDigitise(scan.file, parsed.data.language));
   if (err) return { ok: false, error: err };
 
   revalidatePath(`/dashboard/cases/${scan.doc.case_id}`);
@@ -109,13 +145,7 @@ export async function startExtraction(documentId: string): Promise<ActionResult>
   const scan = await loadScan(supabase, documentId, "extract");
   if (typeof scan === "string") return { ok: false, error: scan };
 
-  let job: { jobId: string; status: string };
-  try {
-    job = await startExtract(scan.file, extractionSchema());
-  } catch (e) {
-    return { ok: false, error: ocrErrorMessage(e) };
-  }
-  const err = await recordJob(supabase, scan, "extract", job.jobId, job.status, "auto");
+  const err = await startJob(supabase, scan, "extract", "auto", () => startExtract(scan.file, extractionSchema()));
   if (err) return { ok: false, error: err };
 
   revalidatePath(`/dashboard/cases/${scan.doc.case_id}`);
@@ -189,12 +219,19 @@ export async function refreshOcr(jobRowId: string): Promise<ActionResult & { don
 
   const { data: job } = await supabase
     .from("ocr_jobs")
-    .select("id, org_id, document_id, pipeline, provider_job_id, status, documents(case_id)")
+    .select("id, org_id, document_id, pipeline, provider_job_id, status, created_at, documents(case_id)")
     .eq("id", jobRowId)
     .single();
   if (!job) return { ok: false, error: "Job not found." };
   const caseId = (Array.isArray(job.documents) ? job.documents[0] : job.documents)?.case_id as string | undefined;
-  if (job.status !== "running") return { ok: true, message: "Already finished.", done: true };
+  if (job.status === "starting") {
+    // The start is still on its way to the provider — or the server stopped before it got there.
+    if (Date.now() - new Date(job.created_at).getTime() < STALE_START_MS) return { ok: true, message: "Starting…", done: false };
+    await supabase.from("ocr_jobs").update({ status: "failed", error: START_UNFINISHED }).eq("id", job.id).eq("status", "starting");
+    if (caseId) revalidatePath(`/dashboard/cases/${caseId}`);
+    return { ok: false, error: START_UNFINISHED, done: true };
+  }
+  if (job.status !== "running" || !job.provider_job_id) return { ok: true, message: "Already finished.", done: true };
   if (!caseId) return { ok: false, error: "Document is not linked to a case.", done: true };
 
   let st: Awaited<ReturnType<typeof jobStatus>>;
