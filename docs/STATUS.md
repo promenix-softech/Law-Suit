@@ -95,7 +95,7 @@
 - [ ] Owner: Supabase → Auth → enable leaked-password protection; confirm public sign-ups are off
 - [ ] Worker sandbox before real data: run soffice/gs/ocrmypdf as a separate uid in bwrap/nsjail with no network and RLIMITs; per-bundle page budget (plan: 1,000) and per-job wall clock
 - [x] Upload names: stored as `<ts>-<uuid>.<ext>` (13 Nov, see below)
-- [ ] Atomic OCR start (partial unique index)
+- [x] Atomic OCR start (15 Nov, see "Review follow-ups" below)
 
 ## Done (domain, 24 Oct)
 - [x] Live at https://civilsuits.promenix.in (Hostinger CNAME → Vercel); production redirects every other host (old `civil-suits*.vercel.app` links) there with a 308 via `CANONICAL_HOST`; website APK opens the new address
@@ -117,7 +117,7 @@
 - [x] "Needs attention" card on the dashboard: `caseDeadlines()` in `packages/domain` (10 tests) — limitation watch (3 yrs from NPA − 90 days, `[[LEGAL_REVIEW]]`: advocate confirms start date and s.18 extensions), 12A three-month period, notice period over, approval waiting > 2 days; plus own tasks overdue / due today
 - [x] English ⇄ मराठी UI toggle (cookie `lang`): top bar, dashboard, status pills, stepper, case-page headings, palette, tasks heading; terms per `marathi-legal-glossary` (†-terms left in English). Forms and help text inside the case page are still English
 - Security review: blocking finding fixed — a crafted DOCX could carry `javascript:` links into the preview (CSP allows inline script). Preview now renders off-document and strips handlers, non-`#` links, non-data/blob sources and active tags before attaching (checked in Chromium). `lang` cookie httpOnly; dashboard survives a bad date
-- [ ] Follow-ups from review: narrow `draft_versions_path_check` to `{org}/{case}/drafts/…docx` (new migration); nonce-based `script-src` without `'unsafe-inline'`; palette search is capped at 1,000 cases
+- [x] Follow-ups from review: narrow `draft_versions_path_check` to `{org}/{case}/drafts/…docx`; nonce-based `script-src` without `'unsafe-inline'`; palette search beyond 1,000 cases (15 Nov, see "Review follow-ups" below)
 - Not verified live: no Supabase env in the sandbox, so palette / dashboard were checked by typecheck, lint and build only; preview checked in Chromium against the sample plaint
 
 ## Done (slice 17 — multi-office isolation, 25 Oct) — applied to the demo DB
@@ -200,7 +200,7 @@
 - [x] Marathi name and address of a party (#34, migration `20261112000000_party_marathi`): `parties.name_mr / address_mr / through_name_mr`, typed by a person in the Suit particulars form ("मराठी नाव व पत्ता"), never transliterated by code; `demand_notice.mr` prints them when present, else the bank-record value; RLS test, template test; security review PASS; on the demo DB and checked live (block present on a case page; not yet filled in or printed live)
 - [x] `task-resumer` agent + `docs/HANDOFF.md`: interrupted work is picked up from the repository; a scheduled check-in every three hours
 - [ ] Owner: the Marathi notice wording to the advocate (the sample file); then remove the review line in the template (new version)
-- [ ] Not done yet: email / WhatsApp reminders (needs a mail key on the server), hearing dates from eCourts (no public API — manual entry), e2e test in CI (needs a Supabase stack in the runner), nonce-based CSP, nightly audit-chain check (needs the worker / a scheduler)
+- [ ] Not done yet: email / WhatsApp reminders (needs a mail key on the server), hearing dates from eCourts (no public API — manual entry), nightly audit-chain check (needs the worker / a scheduler). Done since: e2e tests in CI (#35), nonce-based CSP (15 Nov)
 
 ## Safer uploads and typed text (13 Nov) — merged (#35)
 - [x] Uploaded files (scans, mediation reports, hand-corrected Word files) are stored as `<ms>-<uuid>.<ext>`: the person's file name, which can carry a borrower's name or account number, is not kept. The server refuses any other name; new files show as "PDF" / "Photo" with their date, older files keep their names (`lib/upload-name.ts`, tests)
@@ -232,6 +232,15 @@
 - [x] Marathi labels for the new-case page (chooser, upload, review, typed-in form, court picker). The "where to file" box is built in Marathi from the same decision in code (`chooseCourt` now also returns `flags`), not translated text; summary suit / commercial suit stay in English per the glossary (†). Checked in Marathi mode on desktop and phone; e2e 10/10 (English). Merged (#38) and checked live in Marathi (desktop and phone, no page errors).
 - [ ] Later: the worker sweep runs only once the worker has a VPS (until then each admin's next upload sweeps their own leftovers)
 - [ ] Advocate: confirm the Marathi "where to file" lines (CPC s.20 place, DRT bench, several courts) along with the other Marathi wording
+
+## Review follow-ups (15 Nov) — on the work branch, not merged, migrations not applied
+The items left over from earlier security reviews that needed no owner decision.
+- [x] Atomic OCR start: the job row is written before the paid call, as a claim (`starting`); a scan can have one job starting or running per pipeline (unique index), so two requests at the same moment cannot both pay. Migration `20261115000000_ocr_start_atomic`: status `starting`, provider job id empty only for a claim or a failed start, creation time set by the database on insert and update (the quota and the stale-claim rule count by it), guard trigger (a job stays with its scan and starter, the provider's id is written once, a finished job is not started again). `ocr-actions.ts` `startJob`; a claim whose start never finished is freed after 15 minutes; the controls show a starting job like a running one. RLS tests
+- [x] A draft's files must be in the case's drafts folder: migration `20261115010000_draft_path_narrow` (`{org}/{case}/drafts/<name>.docx`, PDF the same with `.pdf`). RLS tests. The demo DB has no row outside `drafts/` and no running OCR job (checked read-only), so both migrations apply cleanly
+- [x] Ctrl K palette: keeps the 1,000 newest cases in the browser (was: the 1,000 lowest case numbers) and, for an office with more, also asks the database for the typed word — case no., CNR or party name, RLS as before. The word is reduced to letters, digits, `-`, `/`, `.` (`lib/palette-search.ts`, unit tests); tried in the browser with a temporary small local list
+- [x] Content-Security-Policy with a nonce per request (`lib/csp.ts`, `proxy.ts`): `script-src 'self' 'nonce-…' 'strict-dynamic'`, no `'unsafe-inline'` for scripts; styles keep it (style attributes, DOCX preview). Static files get a fixed `default-src 'none'` policy from `next.config.ts`; every path has exactly one CSP header (checked with curl)
+- [x] Tests: `pnpm check` green (web 178 unit tests), RLS tests green, e2e 14/14 on a fresh local stack (`e2e/csp.spec.ts`: header, nonce on every script tag, new nonce per request, spoofed nonce ignored, static policy, every main page and the palette under the policy; the role and new-case flows fail if the browser refuses anything under the policy)
+- [ ] Known, not changed: `refreshOcr` can run twice at the same moment when a job finishes (two tabs polling) and then records the pages' usage twice; the fix is to claim the finish in the same way
 
 ## Owner's decisions (13 Nov)
 - The site is not launched; all data is demo data. Before launch the owner deletes the Satyam demo office and its domain, and moves the database to Mumbai (new Pro project). The demo password is kept as it is on purpose until then. Not to be raised again before launch
