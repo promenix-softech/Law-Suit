@@ -13,8 +13,8 @@ Review follow-ups that need no owner decision (started 15 Nov, on the work branc
 1. Atomic OCR start — done: migration `20261115000000_ocr_start_atomic` (claim row `starting`,
    one active job per scan and pipeline, job facts fixed), `ocr-actions.ts` `startJob`, RLS tests.
 2. Narrow `draft_versions_path_check` — done: migration `20261115010000_draft_path_narrow`, RLS tests; the demo database has no row outside `drafts/` (checked read-only).
-3. Palette search beyond 1,000 cases — written (`lib/palette-search.ts`, unit tests); the database queries still to be tried against the local stack.
-4. Nonce-based CSP — in progress; read `apps/web/AGENTS.md` and the Next docs first, verify with e2e.
+3. Palette search beyond 1,000 cases — done (`lib/palette-search.ts`, unit tests; database search tried in the browser with a temporary small local list).
+4. Nonce-based CSP — done (`lib/csp.ts`, `proxy.ts`, static policy in `next.config.ts`, `e2e/csp.spec.ts`); e2e 14/14.
 5. Then: `pnpm check`, db tests, e2e, `security-reviewer`, STATUS; ask the owner before applying
    the migrations to the demo database, opening the PR and merging.
 

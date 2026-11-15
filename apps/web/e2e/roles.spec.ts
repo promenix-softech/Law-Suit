@@ -1,4 +1,5 @@
 import { test as base, expect, type BrowserContext, type Page } from "@playwright/test";
+import { watchCsp } from "./csp-watch";
 
 /**
  * What each role may see and do, end to end (browser → app → Supabase Auth, RLS and Storage).
@@ -24,20 +25,26 @@ async function signIn(page: Page, user: string, password = PASSWORD) {
   await page.getByRole("button", { name: "Sign in" }).click();
 }
 
-/** `as(user)`: a separate signed-in session (own cookies), closed when the test ends. */
+/**
+ * `as(user)`: a separate signed-in session (own cookies), closed when the test ends. The test
+ * fails if the browser refused anything under the Content-Security-Policy in any session.
+ */
 const test = base.extend<{ as: (user: string) => Promise<Page> }>({
   // The fixture callback is named `provide`, not `use`, so the React hooks lint rule leaves it alone.
   as: async ({ browser, baseURL }, provide) => {
     const contexts: BrowserContext[] = [];
+    const cspChecks: (() => void)[] = [];
     await provide(async (user) => {
       const context = await browser.newContext({ baseURL });
       contexts.push(context);
+      cspChecks.push(watchCsp(context));
       const page = await context.newPage();
       await signIn(page, user);
       await page.waitForURL(/\/dashboard/);
       return page;
     });
     for (const context of contexts) await context.close();
+    for (const check of cspChecks) check();
   },
 });
 
