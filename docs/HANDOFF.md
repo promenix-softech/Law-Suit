@@ -12,8 +12,8 @@ Supabase project `ohdtudvmcahdnqnhfqzp`.
 Review follow-ups that need no owner decision (started 15 Nov, on the work branch, not merged):
 1. Atomic OCR start — done: migration `20261115000000_ocr_start_atomic` (claim row `starting`,
    one active job per scan and pipeline, job facts fixed), `ocr-actions.ts` `startJob`, RLS tests.
-2. Narrow `draft_versions_path_check` to `{org}/{case}/drafts/…` — next (new migration + tests).
-3. Palette search beyond 1,000 cases — after that.
+2. Narrow `draft_versions_path_check` — done: migration `20261115010000_draft_path_narrow`, RLS tests; the demo database has no row outside `drafts/` (checked read-only).
+3. Palette search beyond 1,000 cases — next.
 4. Nonce-based CSP — last; read `apps/web/AGENTS.md` and the Next docs first, verify with e2e.
 5. Then: `pnpm check`, db tests, e2e, `security-reviewer`, STATUS; ask the owner before applying
    the migrations to the demo database, opening the PR and merging.

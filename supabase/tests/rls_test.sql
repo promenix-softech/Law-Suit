@@ -549,6 +549,53 @@ begin
   reset role;
 end $$;
 
+-- a draft's Word file is `{org}/{case}/drafts/<name>.docx`, not another file of the case
+do $$
+declare
+  base constant text := '11111111-1111-1111-1111-111111111111/c0000000-0000-0000-0000-000000000002/';
+  bad text[] := array[
+    base || 'scans/b.docx',
+    base || 'mediation/report.docx',
+    base || 'drafts/sub/x.docx',
+    base || 'drafts/x.pdf',
+    base || 'drafts/x.docx.exe',
+    base || 'drafts/.docx/x'
+  ];
+  p text;
+begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000d2', true);
+  set local role authenticated;
+  foreach p in array bad loop
+    begin
+      insert into public.draft_versions (org_id, draft_id, version, docx_path) values
+        ('11111111-1111-1111-1111-111111111111', 'd0000000-0000-0000-0000-000000000002', 9, p);
+      raise exception 'FAIL: draft path % accepted', p;
+    exception when raise_exception then
+      if sqlerrm like 'FAIL%' then raise; end if;
+    end;
+  end loop;
+  raise notice 'ok - a draft''s Word file must be in the case''s drafts folder';
+  reset role;
+end $$;
+
+-- and its PDF is `{org}/{case}/drafts/<name>.pdf` (written by the worker)
+do $$
+declare
+  base constant text := '11111111-1111-1111-1111-111111111111/c0000000-0000-0000-0000-000000000002/';
+  bad text[] := array[base || 'scans/b.pdf', base || 'drafts/p.docx', base || 'drafts/sub/p.pdf'];
+  p text;
+begin
+  foreach p in array bad loop
+    begin
+      update public.draft_versions set pdf_path = p where id = 'f0000000-0000-0000-0000-000000000002';
+      raise exception 'FAIL: draft PDF path % accepted', p;
+    exception when raise_exception then
+      if sqlerrm like 'FAIL%' then raise; end if;
+    end;
+  end loop;
+  raise notice 'ok - a draft''s PDF must be in the case''s drafts folder';
+end $$;
+
 -- the worker functions are closed to users and anon; anon cannot touch jobs
 do $$
 begin
