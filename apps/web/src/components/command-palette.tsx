@@ -4,15 +4,37 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { setLanguage } from "@/app/lang-actions";
 import { translator, type Lang } from "@/lib/i18n";
+import { mergeById, PALETTE_LOCAL_CASES, remoteTerm } from "@/lib/palette-search";
 import { createClient } from "@/lib/supabase/client";
 import { caseStatus } from "@/lib/ui";
 
 type CaseHit = { id: string; no: string; borrower: string; status: string; cnr: string | null };
 type Item = { key: string; label: string; hint?: string; group: "action" | "case"; run: () => void };
+type CaseRow = {
+  id: string;
+  case_no_internal: string;
+  status: string;
+  cnr_no: string | null;
+  parties: { name: string; position: number }[] | null;
+};
+
+const CASE_COLUMNS = "id, case_no_internal, status, cnr_no, parties(name, position)";
+
+const toHit = (c: CaseRow): CaseHit => ({
+  id: c.id,
+  no: c.case_no_internal,
+  status: c.status,
+  cnr: c.cnr_no,
+  borrower: [...(c.parties ?? [])].sort((a, b) => a.position - b.position)[0]?.name ?? "",
+});
 
 /**
  * Ctrl/⌘ K (or "/") opens a search over the cases the user can see and the main actions.
  * Cases are read with the browser client, so RLS decides what appears — same as the dashboard.
+ *
+ * The newest cases are kept in the browser for instant search. An office with more cases than
+ * that (`PALETTE_LOCAL_CASES`) also asks the database for the typed word, so older cases are found
+ * by case no., CNR or party name as well.
  */
 export function CommandPalette({ lang, roles }: { lang: Lang; roles: string[] }) {
   const t = useMemo(() => translator(lang), [lang]);
@@ -21,6 +43,8 @@ export function CommandPalette({ lang, roles }: { lang: Lang; roles: string[] })
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const [cases, setCases] = useState<CaseHit[] | null>(null);
+  const [capped, setCapped] = useState(false);
+  const [found, setFound] = useState<CaseHit[]>([]);
   const [, startTransition] = useTransition();
   const input = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLUListElement>(null);
@@ -51,25 +75,51 @@ export function CommandPalette({ lang, roles }: { lang: Lang; roles: string[] })
     (async () => {
       const { data } = await createClient()
         .from("cases")
-        .select("id, case_no_internal, status, cnr_no, parties(name, position)")
+        .select(CASE_COLUMNS)
         .is("archived_at", null)
-        .order("case_no_internal")
-        .limit(1000);
+        .order("created_at", { ascending: false })
+        .limit(PALETTE_LOCAL_CASES);
       if (cancelled) return;
-      setCases(
-        (data ?? []).map((c) => ({
-          id: c.id,
-          no: c.case_no_internal,
-          status: c.status,
-          cnr: c.cnr_no,
-          borrower: [...(c.parties ?? [])].sort((a, b) => a.position - b.position)[0]?.name ?? "",
-        })),
-      );
+      const rows = (data ?? []) as CaseRow[];
+      setCapped(rows.length >= PALETTE_LOCAL_CASES);
+      setCases(rows.map(toHit));
     })();
     return () => {
       cancelled = true;
     };
   }, [open, cases]);
+
+  // More cases than are kept here: ask the database for the typed word (after a short pause).
+  const term = open && capped ? remoteTerm(query) : null;
+  useEffect(() => {
+    if (!term) return;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      const supabase = createClient();
+      const like = `%${term}%`;
+      const [byNumber, byParty] = await Promise.all([
+        supabase
+          .from("cases")
+          .select(CASE_COLUMNS)
+          .is("archived_at", null)
+          .or(`case_no_internal.ilike."${like}",cnr_no.ilike."${like}"`)
+          .limit(20),
+        supabase
+          .from("cases")
+          .select("id, case_no_internal, status, cnr_no, parties!inner(name, position)")
+          .is("archived_at", null)
+          .ilike("parties.name", like)
+          .limit(20),
+      ]);
+      if (cancelled) return;
+      const rows = [...(byNumber.data ?? []), ...(byParty.data ?? [])] as CaseRow[];
+      if (rows.length) setFound((known) => mergeById(known, rows.map(toHit)));
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [term]);
 
   const items = useMemo<Item[]>(() => {
     const go = (href: string) => () => {
@@ -102,7 +152,7 @@ export function CommandPalette({ lang, roles }: { lang: Lang; roles: string[] })
         },
       },
     ];
-    const caseItems: Item[] = (cases ?? []).map((c) => ({
+    const caseItems: Item[] = mergeById(cases ?? [], found, Infinity).map((c) => ({
       key: `c:${c.id}`,
       label: c.no,
       hint: [c.borrower, caseStatus(c.status, t)[0], c.cnr && `CNR ${c.cnr}`].filter(Boolean).join(" · "),
@@ -115,7 +165,7 @@ export function CommandPalette({ lang, roles }: { lang: Lang; roles: string[] })
     const words = q.split(/\s+/);
     const hit = (i: Item) => words.every((w) => `${i.label} ${i.hint ?? ""}`.toLowerCase().includes(w));
     return [...caseItems.filter(hit).slice(0, 30), ...actions.filter(hit)];
-  }, [cases, query, roles, lang, t, close, router]);
+  }, [cases, found, query, roles, lang, t, close, router]);
 
   useEffect(() => {
     list.current?.querySelector(`[data-index="${active}"]`)?.scrollIntoView({ block: "nearest" });
