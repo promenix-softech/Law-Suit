@@ -1,43 +1,20 @@
 import type { NextConfig } from "next";
 
-const isDev = process.env.NODE_ENV !== "production";
-
 /**
- * A build pointed at a local Supabase test stack (end-to-end tests: http://127.0.0.1:54321) may
- * talk to it; nothing else over plain http. Hosted builds use https://*.supabase.co only.
+ * Content-Security-Policy. Pages, route handlers and actions get theirs from `src/proxy.ts`, with
+ * a fresh nonce for every request (`src/lib/csp.ts`). The proxy does not run for static files
+ * (`config.matcher` there), so those get this fixed policy: if one of them is opened as a page —
+ * an SVG, say — nothing in it may load or run.
  */
-const localSupabase = (() => {
-  try {
-    const u = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "");
-    return u.protocol === "http:" && (u.hostname === "127.0.0.1" || u.hostname === "localhost") ? u.origin : null;
-  } catch {
-    return null;
-  }
-})();
-const supabaseSrc = `https://*.supabase.co${localSupabase ? ` ${localSupabase}` : ""}`;
-
-/**
- * Content-Security-Policy. Next.js injects inline bootstrap scripts, so script-src needs
- * 'unsafe-inline' until we move to nonces; everything else is locked to our origin and Supabase.
- * Uploads go browser → Supabase Storage directly (bucket size and MIME limits apply there).
- */
-const csp = [
-  "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
-  "style-src 'self' 'unsafe-inline'",
-  `img-src 'self' data: blob: ${supabaseSrc}`,
-  "font-src 'self' data:",
-  `connect-src 'self' ${supabaseSrc} wss://*.supabase.co`,
-  "frame-src 'none'",
-  "frame-ancestors 'none'",
-  "object-src 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  ...(isDev || localSupabase ? [] : ["upgrade-insecure-requests"]),
-].join("; ");
+const STATIC_CSP = { key: "Content-Security-Policy", value: "default-src 'none'; frame-ancestors 'none'" };
+const STATIC_FILES = [
+  "/_next/static/:path*",
+  "/_next/image",
+  "/favicon.ico",
+  "/:all*(\\.png|\\.jpg|\\.jpeg|\\.svg|\\.ico|\\.webp|\\.woff|\\.woff2)",
+];
 
 const securityHeaders = [
-  { key: "Content-Security-Policy", value: csp },
   { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "X-Frame-Options", value: "DENY" },
@@ -56,7 +33,10 @@ const nextConfig: NextConfig = {
     proxyClientMaxBodySize: "1mb",
   },
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    return [
+      { source: "/:path*", headers: securityHeaders },
+      ...STATIC_FILES.map((source) => ({ source, headers: [STATIC_CSP] })),
+    ];
   },
   turbopack: {
     rules: {

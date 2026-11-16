@@ -174,6 +174,8 @@ export function supabaseIntakeDb(sb: SupabaseClient): IntakeDb {
         .insert({ org_id: batch.org_id, case_no_internal: caseNo, status: "docs_uploaded", created_by: batch.created_by })
         .select("id")
         .single();
+      // The office's scheme may refuse new cases (database trigger, SQLSTATE CS001): say so on the batch.
+      if (error?.code === "CS001") throw new Error(`The office's scheme refuses new cases (${error.message.replace(/^scheme: /, "")})`);
       if (error || !data) throw new Error("Could not create case");
       // Record it at once, so a retry reuses this case instead of refusing the number.
       const { data: cur } = await sb.from("batches").select("created_cases").eq("id", batch.id).single();

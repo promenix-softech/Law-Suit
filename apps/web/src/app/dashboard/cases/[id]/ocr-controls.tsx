@@ -8,13 +8,16 @@ import { refreshOcr, startExtraction, startOcr } from "./ocr-actions";
 export type Job = { id: string; status: string; pages_succeeded: number | null; error: string | null } | null;
 type Msg = { ok: boolean; text: string } | null;
 
+/** A job that is on its way to the provider ("starting") or with it ("running"). */
+const isActive = (j: Job) => j?.status === "running" || j?.status === "starting";
+
 const POLL_MS = 5000;
 const MAX_POLLS = 60; // ~5 minutes, then the user can refresh manually
 
 /** While a job runs, asks the server to check Sarvam every few seconds. */
 function usePoll(job: Job, onDone: (m: Msg) => void) {
   const router = useRouter();
-  const running = job?.status === "running";
+  const running = isActive(job);
   const jobId = job?.id;
   useEffect(() => {
     if (!running || !jobId) return;
@@ -59,9 +62,9 @@ export function OcrControls({
   usePoll(job, setMsg);
   usePoll(extractJob, setMsg);
 
-  const ocrRunning = job?.status === "running";
+  const ocrRunning = isActive(job);
   const ocrDone = job && (job.status === "completed" || job.status === "partially_completed");
-  const exRunning = extractJob?.status === "running";
+  const exRunning = isActive(extractJob);
   const failed = (j: Job) => j?.status === "failed" || j?.status === "rejected";
 
   const run = (fn: () => Promise<{ ok: true; message: string } | { ok: false; error: string }>) =>

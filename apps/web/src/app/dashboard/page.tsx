@@ -460,11 +460,16 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
               <section id="approvals" className="glass-card fade-up scroll-mt-24 p-5" style={{ animationDelay: "180ms" }}>
                 <div className="flex items-center justify-between gap-2">
                   <h2 className="text-lg font-semibold">{t("Awaiting my approval")}</h2>
-                  {!!approvalQueue.length && <span className="pill pill-amber">{approvalQueue.length}</span>}
+                  <span className="flex items-center gap-2">
+                    {!!approvalQueue.length && <span className="pill pill-amber">{approvalQueue.length}</span>}
+                    <Link href="/dashboard/approvals" className="muted text-xs hover:underline">
+                      {t("Approvals")} →
+                    </Link>
+                  </span>
                 </div>
                 <div className="mt-3 space-y-2">
                   {approvalCases.map((g) => (
-                    <Link key={g.caseId} href={`/dashboard/cases/${g.caseId}`} className="row-hover flex items-center justify-between gap-2 rounded-xl px-2 py-2.5">
+                    <Link key={g.caseId} href={`/dashboard/approvals#case-${g.caseId}`} className="row-hover flex items-center justify-between gap-2 rounded-xl px-2 py-2.5">
                       <span className="min-w-0">
                         <span className="font-semibold">{g.caseNo}</span>
                         {g.kinds.length > 1 && <span className="pill pill-amber ml-2 px-2 py-0 text-xs">{g.kinds.length}</span>}

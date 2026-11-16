@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { watchCsp } from "./csp-watch";
 
 /**
  * Opening a case: from the bank's file (the AI — a local stand-in for Sarvam, e2e/sarvam-mock.mjs —
@@ -22,6 +23,13 @@ async function signInAdmin(page: Page) {
 }
 
 const field = (page: Page, key: string) => page.locator(`[data-field="${key}"]`);
+
+// Nothing on these pages may be refused by the Content-Security-Policy.
+let cspCheck: () => void = () => {};
+test.beforeEach(({ context }) => {
+  cspCheck = watchCsp(context);
+});
+test.afterEach(() => cspCheck());
 
 test("a case opens from the bank's file: the AI fills the form, the admin checks it, the law picks the court", async ({ page }) => {
   await signInAdmin(page);

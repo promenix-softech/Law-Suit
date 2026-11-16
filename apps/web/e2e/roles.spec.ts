@@ -1,4 +1,5 @@
 import { test as base, expect, type BrowserContext, type Page } from "@playwright/test";
+import { watchCsp } from "./csp-watch";
 
 /**
  * What each role may see and do, end to end (browser → app → Supabase Auth, RLS and Storage).
@@ -24,20 +25,26 @@ async function signIn(page: Page, user: string, password = PASSWORD) {
   await page.getByRole("button", { name: "Sign in" }).click();
 }
 
-/** `as(user)`: a separate signed-in session (own cookies), closed when the test ends. */
+/**
+ * `as(user)`: a separate signed-in session (own cookies), closed when the test ends. The test
+ * fails if the browser refused anything under the Content-Security-Policy in any session.
+ */
 const test = base.extend<{ as: (user: string) => Promise<Page> }>({
   // The fixture callback is named `provide`, not `use`, so the React hooks lint rule leaves it alone.
   as: async ({ browser, baseURL }, provide) => {
     const contexts: BrowserContext[] = [];
+    const cspChecks: (() => void)[] = [];
     await provide(async (user) => {
       const context = await browser.newContext({ baseURL });
       contexts.push(context);
+      cspChecks.push(watchCsp(context));
       const page = await context.newPage();
       await signIn(page, user);
       await page.waitForURL(/\/dashboard/);
       return page;
     });
     for (const context of contexts) await context.close();
+    for (const check of cspChecks) check();
   },
 });
 
@@ -91,6 +98,86 @@ test("the approver sees the cases they approve and the approval list", async ({ 
   const page = await as("approver");
   expect(await listedCases(page)).toHaveLength(10);
   await expect(page.getByRole("heading", { name: "Awaiting my approval" })).toBeVisible();
+});
+
+/** Opens a folded section of the case page (`open` is a boolean attribute, so ask the element). */
+async function openSection(page: Page, id: string) {
+  const section = page.locator(`details#${id}`);
+  if (!(await section.evaluate((d) => (d as HTMLDetailsElement).open))) await section.locator(":scope > summary").click();
+  return section;
+}
+
+test("a paper sent for approval arrives on the approver's own page: sent back with the reason, fixed, sent again, approved there", async ({ as }) => {
+  const links = await caseLinks(as);
+  const NO = caseNo(3); // drafted by drafter1, approved by approver
+  const REASON = "Correct the interest rate in paragraph 3.";
+
+  // The drafter writes the demand notice and sends it.
+  const drafter = await as("drafter1");
+  await drafter.goto(links.get(NO)!);
+  let drafts = await openSection(drafter, "drafts");
+  const notice = () => drafts.locator(".paper-card").filter({ hasText: "Demand notice" }).first();
+  await notice().getByRole("button", { name: /Generate/ }).click();
+  await notice().getByRole("button", { name: /Submit for approval/ }).click({ timeout: 30_000 });
+  await expect(notice().getByText("With the approver")).toBeVisible();
+
+  // Their approvals page says where it is; they are offered nothing to decide.
+  await drafter.goto("/dashboard/approvals");
+  await expect(drafter.locator("#my-waiting")).toContainText(NO);
+  await expect(drafter.getByRole("button", { name: /Approve/ })).toHaveCount(0);
+
+  // The approver finds it on the approvals page, with who wrote it, and can read it there.
+  const approver = await as("approver");
+  await approver.getByRole("link", { name: /Approvals/ }).first().click();
+  await approver.waitForURL(/\/dashboard\/approvals/);
+  const request = () => approver.locator("article").filter({ hasText: NO });
+  await expect(request()).toContainText("Demand notice");
+  await expect(request()).toContainText("Deepak Demo Drafter");
+  await expect(request()).toContainText("Assigned to you");
+  await request().getByRole("button", { name: /Preview/ }).click();
+  await expect(approver.getByRole("dialog")).toBeVisible();
+  await approver.keyboard.press("Escape");
+
+  // Sending back needs the reason.
+  await request().getByRole("button", { name: /Send back/ }).click();
+  await expect(request().getByRole("button", { name: /Send back to the drafter/ })).toBeDisabled();
+  await request().getByRole("textbox").fill(REASON);
+  await request().getByRole("button", { name: /Send back to the drafter/ }).click();
+  await expect(request()).toHaveCount(0);
+
+  // The drafter sees it back with the reason, and sends it again from the case.
+  await drafter.goto("/dashboard/approvals");
+  const back = drafter.locator("#returned-to-me");
+  await expect(back).toContainText(NO);
+  await expect(back).toContainText(REASON);
+  await back.getByRole("link", { name: /Fix it/ }).click();
+  await drafter.waitForURL(/\/dashboard\/cases\//);
+  drafts = await openSection(drafter, "drafts");
+  await notice().getByRole("button", { name: /Submit for approval/ }).click();
+  await expect(notice().getByText("With the approver")).toBeVisible();
+
+  // The approver sees what was said last time and approves, without opening the case.
+  await approver.goto("/dashboard/approvals");
+  await expect(request()).toContainText("Sent back earlier");
+  await expect(request()).toContainText(REASON);
+  await request().getByRole("button", { name: /Approve/ }).click();
+  await expect(request()).toHaveCount(0);
+  await approver.getByText("My recent decisions").click();
+  const decided = approver.locator("details").filter({ hasText: "My recent decisions" });
+  await expect(decided).toContainText(NO);
+  await expect(decided).toContainText("Approved");
+  await expect(decided).toContainText("Sent back");
+
+  // And the case shows the paper approved.
+  await drafter.reload();
+  drafts = await openSection(drafter, "drafts");
+  await expect(notice().getByText("Approved").first()).toBeVisible();
+});
+
+test("field staff have no approvals page", async ({ as }) => {
+  const page = await as("field");
+  await page.goto("/dashboard/approvals");
+  await expect(page).toHaveURL(/\/dashboard\/tasks/);
 });
 
 test("field staff see only their own tasks, never a case page or the reports", async ({ as }) => {
@@ -164,4 +251,16 @@ test("@phone the simple case list fits a phone: no sideways scrolling, buttons b
   }));
   expect(m.pageOverflow).toBeLessThanOrEqual(0);
   expect(m.smallButtons).toEqual([]);
+
+  // The approvals page too.
+  await page.goto("/dashboard/approvals", { waitUntil: "networkidle" });
+  await expect(page.getByRole("heading", { name: "Approvals" })).toBeVisible();
+  const a = await page.evaluate(() => ({
+    pageOverflow: document.documentElement.scrollWidth - window.innerWidth,
+    smallButtons: [...document.querySelectorAll<HTMLElement>(".btn")]
+      .filter((b) => b.getBoundingClientRect().width > 0 && b.getBoundingClientRect().height < 40)
+      .map((b) => b.innerText.trim()),
+  }));
+  expect(a.pageOverflow).toBeLessThanOrEqual(0);
+  expect(a.smallButtons).toEqual([]);
 });

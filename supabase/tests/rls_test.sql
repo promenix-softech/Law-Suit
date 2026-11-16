@@ -267,6 +267,79 @@ begin
   reset role;
 end $$;
 
+-- OCR start is atomic: a scan has at most one job starting or running in each pipeline
+begin;
+do $$
+declare
+  org constant uuid := '11111111-1111-1111-1111-111111111111';
+  doc constant uuid := 'e0000000-0000-0000-0000-000000000002';
+  claim uuid;
+begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000d2', true);
+  set local role authenticated;
+
+  insert into public.ocr_jobs (org_id, document_id, language, status, created_at)
+  values (org, doc, 'en-IN', 'starting', now() - interval '1 day') returning id into claim;
+  if (select created_at from public.ocr_jobs where id = claim) < now() - interval '1 minute' then
+    raise exception 'FAIL: a job was back-dated on insert';
+  end if;
+  raise notice 'ok - a job is claimed before the paid call, at the database''s time';
+
+  begin
+    insert into public.ocr_jobs (org_id, document_id, language, status) values (org, doc, 'en-IN', 'starting');
+    raise exception 'FAIL: a second start was claimed for the same scan';
+  exception when unique_violation then
+    raise notice 'ok - a second start for the same scan is refused while one is starting';
+  end;
+
+  insert into public.ocr_jobs (org_id, document_id, pipeline, language, status) values (org, doc, 'extract', 'auto', 'starting');
+  raise notice 'ok - the other pipeline can start beside it';
+
+  begin
+    update public.ocr_jobs set status = 'running' where id = claim;
+    raise exception 'FAIL: a job runs without the provider''s job id';
+  exception when check_violation then
+    raise notice 'ok - a running job carries the provider''s job id';
+  end;
+  update public.ocr_jobs set status = 'running', provider_job_id = 'job-claim' where id = claim;
+
+  begin
+    insert into public.ocr_jobs (org_id, document_id, provider_job_id, language) values (org, doc, 'job-dup', 'en-IN');
+    raise exception 'FAIL: a second job runs for the same scan';
+  exception when unique_violation then
+    raise notice 'ok - a second job for the same scan is refused while one is running';
+  end;
+
+  begin
+    update public.ocr_jobs set provider_job_id = 'job-other' where id = claim;
+    raise exception 'FAIL: the provider''s job id was replaced';
+  exception when insufficient_privilege then
+    raise notice 'ok - the provider''s job id is written once';
+  end;
+  begin
+    update public.ocr_jobs set created_by = '00000000-0000-0000-0000-0000000000a1' where id = claim;
+    raise exception 'FAIL: a job was passed to another person';
+  exception when insufficient_privilege then
+    raise notice 'ok - a job stays with the person who started it';
+  end;
+  update public.ocr_jobs set created_at = now() - interval '2 days' where id = claim;
+  if (select created_at from public.ocr_jobs where id = claim) < now() - interval '1 minute' then
+    raise exception 'FAIL: a job was back-dated later';
+  end if;
+  raise notice 'ok - a job cannot be back-dated out of the quota';
+
+  update public.ocr_jobs set status = 'completed' where id = claim;
+  begin
+    update public.ocr_jobs set status = 'running' where id = claim;
+    raise exception 'FAIL: a finished job was started again';
+  exception when check_violation then
+    raise notice 'ok - a finished job is not started again';
+  end;
+  insert into public.ocr_jobs (org_id, document_id, language, status) values (org, doc, 'en-IN', 'starting');
+  raise notice 'ok - a new job can start once the last one has finished';
+end $$;
+rollback;
+
 -- assignment: the drafter cannot pick their own approver; the admin can re-assign
 do $$
 begin
@@ -474,6 +547,53 @@ begin
   end loop;
   raise notice 'ok - document and draft paths must stay inside their case folder';
   reset role;
+end $$;
+
+-- a draft's Word file is `{org}/{case}/drafts/<name>.docx`, not another file of the case
+do $$
+declare
+  base constant text := '11111111-1111-1111-1111-111111111111/c0000000-0000-0000-0000-000000000002/';
+  bad text[] := array[
+    base || 'scans/b.docx',
+    base || 'mediation/report.docx',
+    base || 'drafts/sub/x.docx',
+    base || 'drafts/x.pdf',
+    base || 'drafts/x.docx.exe',
+    base || 'drafts/.docx/x'
+  ];
+  p text;
+begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000d2', true);
+  set local role authenticated;
+  foreach p in array bad loop
+    begin
+      insert into public.draft_versions (org_id, draft_id, version, docx_path) values
+        ('11111111-1111-1111-1111-111111111111', 'd0000000-0000-0000-0000-000000000002', 9, p);
+      raise exception 'FAIL: draft path % accepted', p;
+    exception when raise_exception then
+      if sqlerrm like 'FAIL%' then raise; end if;
+    end;
+  end loop;
+  raise notice 'ok - a draft''s Word file must be in the case''s drafts folder';
+  reset role;
+end $$;
+
+-- and its PDF is `{org}/{case}/drafts/<name>.pdf` (written by the worker)
+do $$
+declare
+  base constant text := '11111111-1111-1111-1111-111111111111/c0000000-0000-0000-0000-000000000002/';
+  bad text[] := array[base || 'scans/b.pdf', base || 'drafts/p.docx', base || 'drafts/sub/p.pdf'];
+  p text;
+begin
+  foreach p in array bad loop
+    begin
+      update public.draft_versions set pdf_path = p where id = 'f0000000-0000-0000-0000-000000000002';
+      raise exception 'FAIL: draft PDF path % accepted', p;
+    exception when raise_exception then
+      if sqlerrm like 'FAIL%' then raise; end if;
+    end;
+  end loop;
+  raise notice 'ok - a draft''s PDF must be in the case''s drafts folder';
 end $$;
 
 -- the worker functions are closed to users and anon; anon cannot touch jobs
@@ -1071,9 +1191,9 @@ rollback;
 
 -- AI spend guard
 begin;
-insert into public.ocr_jobs (org_id, document_id, provider_job_id, language, created_by)
+insert into public.ocr_jobs (org_id, document_id, provider_job_id, language, status, created_by)
 select '11111111-1111-1111-1111-111111111111', 'e0000000-0000-0000-0000-000000000002', 'rl-' || g, 'en-IN',
-       '00000000-0000-0000-0000-0000000000d2'
+       'completed', '00000000-0000-0000-0000-0000000000d2'
 from generate_series(1, 3) g;
 select pg_temp.act_as('00000000-0000-0000-0000-0000000000d2');
 select pg_temp.expect(public.ai_quota_ok(5, 100) and not public.ai_quota_ok(3, 100) and not public.ai_quota_ok(5, 3),
@@ -2220,6 +2340,236 @@ begin
   raise notice 'ok - an office admin cannot change the firm code';
 exception when insufficient_privilege then raise notice 'ok - an office admin cannot change the firm code';
 end $$;
+
+-- ---------------------------------------------------------------- super admin (platform)
+insert into auth.users (id, email) values
+  ('00000000-0000-0000-0000-0000000000e9', 'super@example.test'),
+  ('00000000-0000-0000-0000-0000000000e8', 'new-person@example.test');
+insert into public.organizations (id, name) values ('99999999-9999-9999-9999-999999999999', 'Platform (test)');
+insert into public.profiles (id, org_id, full_name) values
+  ('00000000-0000-0000-0000-0000000000e9', '99999999-9999-9999-9999-999999999999', 'Super');
+insert into public.user_roles (user_id, org_id, role) values
+  ('00000000-0000-0000-0000-0000000000e9', '99999999-9999-9999-9999-999999999999', 'admin');
+insert into public.platform_admins (user_id) values ('00000000-0000-0000-0000-0000000000e9');
+
+select pg_temp.expect(
+  public.scheme_year_start('2026-04-01', '2026-11-16') = '2026-04-01'
+  and public.scheme_year_start('2026-04-01', '2027-03-31') = '2026-04-01'
+  and public.scheme_year_start('2026-04-01', '2027-04-01') = '2027-04-01'
+  and public.scheme_year_start('2027-01-01', '2026-11-16') = '2027-01-01',
+  'the scheme year starts on the anniversary of valid_from');
+
+-- an office admin is not a super admin, cannot become one and cannot use the super admin's switches
+do $$
+declare
+  org1 constant uuid := '11111111-1111-1111-1111-111111111111';
+  org2 constant uuid := '22222222-2222-2222-2222-222222222222';
+begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', true);
+  set local role authenticated;
+  if public.is_platform_admin() or (select count(*) from public.platform_admins) <> 0 then
+    raise exception 'FAIL: an office admin is, or sees, a super admin';
+  end if;
+  begin
+    insert into public.platform_admins (user_id) values ('00000000-0000-0000-0000-00000000000a');
+    raise exception 'FAIL: an office admin made themselves super admin';
+  exception when insufficient_privilege then
+    raise notice 'ok - nobody can make themselves a super admin';
+  end;
+  begin
+    perform public.platform_set_scheme(org1, 'Free for ever', 'yearly', null, null, current_date, null, 'warn', null, null, null);
+    raise exception 'FAIL: an office admin set a scheme';
+  exception when insufficient_privilege then
+    raise notice 'ok - only the super admin sets a scheme';
+  end;
+  begin
+    insert into public.office_schemes (org_id, scheme_name, period, valid_from) values (org1, 'Free for ever', 'yearly', current_date);
+    raise exception 'FAIL: an office admin wrote a scheme row';
+  exception when insufficient_privilege then
+    raise notice 'ok - a scheme cannot be written directly';
+  end;
+  begin
+    perform public.platform_set_suspended(org2, true, 'rival');
+    raise exception 'FAIL: an office admin paused an office';
+  exception when insufficient_privilege then
+    raise notice 'ok - only the super admin pauses an office';
+  end;
+  begin
+    perform 1 from public.organizations where suspended_at is not null;
+    raise exception 'FAIL: an office member read the paused flag directly';
+  exception when insufficient_privilege then
+    raise notice 'ok - the paused flag is not readable directly';
+  end;
+  if (select count(*) from public.office_scheme_state()) <> 0
+     or (select count(*) from public.office_scheme_state(org2)) <> 0
+     or (select count(*) from public.office_usage_monthly(org2, 12)) <> 0 then
+    raise exception 'FAIL: an office admin read another office''s scheme or usage';
+  end if;
+  raise notice 'ok - an office admin reads no other office''s scheme or usage';
+  if (select count(*) from public.office_scheme_state(org1)) <> 1 or (select count(*) from public.office_usage_monthly(org1, 12)) <> 12 then
+    raise exception 'FAIL: an office admin cannot read their own office''s scheme and usage';
+  end if;
+  raise notice 'ok - an office admin reads their own office''s scheme and 12 months of usage';
+
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000d1', true);
+  if (select count(*) from public.office_scheme_state(org1)) <> 0 or (select count(*) from public.office_usage_monthly(org1, 12)) <> 0 then
+    raise exception 'FAIL: a drafter read the office''s scheme';
+  end if;
+  raise notice 'ok - the scheme and usage are the admin''s business, not a drafter''s';
+  reset role;
+end $$;
+
+-- the super admin sees every office's counts, and none of its content
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000e9');
+select pg_temp.expect(
+  (select count(*) from public.office_scheme_state() where id in ('11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222')) = 2
+  and (select cases_total from public.office_scheme_state('11111111-1111-1111-1111-111111111111')) >= 2
+  and (select is_platform from public.office_scheme_state('99999999-9999-9999-9999-999999999999')),
+  'the super admin sees every office with its counts');
+select pg_temp.expect(
+  (select count(*) from public.cases) = 0 and (select count(*) from public.parties) = 0 and (select count(*) from public.drafts) = 0
+  and (select count(*) from public.profiles where org_id <> '99999999-9999-9999-9999-999999999999') = 0
+  and (select count(*) from public.audit_log where org_id <> '99999999-9999-9999-9999-999999999999') = 0,
+  'but none of an office''s cases, parties, papers, people or audit trail');
+rollback;
+
+-- a scheme: set by the super admin, audited in the office's chain, enforced on new cases, seats and AI readings
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000e9');
+select public.platform_set_scheme('11111111-1111-1111-1111-111111111111', 'Monthly – Office', 'monthly', 0, null,
+  (now() at time zone 'Asia/Kolkata')::date - 40, null, 'block', 0, 5, 'test');
+reset role;
+select pg_temp.expect(
+  (select count(*) from public.audit_log where entity = 'office_schemes' and org_id = '11111111-1111-1111-1111-111111111111'
+     and actor_id = '00000000-0000-0000-0000-0000000000e9') = 1,
+  'a scheme change is in the office''s own audit chain, under the super admin''s name');
+do $$
+begin
+  insert into public.profiles (id, org_id, full_name) values
+    ('00000000-0000-0000-0000-0000000000e8', '11111111-1111-1111-1111-111111111111', 'Sixth Person');
+  raise exception 'FAIL: a person was added beyond the office''s seats';
+exception when sqlstate 'CS001' then
+  raise notice 'ok - an office cannot have more people than its seats';
+end $$;
+
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+select pg_temp.expect((select scheme_name from public.office_schemes) = 'Monthly – Office', 'the office admin reads its own scheme');
+select pg_temp.expect(not public.ai_quota_ok(60, 1000), 'the office''s own AI cap replaces the default');
+do $$
+begin
+  insert into public.cases (org_id, case_no_internal) values ('11111111-1111-1111-1111-111111111111', 'CS-LIMIT-M');
+  raise exception 'FAIL: a case was opened over the monthly limit';
+exception when sqlstate 'CS001' then
+  if sqlerrm <> 'scheme: monthly limit' then raise exception 'FAIL: wrong reason: %', sqlerrm; end if;
+  raise notice 'ok - at the monthly limit a blocking scheme refuses new cases';
+end $$;
+
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000e9');
+select public.platform_set_scheme('11111111-1111-1111-1111-111111111111', 'Yearly – Office', 'yearly', null, 1,
+  (now() at time zone 'Asia/Kolkata')::date - 40, null, 'block', null, null, null);
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+do $$
+begin
+  insert into public.cases (org_id, case_no_internal) values ('11111111-1111-1111-1111-111111111111', 'CS-LIMIT-Y');
+  raise exception 'FAIL: a case was opened over the yearly limit';
+exception when sqlstate 'CS001' then
+  if sqlerrm <> 'scheme: yearly limit' then raise exception 'FAIL: wrong reason: %', sqlerrm; end if;
+  raise notice 'ok - at the yearly limit too';
+end $$;
+
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000e9');
+select public.platform_set_scheme('11111111-1111-1111-1111-111111111111', 'Yearly – Office', 'yearly', null, null,
+  (now() at time zone 'Asia/Kolkata')::date - 400, (now() at time zone 'Asia/Kolkata')::date - 1, 'block', null, null, null);
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+do $$
+begin
+  insert into public.cases (org_id, case_no_internal) values ('11111111-1111-1111-1111-111111111111', 'CS-EXPIRED');
+  raise exception 'FAIL: a case was opened after the scheme ended';
+exception when sqlstate 'CS001' then
+  if sqlerrm <> 'scheme: expired' then raise exception 'FAIL: wrong reason: %', sqlerrm; end if;
+  raise notice 'ok - and after the scheme has ended';
+end $$;
+
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000e9');
+select public.platform_set_scheme('11111111-1111-1111-1111-111111111111', 'Yearly – Office', 'yearly', 0, 0,
+  (now() at time zone 'Asia/Kolkata')::date - 400, (now() at time zone 'Asia/Kolkata')::date - 1, 'warn', null, null, null);
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+insert into public.cases (org_id, case_no_internal) values ('11111111-1111-1111-1111-111111111111', 'CS-WARN');
+select pg_temp.expect(public.ai_quota_ok(60, 1000), 'a scheme that only warns refuses nothing (and without a cap the default applies)');
+-- the worker (service role) is held to a blocking scheme too: a bulk upload cannot open cases past it
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000e9');
+select public.platform_set_scheme('11111111-1111-1111-1111-111111111111', 'Monthly – Office', 'monthly', 0, null,
+  (now() at time zone 'Asia/Kolkata')::date - 40, null, 'block', null, null, null);
+reset role;
+do $$
+begin
+  set local role service_role;
+  insert into public.cases (org_id, case_no_internal) values ('11111111-1111-1111-1111-111111111111', 'BATCH-OVER');
+  raise exception 'FAIL: the worker opened a case past a blocking scheme';
+exception when sqlstate 'CS001' then
+  raise notice 'ok - cases opened by the worker are held to the scheme too';
+end $$;
+reset role;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000b9');
+insert into public.cases (org_id, case_no_internal) values ('22222222-2222-2222-2222-222222222222', 'OTHER-NO-SCHEME');
+select pg_temp.expect(true, 'an office without a scheme has no limit');
+rollback;
+
+-- pausing an office: its people see and change nothing, whatever they call; another office is untouched
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000e9');
+do $$
+begin
+  begin
+    perform public.platform_set_suspended('99999999-9999-9999-9999-999999999999', true, 'oops');
+    raise exception 'FAIL: the super admin paused their own office';
+  exception when check_violation then
+    raise notice 'ok - the super admin''s own office cannot be paused';
+  end;
+  begin
+    perform public.platform_set_suspended('11111111-1111-1111-1111-111111111111', true, '  ');
+    raise exception 'FAIL: an office was paused without a reason';
+  exception when check_violation then
+    raise notice 'ok - pausing needs a reason';
+  end;
+end $$;
+select public.platform_set_suspended('11111111-1111-1111-1111-111111111111', true, 'Payment overdue');
+
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+select pg_temp.expect(
+  public.current_org_id() is null and not public.has_role('admin')
+  and (select count(*) from public.cases) = 0 and (select count(*) from public.profiles) = 0
+  and (select count(*) from public.office_scheme_state('11111111-1111-1111-1111-111111111111')) = 0,
+  'a paused office''s admin sees nothing');
+select pg_temp.expect(
+  (public.my_access() ->> 'suspended')::boolean and public.my_access() ->> 'reason' = 'Payment overdue',
+  'and is told that the office is paused, and why');
+select pg_temp.expect(not public.ai_quota_ok(60, 1000), 'a paused office has no AI quota');
+do $$
+begin
+  insert into public.cases (org_id, case_no_internal) values ('11111111-1111-1111-1111-111111111111', 'CS-PAUSED');
+  raise exception 'FAIL: a paused office opened a case';
+exception when insufficient_privilege then
+  raise notice 'ok - a paused office can write nothing';
+end $$;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000d1');
+select pg_temp.expect((select count(*) from public.cases) = 0 and (select count(*) from storage.objects) = 0,
+  'nor do its drafters see cases or files');
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000b9');
+select pg_temp.expect(public.current_org_id() = '22222222-2222-2222-2222-222222222222' and not (public.my_access() ->> 'suspended')::boolean,
+  'another office is not affected');
+
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000e9');
+select public.platform_set_suspended('11111111-1111-1111-1111-111111111111', false, null);
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+select pg_temp.expect((select count(*) from public.cases) >= 2 and public.has_role('admin'), 'resumed, the office works again');
+reset role;
+select pg_temp.expect(
+  (select count(*) from public.audit_log where entity = 'organizations' and org_id = '11111111-1111-1111-1111-111111111111'
+     and actor_id = '00000000-0000-0000-0000-0000000000e9') = 2,
+  'pausing and resuming are in the office''s audit chain');
+rollback;
 
 select pg_temp.expect(
   not exists (select 1 from pg_tables where schemaname = 'public' and not rowsecurity),
