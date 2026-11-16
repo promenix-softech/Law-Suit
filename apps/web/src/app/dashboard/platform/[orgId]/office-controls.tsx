@@ -4,7 +4,45 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { SCHEME_PRESETS, type SchemeTerms } from "@civil-suits/domain";
 import { translator, type Lang } from "@/lib/i18n";
-import { saveScheme, setSuspended, type PlatformResult } from "../actions";
+import { inviteOfficeAdmin, saveScheme, setSuspended, type PlatformResult } from "../actions";
+
+/** Invites an admin into this office (its first one, or another if the first never signed in). */
+export function InviteAdminControl({ orgId, lang }: { orgId: string; lang: Lang }) {
+  const t = useMemo(() => translator(lang), [lang]);
+  const [pending, start] = useTransition();
+  const [result, setResult] = useState<PlatformResult | null>(null);
+  const [f, setF] = useState({ fullName: "", email: "" });
+  return (
+    <form
+      className="space-y-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        start(async () => {
+          const r = await inviteOfficeAdmin({ orgId, ...f });
+          setResult(r);
+          if (r.ok) setF({ fullName: "", email: "" });
+        });
+      }}
+    >
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className="block">
+          <span className="label">{t("Admin's full name")}</span>
+          <input className="input-glass mt-1" required minLength={2} maxLength={120} value={f.fullName} onChange={(e) => setF((p) => ({ ...p, fullName: e.target.value }))} />
+        </label>
+        <label className="block">
+          <span className="label">{t("Admin's email")}</span>
+          <input className="input-glass mt-1" type="email" required value={f.email} onChange={(e) => setF((p) => ({ ...p, email: e.target.value }))} />
+        </label>
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <button type="submit" className="btn btn-primary px-4 py-2" disabled={pending}>
+          ✉ {pending ? t("Sending…") : t("Invite admin")}
+        </button>
+        <Result r={result} t={t} />
+      </div>
+    </form>
+  );
+}
 
 function Result({ r, t }: { r: PlatformResult | null; t: (s: string) => string }) {
   if (!r) return null;

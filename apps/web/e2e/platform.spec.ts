@@ -69,7 +69,7 @@ async function typeInCase(admin: Page, caseNo: string) {
 
 test("an office admin has no super admin pages", async ({ browser }) => {
   const admin = await signIn(browser, "nirmal", "admin");
-  await expect(admin.getByRole("link", { name: "Offices" })).toHaveCount(0);
+  await expect(admin.getByRole("link", { name: "All offices" })).toHaveCount(0);
   expect((await admin.goto("/dashboard/platform"))?.status()).toBe(404);
 });
 
@@ -81,8 +81,10 @@ test("the super admin sees every office's scheme and usage, and none of its case
   expect(caseHref).toBeTruthy();
 
   const superAdmin = await signIn(browser, "promenix", "superadmin");
-  await superAdmin.getByRole("link", { name: "Offices" }).first().click();
+  // The super admin's home is the console, and the menu holds the console only.
   await superAdmin.waitForURL(/\/dashboard\/platform$/);
+  await expect(superAdmin.getByRole("link", { name: "All offices" }).first()).toBeVisible();
+  await expect(superAdmin.getByRole("link", { name: "Approvals" })).toHaveCount(0);
   const row = superAdmin.locator('tr[data-office="nirmal"]');
   await expect(row).toContainText(OFFICE);
   await expect(superAdmin.locator('tr[data-office="promenix"]')).toContainText("your own office");
@@ -147,4 +149,39 @@ test("a paused office's people see why instead of the app; resumed, they work ag
   }
   await drafter.goto("/dashboard?view=all");
   await expect(drafter.getByText("DEMO-2026-0001").first()).toBeVisible();
+});
+
+test("the super admin opens a new office", async ({ browser }) => {
+  const superAdmin = await signIn(browser, "promenix", "superadmin");
+  const code = `e2e-${Date.now().toString(36)}`;
+  const name = `Test Firm ${code}`;
+  await superAdmin.getByRole("link", { name: "New office" }).first().click();
+  await superAdmin.waitForURL(/\/dashboard\/platform\/new$/);
+  await superAdmin.getByLabel("Office name").fill(name);
+  await expect(superAdmin.getByLabel("Firm code")).toHaveValue(`test-firm-${code}`);
+  await superAdmin.getByLabel("Firm code").fill(code);
+  await superAdmin.getByLabel("Admin's full name").fill("Test Admin");
+  await superAdmin.getByLabel("Admin's email").fill(`${code}@example.test`);
+  await superAdmin.getByRole("button", { name: "Open the office" }).click();
+  // The office opens; the invitation needs the edge function, which may not run locally.
+  await superAdmin.waitForURL(/\/dashboard\/platform\/[0-9a-f-]{36}\?opened=[01]$/);
+  await expect(superAdmin.getByRole("heading", { name })).toBeVisible();
+  await expect(superAdmin.getByRole("heading", { name: "Office admin" })).toBeVisible();
+
+  await superAdmin.goto("/dashboard/platform");
+  await expect(superAdmin.locator(`tr[data-office="${code}"]`)).toContainText(name);
+
+  // The same firm code cannot be used twice.
+  await superAdmin.goto("/dashboard/platform/new");
+  await superAdmin.getByLabel("Office name").fill(`${name} again`);
+  await superAdmin.getByLabel("Firm code").fill(code);
+  await superAdmin.getByLabel("Admin's full name").fill("Test Admin");
+  await superAdmin.getByLabel("Admin's email").fill(`${code}-2@example.test`);
+  await superAdmin.getByRole("button", { name: "Open the office" }).click();
+  await expect(superAdmin.getByText("This firm code is taken. Choose another.")).toBeVisible();
+});
+
+test("an office admin cannot open the new office page", async ({ browser }) => {
+  const admin = await signIn(browser, "nirmal", "admin");
+  expect((await admin.goto("/dashboard/platform/new"))?.status()).toBe(404);
 });

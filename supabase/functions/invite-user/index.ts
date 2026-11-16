@@ -1,4 +1,6 @@
 // Invites a person into the caller's office. Only an office admin may call it.
+// The super admin may instead name another office (`orgId`): then only an admin is invited, and
+// the login is seated by `platform_seat_admin`, which runs as the super admin and checks it again.
 //
 // The service-role key stays on Supabase's servers and is used for two things only: sending the
 // invitation (auth admin API) and recording the attempt. The profile and roles are written AS THE
@@ -15,7 +17,8 @@ const MAX_ATTEMPTS_PER_DAY = 20;
 /** One answer for every refusal, so nobody can learn whether an email has an account elsewhere. */
 const REFUSED = "Could not invite this email. If the person already has a Civil Suits login, ask Promenix to move it.";
 
-type Input = { email: string; fullName: string; roles: Role[] };
+type Input = { email: string; fullName: string; roles: Role[]; orgId: string | null };
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 /** Plain validation (no libraries): the web app validates with zod first; this is the gate. */
 function parse(body: unknown): Input | string {
@@ -26,7 +29,9 @@ function parse(body: unknown): Input | string {
   if (!/^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,24}$/.test(email)) return "Enter a valid email address.";
   if (fullName.length < 2 || fullName.length > 120) return "Enter the person's full name.";
   if (!roles.length || !roles.every((r) => (ROLES as readonly unknown[]).includes(r))) return "Choose at least one role.";
-  return { email, fullName, roles: roles as Role[] };
+  const orgId = typeof b?.orgId === "string" ? b.orgId.toLowerCase() : null;
+  if (orgId !== null && !UUID.test(orgId)) return "Invalid office.";
+  return { email, fullName, roles: roles as Role[], orgId };
 }
 
 const json = (status: number, body: Record<string, unknown>) =>
@@ -49,13 +54,6 @@ Deno.serve(async (req) => {
   const asCaller = createClient(url, anon, { global: { headers: { Authorization: auth } }, auth: { persistSession: false } });
   const { data: me } = await asCaller.auth.getUser();
   if (!me.user) return json(401, { error: "Sign in again." });
-  const [{ data: isAdmin }, { data: profile }] = await Promise.all([
-    asCaller.rpc("has_role", { r: "admin" }),
-    asCaller.from("profiles").select("org_id").eq("id", me.user.id).single(),
-  ]);
-  if (!isAdmin || !profile) return json(403, { error: "Only an office admin can invite people." });
-  const orgId = profile.org_id as string;
-
   let input: Input | string;
   try {
     input = parse(await req.json());
@@ -64,13 +62,31 @@ Deno.serve(async (req) => {
   }
   if (typeof input === "string") return json(400, { error: input });
 
+  const [{ data: isAdmin }, { data: isSuper }, { data: profile }] = await Promise.all([
+    asCaller.rpc("has_role", { r: "admin" }),
+    asCaller.rpc("is_platform_admin"),
+    asCaller.from("profiles").select("org_id").eq("id", me.user.id).single(),
+  ]);
+  // Another office: the super admin only, and only its admin.
+  const forOffice = input.orgId !== null && input.orgId !== profile?.org_id;
+  if (forOffice) {
+    if (isSuper !== true || !profile) return json(403, { error: "Only the super admin can invite into another office." });
+    if (input.roles.length !== 1 || input.roles[0] !== "admin") return json(400, { error: "Invite the office's admin only." });
+  } else if (!isAdmin || !profile) {
+    return json(403, { error: "Only an office admin can invite people." });
+  }
+  const orgId = forOffice ? input.orgId! : (profile!.org_id as string);
+  // Attempts are kept (and limited) in the inviter's own office: the super admin's invitations
+  // into other offices count against the super admin's office.
+  const attemptsOrg = profile!.org_id as string;
+
   const admin = createClient(url, service, { auth: { persistSession: false } });
   const emailHash = await sha256Hex(input.email);
   const record = (outcome: Outcome) =>
-    admin.from("invite_attempts").insert({ org_id: orgId, invited_by: me.user!.id, email_sha256: emailHash, outcome });
+    admin.from("invite_attempts").insert({ org_id: attemptsOrg, invited_by: me.user!.id, email_sha256: emailHash, outcome });
 
   const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
-  const { count } = await admin.from("invite_attempts").select("id", { count: "exact", head: true }).eq("org_id", orgId).gte("created_at", since);
+  const { count } = await admin.from("invite_attempts").select("id", { count: "exact", head: true }).eq("org_id", attemptsOrg).gte("created_at", since);
   if ((count ?? 0) >= MAX_ATTEMPTS_PER_DAY) return json(429, { error: "Daily invitation limit reached. Try again tomorrow." });
 
   const redirectTo = Deno.env.get("APP_URL") ? `${Deno.env.get("APP_URL")}/auth/set-password` : undefined;
@@ -82,7 +98,7 @@ Deno.serve(async (req) => {
     // Already a login: allowed only if that person is already in this office (then: roles only).
     const existing = await findUserByEmail(admin, input.email);
     const { data: theirs } = existing ? await admin.from("profiles").select("org_id").eq("id", existing).maybeSingle() : { data: null };
-    if (!existing || theirs?.org_id !== orgId) {
+    if (!existing || theirs?.org_id !== orgId || forOffice) {
       await record("refused");
       return json(400, { error: REFUSED });
     }
@@ -90,13 +106,31 @@ Deno.serve(async (req) => {
     newUser = false;
   } else {
     userId = invited.data.user.id;
-    const { error } = await asCaller.from("profiles").insert({ id: userId, org_id: orgId, full_name: input.fullName });
+    // An invited login that never signed in is invited again with the SAME id. Never delete or
+    // re-seat a login that already has an office: in this office it is a re-send, elsewhere a refusal.
+    const { data: had } = await admin.from("profiles").select("org_id").eq("id", userId).maybeSingle();
+    if (had) {
+      if (had.org_id !== orgId) {
+        await record("refused");
+        return json(400, { error: REFUSED });
+      }
+      await record("sent");
+      return json(200, { message: `Invitation sent again to ${input.email}.` });
+    }
+    const { error } = forOffice
+      ? await asCaller.rpc("platform_seat_admin", { p_org: orgId, p_user: userId, p_full_name: input.fullName })
+      : await asCaller.from("profiles").insert({ id: userId, org_id: orgId, full_name: input.fullName });
     if (error) {
       // Do not leave a login without an office: it would block this email for good.
       await admin.auth.admin.deleteUser(userId);
       await record("failed");
       return json(500, { error: "Could not create the person; the e-mail they may receive will not work. Try again." });
     }
+  }
+
+  if (forOffice) {
+    await record("sent");
+    return json(200, { message: `Invitation sent to ${input.email}. They set their own password from the email.` });
   }
 
   const { error: rolesError } = await asCaller

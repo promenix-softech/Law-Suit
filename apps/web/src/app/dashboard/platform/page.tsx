@@ -66,6 +66,9 @@ export default async function PlatformPage() {
           <p className="label">{t("Super admin")}</p>
           <h1 className="mt-1 text-3xl font-semibold tracking-tight">{t("Offices")}</h1>
           <p className="muted mt-1 text-sm">{t("Each office's scheme and how much of it is used. You see numbers here, never an office's cases or papers.")}</p>
+          <Link href="/dashboard/platform/new" className="btn btn-primary mt-4 inline-block px-4 py-2">
+            ＋ {t("New office")}
+          </Link>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
