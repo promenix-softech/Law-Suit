@@ -165,6 +165,7 @@ export async function issueInvoice(input: z.input<typeof InvoiceInput>): Promise
   const { data, error } = await db.rpc("platform_issue_invoice", {
     p_org: parsed.data.orgId,
     p_prefix: INVOICE_PREFIX,
+    p_supplier_gstin: SUPPLIER.gstin,
     p_period_start: d.periodStart,
     p_period_end: d.periodEnd,
     p_lines: d.lines,
@@ -176,7 +177,10 @@ export async function issueInvoice(input: z.input<typeof InvoiceInput>): Promise
   });
   if (error) {
     if (error.code === "42501") return { ok: false, error: "Only the super admin can issue an invoice." };
-    if (error.code === "23505") return { ok: false, error: "This period already has an invoice. Cancel it first to issue a new one." };
+    if (error.code === "23505" && error.message.includes("invoices_one_live_per_period")) {
+      return { ok: false, error: "This period already has an invoice. Cancel it first to issue a new one." };
+    }
+    if (error.code === "23505") return { ok: false, error: "Another invoice was being numbered at the same moment. Try again." };
     return { ok: false, error: "Could not issue the invoice." };
   }
   const no = (data as { invoice_no: string }[] | null)?.[0]?.invoice_no ?? "";

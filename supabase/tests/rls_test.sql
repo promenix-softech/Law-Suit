@@ -2671,7 +2671,7 @@ exception when insufficient_privilege then
 end $$;
 do $$
 begin
-  perform public.platform_issue_invoice('11111111-1111-1111-1111-111111111111', 'PS', '2030-01-01', '2030-01-31',
+  perform public.platform_issue_invoice('11111111-1111-1111-1111-111111111111', 'PS', null, '2030-01-01', '2030-01-31',
     '[{"description": "x", "qty": 1, "ratePaise": 0, "amountPaise": 0}]', 0, 0, 0, 0, 0);
   raise exception 'FAIL: an office admin issued an invoice';
 exception when insufficient_privilege then
@@ -2685,7 +2685,26 @@ exception when insufficient_privilege then
   raise notice 'ok - an office admin cannot list invoices of all offices';
 end $$;
 
+do $$
+begin
+  perform public.platform_set_invoice_status('12345678-1234-1234-1234-123456789012', 'cancelled', null);
+  raise exception 'FAIL: an office admin changed an invoice';
+exception when insufficient_privilege then
+  raise notice 'ok - an office admin cannot mark invoices paid or cancelled';
+end $$;
+do $$
+begin
+  perform * from public.platform_billing_plans('22222222-2222-2222-2222-222222222222');
+  raise exception 'FAIL: an office admin read another office''s plan';
+exception when insufficient_privilege then
+  raise notice 'ok - an office admin cannot read plans through the super admin''s function';
+end $$;
+select pg_temp.expect(public.billable_suit_packs('22222222-2222-2222-2222-222222222222', '2000-01-01', '2100-12-31') = 0,
+  'another office''s suit packs count as 0 for an office admin');
+
 select pg_temp.act_as('00000000-0000-0000-0000-0000000000e9');
+select public.platform_set_billing_plan('22222222-2222-2222-2222-222222222222', '2026-01-01',
+  '[{"upTo": null, "ratePaise": 0}]', 100000, null, '29', null);
 select public.platform_set_billing_plan('11111111-1111-1111-1111-111111111111', '2026-01-01',
   '[{"upTo": 100, "ratePaise": 150000}, {"upTo": null, "ratePaise": 60000}]', 1000000, null, '27', '998213');
 select public.platform_set_billing_plan('11111111-1111-1111-1111-111111111111', '2026-01-01',
@@ -2697,7 +2716,7 @@ select pg_temp.expect(public.billable_suit_packs('11111111-1111-1111-1111-111111
   'the super admin can count an office''s suit packs');
 do $$
 begin
-  perform public.platform_issue_invoice('11111111-1111-1111-1111-111111111111', 'PS', '2030-01-01', '2030-01-31',
+  perform public.platform_issue_invoice('11111111-1111-1111-1111-111111111111', 'PS', null, '2030-01-01', '2030-01-31',
     '[{"description": "Monthly fee", "qty": 2, "ratePaise": 100, "amountPaise": 300}]', 300, 27, 27, 0, 354);
   raise exception 'FAIL: a line with a wrong amount was accepted';
 exception when check_violation then
@@ -2705,16 +2724,32 @@ exception when check_violation then
 end $$;
 do $$
 begin
-  perform public.platform_issue_invoice('11111111-1111-1111-1111-111111111111', 'PS', '2030-01-01', '2030-01-31',
+  perform public.platform_issue_invoice('11111111-1111-1111-1111-111111111111', 'PS', null, '2030-01-01', '2030-01-31',
     '[{"description": "Monthly fee", "qty": 1, "ratePaise": 100, "amountPaise": 100}]', 999, 0, 0, 0, 999);
   raise exception 'FAIL: lines not adding up were accepted';
 exception when check_violation then
   raise notice 'ok - the lines must add up to the taxable value';
 end $$;
-create temp table inv1 as select * from public.platform_issue_invoice('11111111-1111-1111-1111-111111111111', 'PS',
+do $$
+begin
+  perform public.platform_issue_invoice('11111111-1111-1111-1111-111111111111', 'PS', null, '2030-01-01', '2030-01-31',
+    '[{"description": "Monthly fee", "qty": 1, "ratePaise": 100, "amountPaise": 100}]', 100, 0, 0, 18, 118);
+  raise exception 'FAIL: IGST inside Maharashtra was accepted';
+exception when check_violation then
+  raise notice 'ok - the GST split must match the place of supply';
+end $$;
+do $$
+begin
+  perform public.platform_issue_invoice('11111111-1111-1111-1111-111111111111', 'PSXY', null, '2030-01-01', '2030-01-31',
+    '[{"description": "Monthly fee", "qty": 1, "ratePaise": 100, "amountPaise": 100}]', 100, 9, 9, 0, 118);
+  raise exception 'FAIL: a 4-character prefix was accepted';
+exception when check_violation then
+  raise notice 'ok - the invoice prefix is at most 3 characters';
+end $$;
+create temp table inv1 as select * from public.platform_issue_invoice('11111111-1111-1111-1111-111111111111', 'PS', null,
   '2030-01-01', '2030-01-31', '[{"description": "Monthly fee", "qty": 1, "ratePaise": 500000, "amountPaise": 500000}]',
   500000, 45000, 45000, 0, 590000);
-create temp table inv2 as select * from public.platform_issue_invoice('22222222-2222-2222-2222-222222222222', 'PS',
+create temp table inv2 as select * from public.platform_issue_invoice('22222222-2222-2222-2222-222222222222', 'PS', null,
   '2030-01-01', '2030-01-31', '[{"description": "Monthly fee", "qty": 1, "ratePaise": 100000, "amountPaise": 100000}]',
   100000, 0, 0, 18000, 118000);
 select pg_temp.expect(
@@ -2723,7 +2758,7 @@ select pg_temp.expect(
   'invoice numbers run in one sequence across offices');
 do $$
 begin
-  perform public.platform_issue_invoice('11111111-1111-1111-1111-111111111111', 'PS', '2030-01-01', '2030-01-31',
+  perform public.platform_issue_invoice('11111111-1111-1111-1111-111111111111', 'PS', null, '2030-01-01', '2030-01-31',
     '[{"description": "Again", "qty": 1, "ratePaise": 100, "amountPaise": 100}]', 100, 9, 9, 0, 118);
   raise exception 'FAIL: a period was invoiced twice';
 exception when unique_violation then
@@ -2737,6 +2772,11 @@ exception when check_violation then
   raise notice 'ok - marking paid needs a payment reference';
 end $$;
 select public.platform_set_invoice_status((select id from inv1), 'paid', 'NEFT-12345');
+select public.platform_set_billing_plan('11111111-1111-1111-1111-111111111111', '2026-01-01',
+  '[{"upTo": null, "ratePaise": 60000}]', 500000, null, '29', '998213');
+select pg_temp.expect(
+  (select recipient_state = '27' and sac_code = '998213' from public.platform_invoices(null) where id = (select id from inv1)),
+  'an issued invoice keeps the GST details it was issued with');
 select pg_temp.expect(
   (select status = 'paid' and payment_ref = 'NEFT-12345' and paid_at is not null from public.platform_invoices(null) where id = (select id from inv1)),
   'the super admin marks an invoice paid');
@@ -2748,7 +2788,7 @@ exception when raise_exception then
   raise notice 'ok - payment details are recorded once';
 end $$;
 select public.platform_set_invoice_status((select id from inv2), 'cancelled', null);
-select public.platform_issue_invoice('22222222-2222-2222-2222-222222222222', 'PS', '2030-01-01', '2030-01-31',
+select public.platform_issue_invoice('22222222-2222-2222-2222-222222222222', 'PS', null, '2030-01-01', '2030-01-31',
   '[{"description": "Monthly fee", "qty": 1, "ratePaise": 90000, "amountPaise": 90000}]', 90000, 0, 0, 16200, 106200);
 select pg_temp.expect(
   (select count(*) from public.platform_invoices('22222222-2222-2222-2222-222222222222')) = 2,

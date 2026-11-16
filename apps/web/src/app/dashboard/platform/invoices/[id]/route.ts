@@ -16,15 +16,19 @@ export async function GET(_req: Request, ctx: RouteContext<"/dashboard/platform/
 
   const inv = (await loadInvoices(supabase, null)).find((r) => r.id === id);
   if (!inv) return new Response("Not found", { status: 404 });
-  const plan = planOn(await loadBillingPlans(supabase, inv.orgId), inv.periodStart);
+  // The GST details kept on the invoice; only invoices issued before they were kept fall back to the plan.
+  const kept = inv.recipientState != null;
+  const plan = kept ? null : planOn(await loadBillingPlans(supabase, inv.orgId), inv.periodStart);
+  const recipientGstin = kept ? inv.recipientGstin : (plan?.recipientGstin ?? null);
+  const recipientState = (kept ? inv.recipientState : plan?.recipientState) ?? SUPPLIER.state;
 
   const doc = buildTaxInvoice({
-    supplier: SUPPLIER,
-    recipient: { name: inv.officeName, address: null, gstin: plan?.recipientGstin ?? null, state: plan?.recipientState ?? SUPPLIER.state },
+    supplier: kept ? { ...SUPPLIER, gstin: inv.supplierGstin } : SUPPLIER,
+    recipient: { name: inv.officeName, address: null, gstin: recipientGstin, state: recipientState },
     invoiceNo: inv.invoiceNo,
     invoiceDate: inv.issuedAt,
     period: { start: inv.periodStart, end: inv.periodEnd },
-    sacCode: plan?.sacCode ?? null,
+    sacCode: kept ? inv.sacCode : (plan?.sacCode ?? null),
     lines: inv.lines,
     taxablePaise: inv.taxablePaise,
     cgstPaise: inv.cgstPaise,

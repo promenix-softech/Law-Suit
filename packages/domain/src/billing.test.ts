@@ -115,6 +115,10 @@ describe("financialYear / invoiceNumber", () => {
     expect(n).toBe("PS/2026-27/0042");
     expect(n.length).toBeLessThanOrEqual(16);
   });
+  it("keeps the longest prefix within 16 characters and refuses a longer one", () => {
+    expect(invoiceNumber("PSL", "2026-27", 9999)).toHaveLength(16);
+    expect(() => invoiceNumber("PSLL", "2026-27", 1)).toThrow();
+  });
 });
 
 describe("gstinValid", () => {

@@ -138,7 +138,7 @@ export function financialYear(isoInstant: string): string {
 
 /** GST invoice number: unique per FY, ≤ 16 characters, letters/digits with - and / only. */
 export function invoiceNumber(prefix: string, fy: string, seq: number): string {
-  if (!/^[A-Z0-9]{1,4}$/.test(prefix)) throw new RangeError("Prefix: 1–4 capital letters or digits");
+  if (!/^[A-Z0-9]{1,3}$/.test(prefix)) throw new RangeError("Prefix: 1–3 capital letters or digits (the number is at most 16 characters)");
   if (!/^\d{4}-\d{2}$/.test(fy)) throw new RangeError("FY like 2026-27");
   if (!Number.isInteger(seq) || seq < 1 || seq > 9999) throw new RangeError("seq must be 1–9999");
   return `${prefix}/${fy}/${String(seq).padStart(4, "0")}`;

@@ -34,6 +34,11 @@ export type InvoiceRow = {
   paidAt: string | null;
   paymentRef: string | null;
   issuedAt: string;
+  /** GST details kept on the invoice when it was issued (null on invoices issued before 17 Nov). */
+  recipientGstin: string | null;
+  recipientState: string | null;
+  sacCode: string | null;
+  supplierGstin: string | null;
 };
 
 const Lines = z.array(z.object({ description: z.string(), qty: z.number().int(), ratePaise: z.number().int(), amountPaise: z.number().int() }));
@@ -83,6 +88,10 @@ export async function loadInvoices(db: Db, orgId: string | null): Promise<Invoic
     paidAt: (r.paid_at as string | null) ?? null,
     paymentRef: (r.payment_ref as string | null) ?? null,
     issuedAt: String(r.issued_at),
+    recipientGstin: (r.recipient_gstin as string | null) ?? null,
+    recipientState: (r.recipient_state as string | null) ?? null,
+    sacCode: (r.sac_code as string | null) ?? null,
+    supplierGstin: (r.supplier_gstin as string | null) ?? null,
   }));
 }
 
