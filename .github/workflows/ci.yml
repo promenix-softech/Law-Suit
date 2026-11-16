@@ -69,7 +69,8 @@ jobs:
             echo "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$PUBLISHABLE_KEY"
             echo "SUPABASE_SECRET_KEY=$SECRET_KEY"
           } >> "$GITHUB_ENV"
-      - run: pnpm --filter web seed:demo
+      # The super admin of the tests exists only on this throw-away stack.
+      - run: SEED_SUPER_ADMIN=1 pnpm --filter web seed:demo
       - run: pnpm --filter web build
       - run: pnpm --filter web exec playwright install --with-deps chromium
       - run: pnpm --filter web e2e

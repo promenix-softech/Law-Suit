@@ -58,6 +58,23 @@ async function ensureUser(email: string): Promise<string> {
   return data.user.id;
 }
 
+/**
+ * A super admin (above every office) for LOCAL and CI runs only: `SEED_SUPER_ADMIN=1`. This script
+ * never creates one otherwise — on a hosted project the owner decides which login that is. It
+ * lives in an office of its own, firm code `promenix`.
+ */
+const PLATFORM = { name: "Promenix (Platform, Demo)", code: "promenix", user: "superadmin", fullName: "Sagar Demo Superadmin" };
+
+async function seedSuperAdmin() {
+  let org = (await must(db.from("organizations").select("id").eq("name", PLATFORM.name), "platform office lookup"))[0];
+  if (!org) org = await must(db.from("organizations").insert({ name: PLATFORM.name, slug: PLATFORM.code }).select("id").single(), "platform office");
+  const id = await ensureUser(`${PLATFORM.user}@${DOMAIN}`);
+  await must(db.from("profiles").upsert({ id, org_id: org.id, full_name: PLATFORM.fullName }).select("id"), "super admin profile");
+  await must(db.from("user_roles").upsert({ user_id: id, org_id: org.id, role: "admin" }).select("user_id"), "super admin role");
+  await must(db.from("platform_admins").upsert({ user_id: id, note: "demo seed" }).select("user_id"), "super admin");
+  console.log(`Seeded the super admin ${PLATFORM.user}@${DOMAIN} (firm code ${PLATFORM.code}).`);
+}
+
 async function main() {
   let org = (await must(db.from("organizations").select("id, slug").eq("name", ORG_NAME), "org lookup"))[0];
   if (!org) org = await must(db.from("organizations").insert({ name: ORG_NAME, slug: FIRM_CODE }).select("id, slug").single(), "org insert");
@@ -156,6 +173,7 @@ async function main() {
     }
   }
 
+  if (process.env.SEED_SUPER_ADMIN === "1") await seedSuperAdmin();
   console.log(`Seeded "${ORG_NAME}". Logins: ${USERS.map((u) => `${u.key}@${DOMAIN}`).join(", ")}`);
 }
 
