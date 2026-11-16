@@ -9,15 +9,12 @@ Supabase project `ohdtudvmcahdnqnhfqzp`.
 
 ## Pending
 
-All on the work branch; nothing merged, no migration applied to the demo database.
-
-Built, tested and security-reviewed (see `docs/STATUS.md` "Review follow-ups (15 Nov)" and
-"Approvals page and super admin (16 Nov)"). The review's one failing point is fixed in
-`20261116010000_scheme_enforcement`. `pnpm check` green, RLS tests green, e2e 20/20.
-
-Waiting for the owner: which login is the super admin on the live site; apply migrations
-`20261115000000`, `20261115010000`, `20261116000000`, `20261116010000` to the demo database;
-PR and merge.
+Owner said go (16 Nov): migrations `20261115000000`, `20261115010000`, `20261116000000`,
+`20261116010000` are APPLIED to the demo database; platform office `promenix` created.
+In flight: PR from the work branch → CI green → squash-merge → check live.
+Then: once the owner has created his login in Supabase Auth (Invite user, his own e-mail — he gave
+it in chat; it is not written in the repo), link it: profile in the `promenix` office, role admin,
+row in `platform_admins` (execute_sql as postgres). Check `/dashboard/platform` live.
 
 ## Needs the owner
 - Try "New case → From the bank's file" once with a synthetic loan file: the first run against
