@@ -1,17 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 
 const MIN = 10;
-type Phase = "checking" | "ready" | "invalid" | "saving" | "done";
+type Phase = "checking" | "confirm" | "ready" | "invalid" | "saving" | "done";
 
 /**
  * Landing page of invitation and password-reset emails. The link signs the person in (token in the
  * URL hash, a PKCE code, or a token hash, depending on the email template); the tokens are removed
  * from the address bar at once, then the person chooses their own password.
+ *
+ * A token hash (`?token_hash=…&type=…`, the recommended email template) is used only when the
+ * person presses "Continue": mail scanners such as Outlook's Safe Links open every link in an
+ * email before the person does, and a one-time link they open is spent.
  */
 export function SetPasswordForm() {
   const router = useRouter();
@@ -20,6 +24,8 @@ export function SetPasswordForm() {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [email, setEmail] = useState<string | null>(null);
+
+  const tokenLink = useRef<{ token_hash: string; type: EmailOtpType } | null>(null);
 
   useEffect(() => {
     const supabase = createClient();
@@ -39,7 +45,10 @@ export function SetPasswordForm() {
       } else if (url.searchParams.get("code")) {
         ok = !(await supabase.auth.exchangeCodeForSession(url.searchParams.get("code")!)).error;
       } else if (url.searchParams.get("token_hash") && url.searchParams.get("type")) {
-        ok = !(await supabase.auth.verifyOtp({ token_hash: url.searchParams.get("token_hash")!, type: url.searchParams.get("type") as EmailOtpType })).error;
+        // Wait for the person: see the note above.
+        tokenLink.current = { token_hash: url.searchParams.get("token_hash")!, type: url.searchParams.get("type") as EmailOtpType };
+        clean();
+        return setPhase("confirm");
       }
       // No link, no password change: an existing session alone (e.g. an unlocked shared PC) is not enough.
       clean();
@@ -48,6 +57,17 @@ export function SetPasswordForm() {
       setPhase(ok ? "ready" : "invalid");
     })();
   }, []);
+
+  async function openLink() {
+    if (!tokenLink.current) return;
+    setPhase("checking");
+    const supabase = createClient();
+    const ok = !(await supabase.auth.verifyOtp(tokenLink.current)).error;
+    tokenLink.current = null;
+    if (ok) setEmail((await supabase.auth.getUser()).data.user?.email ?? null);
+    if (!ok) setError("This link has expired or was already used. Ask your office admin to send a new invitation.");
+    setPhase(ok ? "ready" : "invalid");
+  }
 
   async function save() {
     if (password.length < MIN) return setError(`Use at least ${MIN} characters.`);
@@ -67,6 +87,15 @@ export function SetPasswordForm() {
   }
 
   if (phase === "checking") return <p className="muted mt-6 text-sm">Checking your link…</p>;
+  if (phase === "confirm")
+    return (
+      <div className="mt-6 space-y-3">
+        <p className="muted text-sm">Press the button to continue. (The link works once, and only when you press it.)</p>
+        <button type="button" className="btn btn-primary w-full py-3" onClick={() => void openLink()}>
+          Continue to set my password
+        </button>
+      </div>
+    );
   if (phase === "invalid")
     return (
       <div className="mt-6 space-y-3">

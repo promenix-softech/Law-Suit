@@ -256,6 +256,11 @@ Owner's request (15 Nov): approval requests in a window of their own; more contr
 - [x] Merged (#39) and checked live: nonce CSP header, approvals page, `/dashboard/platform` answers 404 to an office approver, no page errors
 - [ ] Not built yet: creating a new office and inviting its first admin from the super admin's page (needs a change to the `invite-user` edge function); invoices from the super admin's page
 
+## Sign-in links (16 Nov)
+- [x] Links sent from the Supabase dashboard land on the Site URL; any page now forwards them to `/auth/set-password` (#40)
+- [x] Mail scanners (Outlook / Live Safe Links) open links before the person and spend them. `/auth/set-password` accepts a token-hash link and uses it only on a click ("Continue to set my password")
+- [ ] Owner, Supabase → Authentication → Emails → Templates: in **Invite user** use `<a href="{{ .SiteURL }}/auth/set-password?token_hash={{ .TokenHash }}&type=invite">Set your password</a>`, and in **Reset password** the same with `type=recovery`. Authentication → URL Configuration: Site URL `https://civilsuits.promenix.in`
+
 ## Owner's decisions (13 Nov)
 - The site is not launched; all data is demo data. Before launch the owner deletes the Satyam demo office and its domain, and moves the database to Mumbai (new Pro project). The demo password is kept as it is on purpose until then. Not to be raised again before launch
 
