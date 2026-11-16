@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { AuthLinkForwarder } from "@/components/auth-link-forwarder";
 import { Spotlight } from "@/components/spotlight";
 import { getLang } from "@/lib/lang";
 import "./globals.css";
@@ -26,6 +27,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
           <div className="blob" />
         </div>
         <Spotlight />
+        <AuthLinkForwarder />
         {children}
       </body>
     </html>
