@@ -41,7 +41,7 @@ test("a page's scripts run only with the nonce of that request", async ({ reques
 
   // Next.js put this request's nonce on its script tags, and no script tag is without one.
   const html = await first.text();
-  const scripts = html.match(/<script\b[^>]*>/g) ?? [];
+  const scripts = html.match(/<script\b[^>]*>/gi) ?? [];
   expect(scripts.length).toBeGreaterThan(0);
   for (const tag of scripts) expect(tag).toContain(`nonce="${nonce}"`);
 });
