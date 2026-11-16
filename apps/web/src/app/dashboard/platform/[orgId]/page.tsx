@@ -7,7 +7,7 @@ import { getT } from "@/lib/lang";
 import { isPlatformAdmin, loadMonthlyUsage, loadOffice } from "@/lib/platform";
 import { createClient } from "@/lib/supabase/server";
 import { fmtDate } from "@/lib/ui";
-import { SchemeForm, SuspendControl } from "./office-controls";
+import { InviteAdminControl, SchemeForm, SuspendControl } from "./office-controls";
 
 export const metadata = { title: "Office — Civil Suits" };
 
@@ -22,8 +22,9 @@ const BLOCKED: Record<string, string> = {
 };
 
 /** One office for the super admin: usage against its scheme, twelve months of usage, and the switches. */
-export default async function PlatformOfficePage({ params }: PageProps<"/dashboard/platform/[orgId]">) {
+export default async function PlatformOfficePage({ params, searchParams }: PageProps<"/dashboard/platform/[orgId]">) {
   const { orgId } = await params;
+  const opened = (await searchParams).opened;
   if (!z.uuid().safeParse(orgId).success) notFound();
   const supabase = await createClient();
   if (!supabase) redirect("/login");
@@ -57,7 +58,13 @@ export default async function PlatformOfficePage({ params }: PageProps<"/dashboa
           <div className="mt-3">
             <SchemePills office={office} t={t} />
           </div>
-          {office.status.blocked && <p className="mt-3 rounded-xl bg-red-500/10 px-3 py-2 text-sm">{t(BLOCKED[office.status.blocked])}</p>}
+          {opened === "1" && (
+            <p className="mt-3 rounded-xl bg-emerald-500/10 px-3 py-2 text-sm">{t("Office opened and its admin invited. Now set its scheme below.")}</p>
+          )}
+          {opened === "0" && (
+            <p className="mt-3 rounded-xl bg-amber-500/10 px-3 py-2 text-sm">{t("Office opened, but the admin's invitation did not go. Invite the admin again below.")}</p>
+          )}
+          {office.status.blocked &&<p className="mt-3 rounded-xl bg-red-500/10 px-3 py-2 text-sm">{t(BLOCKED[office.status.blocked])}</p>}
           {!office.terms && !office.isPlatform && (
             <p className="mt-3 rounded-xl bg-amber-500/10 px-3 py-2 text-sm">{t("No scheme is set for this office yet: nothing is limited. Set one below.")}</p>
           )}
@@ -89,6 +96,16 @@ export default async function PlatformOfficePage({ params }: PageProps<"/dashboa
             <SchemeForm orgId={office.id} terms={office.terms} note={office.note} today={office.usage.today} lang={lang} />
           </div>
         </section>
+
+        {!office.isPlatform && (
+          <section className="glass-card fade-up p-5">
+            <h2 className="text-lg font-semibold">{t("Office admin")}</h2>
+            <p className="muted mt-1 text-sm">{t("The admin sets their own password from the email and adds the office's people. Invite again if the first email was lost.")}</p>
+            <div className="mt-4">
+              <InviteAdminControl orgId={office.id} lang={lang} />
+            </div>
+          </section>
+        )}
 
         <section className="glass-card fade-up p-5">
           <h2 className="text-lg font-semibold">{t("Pause or resume")}</h2>

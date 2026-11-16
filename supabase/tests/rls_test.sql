@@ -2569,6 +2569,62 @@ select pg_temp.expect(
   (select count(*) from public.audit_log where entity = 'organizations' and org_id = '11111111-1111-1111-1111-111111111111'
      and actor_id = '00000000-0000-0000-0000-0000000000e9') = 2,
   'pausing and resuming are in the office''s audit chain');
+
+-- the super admin opens a new office and seats its first admin; nobody else can
+insert into auth.users (id, email) values ('00000000-0000-0000-0000-0000000000e7', 'first-admin@example.test');
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+do $$
+begin
+  perform public.platform_create_office('Rival Firm', 'rival');
+  raise exception 'FAIL: an office admin opened an office';
+exception when insufficient_privilege then
+  raise notice 'ok - an office admin cannot open an office';
+end $$;
+do $$
+begin
+  perform public.platform_seat_admin('11111111-1111-1111-1111-111111111111', '00000000-0000-0000-0000-0000000000e7', 'Planted');
+  raise exception 'FAIL: an office admin seated a login';
+exception when insufficient_privilege then
+  raise notice 'ok - an office admin cannot seat a login through the super admin''s function';
+end $$;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000e9');
+create temp table new_office as select public.platform_create_office('  New Firm (test)  ', 'NewFirm') as id;
+select pg_temp.expect(
+  (select name = 'New Firm (test)' and slug = 'newfirm' from public.organizations where id = (select id from new_office)),
+  'the super admin opens an office; the name is trimmed and the firm code lower-cased');
+do $$
+begin
+  perform public.platform_create_office('Copy Firm', 'newfirm');
+  raise exception 'FAIL: a firm code was used twice';
+exception when unique_violation then
+  raise notice 'ok - a firm code is used once';
+end $$;
+do $$
+begin
+  perform public.platform_create_office('Bad Code Firm', '1-bad code');
+  raise exception 'FAIL: a bad firm code was accepted';
+exception when check_violation then
+  raise notice 'ok - a bad firm code is refused';
+end $$;
+do $$
+begin
+  perform public.platform_seat_admin('11111111-1111-1111-1111-111111111111', '00000000-0000-0000-0000-00000000000a', 'Moved');
+  raise exception 'FAIL: a login was moved out of its office';
+exception when unique_violation then
+  raise notice 'ok - a login that has an office cannot be seated in another';
+end $$;
+select public.platform_seat_admin((select id from new_office), '00000000-0000-0000-0000-0000000000e7', 'First Admin');
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000e7');
+select pg_temp.expect(
+  public.current_org_id() = (select id from new_office) and public.has_role('admin') and not public.has_role('drafter')
+  and (select count(*) from public.cases) = 0,
+  'the seated admin is an admin of the new office only and sees no other office''s cases');
+select pg_temp.expect(not public.is_platform_admin(), 'the new office''s admin is not a super admin');
+reset role;
+select pg_temp.expect(
+  exists (select 1 from public.audit_log where entity = 'organizations' and action = 'insert'
+          and org_id = (select id from new_office) and actor_id = '00000000-0000-0000-0000-0000000000e9'),
+  'opening an office is in its audit chain, by the super admin');
 rollback;
 
 select pg_temp.expect(

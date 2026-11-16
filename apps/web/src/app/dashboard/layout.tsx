@@ -62,7 +62,13 @@ export default async function DashboardLayout({ children }: LayoutProps<"/dashbo
 
   const work = t("Work");
   const office = t("Office");
-  const items: NavItem[] = [
+  // The super admin runs the platform, not an office: their navigation is the console only.
+  const superAdmin = access?.platform_admin === true;
+  const superItems: NavItem[] = [
+    { href: "/dashboard/platform", label: t("All offices"), icon: "◆", group: t("Super admin") },
+    { href: "/dashboard/platform/new", label: t("New office"), icon: "＋", group: t("Super admin") },
+  ];
+  const items: NavItem[] = superAdmin ? superItems : [
     ...(fieldOnly ? [] : [{ href: "/dashboard", label: t("Dashboard"), icon: "▦", group: work }]),
     ...(admin ? [{ href: "/dashboard/cases/new", label: t("New case"), icon: "＋", group: work }] : []),
     ...(canApprove || r.has("drafter") ? [{ href: "/dashboard/approvals", label: t("Approvals"), icon: "✓", badge: toDecide + sentBack, group: work }] : []),
@@ -79,7 +85,6 @@ export default async function DashboardLayout({ children }: LayoutProps<"/dashbo
         ]
       : []),
     { href: "/dashboard/help", label: t("How it works"), icon: "?", group: work },
-    ...(access?.platform_admin ? [{ href: "/dashboard/platform", label: t("Offices"), icon: "◆", group: t("Super admin") }] : []),
   ];
 
   return (

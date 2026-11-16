@@ -95,6 +95,8 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
 
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) redirect("/login");
+  // The super admin's home is the console of all offices.
+  if ((await supabase.rpc("is_platform_admin")).data === true) redirect("/dashboard/platform");
   const { lang, t } = await getT();
   const full = (await getViewMode()) === "full";
 

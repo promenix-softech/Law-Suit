@@ -256,6 +256,12 @@ Owner's request (15 Nov): approval requests in a window of their own; more contr
 - [x] Merged (#39) and checked live: nonce CSP header, approvals page, `/dashboard/platform` answers 404 to an office approver, no page errors
 - [ ] Not built yet: creating a new office and inviting its first admin from the super admin's page (needs a change to the `invite-user` edge function); invoices from the super admin's page
 
+## Super admin console only (16 Nov)
+- [x] The super admin's menu is the console only (All offices, New office); `/dashboard` takes them to `/dashboard/platform`
+- [x] New office: `platform_create_office` (name + firm code, super admin only, in the new office's audit chain) and the first admin invited through `invite-user` with `orgId` → `platform_seat_admin` (super admin only, only a login with no office yet); "Invite admin" again from the office's page
+- [x] Invite attempts of the super admin count against the super admin's own office (20 a day)
+- [ ] Known: changes to `platform_admins` (who is super admin) are made with the service role and are not in an audit chain
+
 ## Sign-in links (16 Nov)
 - [x] Links sent from the Supabase dashboard land on the Site URL; any page now forwards them to `/auth/set-password` (#40)
 - [x] Mail scanners (Outlook / Live Safe Links) open links before the person and spend them. `/auth/set-password` accepts a token-hash link and uses it only on a click ("Continue to set my password")
