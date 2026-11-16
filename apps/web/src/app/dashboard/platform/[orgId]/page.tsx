@@ -7,7 +7,16 @@ import { getT } from "@/lib/lang";
 import { isPlatformAdmin, loadMonthlyUsage, loadOffice } from "@/lib/platform";
 import { createClient } from "@/lib/supabase/server";
 import { fmtDate } from "@/lib/ui";
+import { loadBillingPlans, loadInvoices } from "@/lib/platform-billing";
+import { BillingPlanForm, IssueInvoiceForm } from "../invoice-controls";
+import { InvoiceTable } from "../invoice-table";
 import { InviteAdminControl, SchemeForm, SuspendControl } from "./office-controls";
+
+/** "YYYY-MM" of the month before the given ISO date. */
+function lastMonth(today: string): string {
+  const [y, m] = today.split("-").map(Number) as [number, number];
+  return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, "0")}`;
+}
 
 export const metadata = { title: "Office — Civil Suits" };
 
@@ -33,12 +42,15 @@ export default async function PlatformOfficePage({ params, searchParams }: PageP
   if (!(await isPlatformAdmin(supabase))) notFound();
   const { lang, t } = await getT();
 
-  const [{ data: profile }, { data: roles }, office, months] = await Promise.all([
+  const [{ data: profile }, { data: roles }, office, months, plans, invoices] = await Promise.all([
     supabase.from("profiles").select("full_name, organizations(name)").eq("id", auth.user.id).single(),
     supabase.from("user_roles").select("role").eq("user_id", auth.user.id),
     loadOffice(supabase, orgId),
     loadMonthlyUsage(supabase, orgId, 12),
+    loadBillingPlans(supabase, orgId),
+    loadInvoices(supabase, orgId),
   ]);
+  const plan = plans[0] ?? null;
   if (!profile) redirect("/login");
   if (!office) notFound();
   const roleNames = (roles ?? []).map((r) => r.role as string);
@@ -96,6 +108,30 @@ export default async function PlatformOfficePage({ params, searchParams }: PageP
             <SchemeForm orgId={office.id} terms={office.terms} note={office.note} today={office.usage.today} lang={lang} />
           </div>
         </section>
+
+        {!office.isPlatform && (
+          <section className="glass-card fade-up p-5" id="billing">
+            <h2 className="text-lg font-semibold">{t("Prices and GST")}</h2>
+            <p className="muted mt-1 text-sm">
+              {plan ? `${t("In force from")} ${fmtDate(plan.effectiveFrom)}. ${t("A new start date keeps the old prices for earlier months.")}` : t("No prices are set yet: an invoice needs them.")}
+            </p>
+            <div className="mt-4">
+              <BillingPlanForm orgId={office.id} plan={plan} today={office.usage.today} lang={lang} />
+            </div>
+          </section>
+        )}
+
+        {!office.isPlatform && (
+          <section className="glass-card fade-up p-5">
+            <h2 className="text-lg font-semibold">{t("Invoices")}</h2>
+            <div className="mt-4">
+              <IssueInvoiceForm orgId={office.id} lastMonth={lastMonth(office.usage.today)} today={office.usage.today} lang={lang} />
+            </div>
+            <div className="mt-6">
+              <InvoiceTable rows={invoices} showOffice={false} t={t} lang={lang} />
+            </div>
+          </section>
+        )}
 
         {!office.isPlatform && (
           <section className="glass-card fade-up p-5">

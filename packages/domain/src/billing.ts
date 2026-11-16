@@ -88,6 +88,35 @@ export interface InvoiceLine {
   ratePaise: Paise;
 }
 
+/** First and last day of a "YYYY-MM" month, as ISO dates. */
+export function monthBounds(month: string): { start: string; end: string } {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new RangeError("Month like 2026-10");
+  const [y, m] = month.split("-").map(Number) as [number, number];
+  const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return { start: `${month}-01`, end: `${month}-${String(last).padStart(2, "0")}` };
+}
+
+/** Invoice lines for a month of suit packs: one per slab used, plus the minimum top-up. */
+export function monthlyInvoiceLines(input: MonthlyChargeInput & { month: string }): InvoiceLine[] {
+  monthBounds(input.month);
+  const charge = monthlyCharge(input);
+  const lines: InvoiceLine[] = [];
+  let from = 0;
+  for (const s of input.slabs) {
+    const to = s.upTo ?? Infinity;
+    const qty = Math.max(0, Math.min(input.suitPacks, to) - from);
+    if (qty) {
+      const range = s.upTo ? `${from + 1}–${s.upTo}` : `${from + 1} and above`;
+      lines.push({ description: `Suit packs ${range}, ${input.month}`, qty, ratePaise: s.ratePaise });
+    }
+    from = to;
+  }
+  if (charge.minimumTopUpPaise) {
+    lines.push({ description: `Monthly minimum top-up, ${input.month}`, qty: 1, ratePaise: charge.minimumTopUpPaise });
+  }
+  return lines;
+}
+
 export function invoiceTotals(lines: InvoiceLine[], supplierState: string, recipientState: string) {
   const taxable = lines.reduce((sum, l) => {
     if (!Number.isInteger(l.qty) || l.qty < 0) throw new RangeError("qty must be a whole number");
@@ -109,7 +138,7 @@ export function financialYear(isoInstant: string): string {
 
 /** GST invoice number: unique per FY, ≤ 16 characters, letters/digits with - and / only. */
 export function invoiceNumber(prefix: string, fy: string, seq: number): string {
-  if (!/^[A-Z0-9]{1,4}$/.test(prefix)) throw new RangeError("Prefix: 1–4 capital letters or digits");
+  if (!/^[A-Z0-9]{1,3}$/.test(prefix)) throw new RangeError("Prefix: 1–3 capital letters or digits (the number is at most 16 characters)");
   if (!/^\d{4}-\d{2}$/.test(fy)) throw new RangeError("FY like 2026-27");
   if (!Number.isInteger(seq) || seq < 1 || seq > 9999) throw new RangeError("seq must be 1–9999");
   return `${prefix}/${fy}/${String(seq).padStart(4, "0")}`;

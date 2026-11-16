@@ -185,3 +185,65 @@ test("an office admin cannot open the new office page", async ({ browser }) => {
   const admin = await signIn(browser, "nirmal", "admin");
   expect((await admin.goto("/dashboard/platform/new"))?.status()).toBe(404);
 });
+
+test("the super admin sets prices, issues an invoice, records payment and cancels it", async ({ browser }) => {
+  const superAdmin = await signIn(browser, "promenix", "superadmin");
+  superAdmin.on("dialog", (d) => d.accept());
+  await openOffice(superAdmin);
+
+  // Prices: a fixed monthly fee only, inside Maharashtra.
+  await superAdmin.getByLabel("Price per suit pack (₹)").first().fill("0");
+  await superAdmin.getByLabel("Monthly minimum (₹)").fill("5,000");
+  await superAdmin.getByLabel("Prices apply from").fill("2020-01-01");
+  await superAdmin.getByLabel("State code (place of supply)").fill("27");
+  await superAdmin.getByRole("button", { name: "Save prices" }).click();
+  await expect(superAdmin.getByText("Billing plan saved.")).toBeVisible();
+
+  // A hand-written invoice, worked out by the system before it is issued.
+  await superAdmin.getByRole("radio", { name: /Written by hand/ }).check();
+  await superAdmin.getByLabel("Period from").fill("2021-04-01");
+  await superAdmin.getByLabel("Period to").fill("2022-03-31");
+  await superAdmin.getByLabel("Description").fill("Yearly scheme fee");
+  await superAdmin.getByLabel("Quantity").fill("1");
+  await superAdmin.getByLabel("Rate (₹)").fill("60000");
+  await superAdmin.getByRole("button", { name: "Work it out" }).click();
+  await expect(superAdmin.getByText("CGST 9% + SGST 9%")).toBeVisible();
+  await expect(superAdmin.getByText("₹70,800.00")).toBeVisible();
+  await superAdmin.getByRole("button", { name: "Issue invoice" }).click();
+  await expect(superAdmin.getByText(/Invoice PS\/\d{4}-\d{2}\/\d{4} issued\./)).toBeVisible();
+
+  const row = superAdmin.locator("tr[data-invoice]").filter({ hasText: "₹70,800.00" }).filter({ hasText: "Unpaid" }).first();
+  await expect(row).toBeVisible();
+  const href = await row.getByRole("link").first().getAttribute("href");
+  const doc = await superAdmin.request.get(href!);
+  expect(doc.status()).toBe(200);
+  expect(doc.headers()["content-type"]).toContain("wordprocessingml");
+
+  // The same period cannot be invoiced twice while the first is live.
+  await superAdmin.getByRole("button", { name: "Work it out" }).click();
+  await superAdmin.getByRole("button", { name: "Issue invoice" }).click();
+  await expect(superAdmin.getByText("This period already has an invoice. Cancel it first to issue a new one.")).toBeVisible();
+
+  // Paid with a reference, then cancelled (so the period is free for the next run).
+  const invoiceNo = (await row.getAttribute("data-invoice"))!;
+  const mine = superAdmin.locator(`tr[data-invoice="${invoiceNo}"]`);
+  await mine.getByRole("button", { name: "Mark paid" }).click();
+  await mine.getByLabel("Payment reference (UTR / cheque no.)").fill("UTR-TEST-001");
+  await mine.getByRole("button", { name: "Save" }).click();
+  await expect(mine).toContainText("Paid");
+  await expect(mine).toContainText("UTR-TEST-001");
+
+  await superAdmin.goto("/dashboard/platform/invoices");
+  await expect(superAdmin.getByRole("heading", { name: "Invoices" })).toBeVisible();
+  const listed = superAdmin.locator(`tr[data-invoice="${invoiceNo}"]`);
+  await expect(listed).toContainText(OFFICE);
+  await listed.getByRole("button", { name: "Cancel invoice" }).click();
+  await expect(listed).toContainText("Cancelled");
+
+  // The office's own admin sees its invoice on the billing page; nobody else gets the super admin's copy.
+  const admin = await signIn(browser, "nirmal", "admin");
+  await admin.goto("/dashboard/billing");
+  await expect(admin.getByText(invoiceNo)).toBeVisible();
+  expect((await admin.request.get(href!)).status()).toBe(404);
+  expect((await admin.goto("/dashboard/platform/invoices"))?.status()).toBe(404);
+});
