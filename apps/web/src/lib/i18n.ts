@@ -588,6 +588,16 @@ const MR: Record<string, string> = {
   "You are not allowed to approve drafts.": "तुम्हाला मसुदे मंजूर करण्याची परवानगी नाही.",
   "Add a comment explaining what to fix.": "काय दुरुस्त करायचे ते लिहा.",
   "Draft not found.": "मसुदा सापडला नाही.",
+  // paper names
+  "Vakalatnama": "वकीलपत्र",
+  "Affidavit": "प्रतिज्ञापत्र",
+  "List of documents": "कागदपत्रांची यादी",
+  "Address memo": "पत्ता मेमो",
+  "Bankers' Books certificate": "Bankers' Books प्रमाणपत्र",
+  "Draft decree": "हुकूमनाम्याचा मसुदा",
+  "Court-fee letter": "कोर्ट फी पत्र",
+  "E-filing data sheet": "ई-फाइलिंग माहिती पत्रक",
+  "12A mediation application": "12A मध्यस्थी अर्ज",
 };
 
 export type T = (en: string) => string;

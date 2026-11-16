@@ -251,4 +251,16 @@ test("@phone the simple case list fits a phone: no sideways scrolling, buttons b
   }));
   expect(m.pageOverflow).toBeLessThanOrEqual(0);
   expect(m.smallButtons).toEqual([]);
+
+  // The approvals page too.
+  await page.goto("/dashboard/approvals", { waitUntil: "networkidle" });
+  await expect(page.getByRole("heading", { name: "Approvals" })).toBeVisible();
+  const a = await page.evaluate(() => ({
+    pageOverflow: document.documentElement.scrollWidth - window.innerWidth,
+    smallButtons: [...document.querySelectorAll<HTMLElement>(".btn")]
+      .filter((b) => b.getBoundingClientRect().width > 0 && b.getBoundingClientRect().height < 40)
+      .map((b) => b.innerText.trim()),
+  }));
+  expect(a.pageOverflow).toBeLessThanOrEqual(0);
+  expect(a.smallButtons).toEqual([]);
 });
