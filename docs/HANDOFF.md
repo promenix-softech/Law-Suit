@@ -9,12 +9,7 @@ Supabase project `ohdtudvmcahdnqnhfqzp`.
 
 ## Pending
 
-Owner said go (16 Nov): migrations `20261115000000`, `20261115010000`, `20261116000000`,
-`20261116010000` are APPLIED to the demo database; platform office `promenix` created.
-In flight: PR from the work branch → CI green → squash-merge → check live.
-Then: once the owner has created his login in Supabase Auth (Invite user, his own e-mail — he gave
-it in chat; it is not written in the repo), link it: profile in the `promenix` office, role admin,
-row in `platform_admins` (execute_sql as postgres). Check `/dashboard/platform` live.
+Nothing in flight.
 
 ## Needs the owner
 - Try "New case → From the bank's file" once with a synthetic loan file: the first run against
@@ -37,3 +32,4 @@ row in `platform_admins` (execute_sql as postgres). Check `/dashboard/platform` 
 - #37 merged (open a new case from the bank's file; court by law, Pune by default); migrations
   `20261114000000`, `…010000`, `…020000` on the demo database; checked live (both ways, Pune default).
 - #38 merged (Marathi labels for the new-case page). No database step; checked live in Marathi.
+- #39 merged (approvals page, super admin with schemes / usage / pause, security follow-ups); migrations `20261115000000`, `…15010000`, `…16000000`, `…16010000` on the demo database; super admin linked; checked live.

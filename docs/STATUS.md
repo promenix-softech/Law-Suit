@@ -252,7 +252,8 @@ Owner's request (15 Nov): approval requests in a window of their own; more contr
 - [x] From the review: `ocr_jobs.provider_job_id` is now stored sealed and bound to its row (`lib/ocr/seal.ts`, tests), so a case editor cannot point a job at another Sarvam job; a job that cannot be opened is failed without asking the provider. e2e 20/20 after the change
 - [ ] Known: `platform_admins` changes are made with the service role and so are not in an audit trail (owner adds super admins by hand)
 - [x] Owner's go-ahead (16 Nov): the four migrations (`20261115000000`, `20261115010000`, `20261116000000`, `20261116010000`) applied to the demo database and checked (tables with forced RLS, index, triggers); platform office "Promenix Softech LLP (Platform)", firm code `promenix`, created. Security advisors: only the expected warnings (functions callable by signed-in users, each checks the caller inside)
-- [ ] Owner: create the super admin's login in Supabase (Authentication → Users → Invite user, the owner's own e-mail); then it is linked to the `promenix` office as admin and added to `platform_admins` (service role)
+- [x] Super admin login created by the owner (invite) and linked: admin of the `promenix` office, row in `platform_admins` (16 Nov)
+- [x] Merged (#39) and checked live: nonce CSP header, approvals page, `/dashboard/platform` answers 404 to an office approver, no page errors
 - [ ] Not built yet: creating a new office and inviting its first admin from the super admin's page (needs a change to the `invite-user` edge function); invoices from the super admin's page
 
 ## Owner's decisions (13 Nov)
