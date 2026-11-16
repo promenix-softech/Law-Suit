@@ -254,7 +254,6 @@ Owner's request (15 Nov): approval requests in a window of their own; more contr
 - [x] Owner's go-ahead (16 Nov): the four migrations (`20261115000000`, `20261115010000`, `20261116000000`, `20261116010000`) applied to the demo database and checked (tables with forced RLS, index, triggers); platform office "Promenix Softech LLP (Platform)", firm code `promenix`, created. Security advisors: only the expected warnings (functions callable by signed-in users, each checks the caller inside)
 - [x] Super admin login created by the owner (invite) and linked: admin of the `promenix` office, row in `platform_admins` (16 Nov)
 - [x] Merged (#39) and checked live: nonce CSP header, approvals page, `/dashboard/platform` answers 404 to an office approver, no page errors
-<<<<<<< HEAD
 - [x] Invoices from the super admin's page (17 Nov): see "Super admin invoices" below
 
 ## Super admin invoices (17 Nov)
@@ -263,9 +262,6 @@ Owner's request (15 Nov): approval requests in a window of their own; more contr
 - [x] Mark paid (UTR / cheque reference) or cancel; forward-only (existing trigger). A cancelled invoice frees its period
 - [x] Console "Invoices": every office's invoices, unpaid total, invoiced and paid this FY; DOCX download for the super admin
 - [ ] Owner: set `BILLING_SUPPLIER_GSTIN` (and address) in Vercel once registered, and confirm the SAC code to put on invoices; `INVOICE_PREFIX` defaults to `PS`
-=======
-- [ ] Not built yet: invoices from the super admin's page (creating a new office: see below)
->>>>>>> 0277fc74ca50dc7f31fa723ddcac90a0effab32c
 
 ## Super admin console only (16 Nov)
 - [x] The super admin's menu is the console only (All offices, New office); `/dashboard` takes them to `/dashboard/platform`

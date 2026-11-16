@@ -67,10 +67,7 @@ export default async function DashboardLayout({ children }: LayoutProps<"/dashbo
   const superItems: NavItem[] = [
     { href: "/dashboard/platform", label: t("All offices"), icon: "◆", group: t("Super admin") },
     { href: "/dashboard/platform/new", label: t("New office"), icon: "＋", group: t("Super admin") },
-<<<<<<< HEAD
     { href: "/dashboard/platform/invoices", label: t("Invoices"), icon: "₹", group: t("Super admin") },
-=======
->>>>>>> 0277fc74ca50dc7f31fa723ddcac90a0effab32c
   ];
   const items: NavItem[] = superAdmin ? superItems : [
     ...(fieldOnly ? [] : [{ href: "/dashboard", label: t("Dashboard"), icon: "▦", group: work }]),

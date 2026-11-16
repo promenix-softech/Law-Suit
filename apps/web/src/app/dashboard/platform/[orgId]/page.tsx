@@ -7,7 +7,6 @@ import { getT } from "@/lib/lang";
 import { isPlatformAdmin, loadMonthlyUsage, loadOffice } from "@/lib/platform";
 import { createClient } from "@/lib/supabase/server";
 import { fmtDate } from "@/lib/ui";
-<<<<<<< HEAD
 import { loadBillingPlans, loadInvoices } from "@/lib/platform-billing";
 import { BillingPlanForm, IssueInvoiceForm } from "../invoice-controls";
 import { InvoiceTable } from "../invoice-table";
@@ -18,9 +17,6 @@ function lastMonth(today: string): string {
   const [y, m] = today.split("-").map(Number) as [number, number];
   return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, "0")}`;
 }
-=======
-import { InviteAdminControl, SchemeForm, SuspendControl } from "./office-controls";
->>>>>>> 0277fc74ca50dc7f31fa723ddcac90a0effab32c
 
 export const metadata = { title: "Office — Civil Suits" };
 
@@ -114,7 +110,6 @@ export default async function PlatformOfficePage({ params, searchParams }: PageP
         </section>
 
         {!office.isPlatform && (
-<<<<<<< HEAD
           <section className="glass-card fade-up p-5" id="billing">
             <h2 className="text-lg font-semibold">{t("Prices and GST")}</h2>
             <p className="muted mt-1 text-sm">
@@ -139,8 +134,6 @@ export default async function PlatformOfficePage({ params, searchParams }: PageP
         )}
 
         {!office.isPlatform && (
-=======
->>>>>>> 0277fc74ca50dc7f31fa723ddcac90a0effab32c
           <section className="glass-card fade-up p-5">
             <h2 className="text-lg font-semibold">{t("Office admin")}</h2>
             <p className="muted mt-1 text-sm">{t("The admin sets their own password from the email and adds the office's people. Invite again if the first email was lost.")}</p>

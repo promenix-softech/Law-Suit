@@ -185,7 +185,6 @@ test("an office admin cannot open the new office page", async ({ browser }) => {
   const admin = await signIn(browser, "nirmal", "admin");
   expect((await admin.goto("/dashboard/platform/new"))?.status()).toBe(404);
 });
-<<<<<<< HEAD
 
 test("the super admin sets prices, issues an invoice, records payment and cancels it", async ({ browser }) => {
   const superAdmin = await signIn(browser, "promenix", "superadmin");
@@ -248,5 +247,3 @@ test("the super admin sets prices, issues an invoice, records payment and cancel
   expect((await admin.request.get(href!)).status()).toBe(404);
   expect((await admin.goto("/dashboard/platform/invoices"))?.status()).toBe(404);
 });
-=======
->>>>>>> 0277fc74ca50dc7f31fa723ddcac90a0effab32c
