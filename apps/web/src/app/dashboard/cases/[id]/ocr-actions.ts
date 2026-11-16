@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { canTransition, type CaseStatus } from "@civil-suits/domain";
 import { encryptText } from "@/lib/crypto";
+import { openOcrJob, sealOcrJob } from "@/lib/ocr/seal";
 import { confidenceOf, extractionSchema, FIELDS, normalise, rawText } from "@/lib/extract/fields";
 import {
   COST_PAISE_PER_PAGE,
@@ -33,6 +34,7 @@ const START_UNFINISHED = "The start did not finish. Try again.";
  * longer than any request can run, so a start that is still on its way is never freed.
  */
 const STALE_START_MS = 15 * 60 * 1000;
+
 
 type Supabase = NonNullable<Awaited<ReturnType<typeof createClient>>>;
 type Scan = { doc: { id: string; org_id: string; case_id: string }; file: { data: Blob; filename: string; contentType: string } };
@@ -110,7 +112,7 @@ async function startJob(
     await supabase.from("ocr_jobs").update({ status: "failed", error: message }).eq("id", claim.id);
     return message;
   }
-  const { error } = await supabase.from("ocr_jobs").update({ provider_job_id: job.jobId, status: job.status }).eq("id", claim.id);
+  const { error } = await supabase.from("ocr_jobs").update({ provider_job_id: sealOcrJob(claim.id, job.jobId), status: job.status }).eq("id", claim.id);
   return error ? "Could not record the job." : null;
 }
 
@@ -232,11 +234,19 @@ export async function refreshOcr(jobRowId: string): Promise<ActionResult & { don
     return { ok: false, error: START_UNFINISHED, done: true };
   }
   if (job.status !== "running" || !job.provider_job_id) return { ok: true, message: "Already finished.", done: true };
+  const providerJobId = openOcrJob(job.id, job.provider_job_id);
+  if (!providerJobId) {
+    // Not a value this server wrote for this job: never ask the provider about it.
+    await supabase.from("ocr_jobs").update({ status: "failed", error: "This job cannot be read. Start it again." }).eq("id", job.id).eq("status", "running");
+    if (caseId) revalidatePath(`/dashboard/cases/${caseId}`);
+    return { ok: false, error: "This job cannot be read. Start it again.", done: true };
+  }
+  const sealedJob = { ...job, provider_job_id: providerJobId };
   if (!caseId) return { ok: false, error: "Document is not linked to a case.", done: true };
 
   let st: Awaited<ReturnType<typeof jobStatus>>;
   try {
-    st = await jobStatus(job.provider_job_id);
+    st = await jobStatus(providerJobId);
   } catch (e) {
     return { ok: false, error: ocrErrorMessage(e) };
   }
@@ -250,7 +260,7 @@ export async function refreshOcr(jobRowId: string): Promise<ActionResult & { don
   let failure: string | null = null;
   if (st.status === "completed" || st.status === "partially_completed") {
     try {
-      const out = extract ? await saveExtraction(supabase, job, caseId) : await saveDigitise(supabase, job);
+      const out = extract ? await saveExtraction(supabase, sealedJob, caseId) : await saveDigitise(supabase, sealedJob);
       saved = out.saved;
       failure = out.error;
     } catch (e) {
@@ -286,7 +296,7 @@ export async function refreshOcr(jobRowId: string): Promise<ActionResult & { don
       kind: "ocr_page",
       qty: pagesBilled,
       cost_paise: pagesBilled * (extract ? EXTRACT_COST_PAISE_PER_PAGE : COST_PAISE_PER_PAGE),
-      meta: { provider: "sarvam", pipeline: job.pipeline, job: job.provider_job_id },
+      meta: { provider: "sarvam", pipeline: job.pipeline, ocr_job: job.id },
     });
   }
 
