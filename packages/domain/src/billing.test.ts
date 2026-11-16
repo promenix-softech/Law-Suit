@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { financialYear, gstinValid, gstSplit, invoiceNumber, monthlyCharge, invoiceTotals, parseSlabs } from "./billing";
+import {
+  financialYear,
+  gstinValid,
+  gstSplit,
+  invoiceNumber,
+  monthBounds,
+  monthlyCharge,
+  monthlyInvoiceLines,
+  invoiceTotals,
+  parseSlabs,
+} from "./billing";
 import { rupees } from "./money";
 
 describe("gstSplit", () => {
@@ -38,6 +48,37 @@ describe("monthlyCharge", () => {
   });
   it("needs an open-ended last slab", () => {
     expect(() => monthlyCharge({ suitPacks: 1, slabs: [{ upTo: 10, ratePaise: 1 }], minimumPaise: 0 })).toThrow();
+  });
+});
+
+describe("monthlyInvoiceLines", () => {
+  const slabs = [
+    { upTo: 100, ratePaise: rupees(1_500) },
+    { upTo: null, ratePaise: rupees(600) },
+  ];
+  it("gives one line per slab used, matching the charge", () => {
+    const lines = monthlyInvoiceLines({ suitPacks: 120, slabs, minimumPaise: 0, month: "2026-10" });
+    expect(lines).toEqual([
+      { description: "Suit packs 1–100, 2026-10", qty: 100, ratePaise: rupees(1_500) },
+      { description: "Suit packs 101 and above, 2026-10", qty: 20, ratePaise: rupees(600) },
+    ]);
+  });
+  it("adds the minimum top-up as its own line", () => {
+    const lines = monthlyInvoiceLines({ suitPacks: 0, slabs, minimumPaise: rupees(10_000), month: "2026-10" });
+    expect(lines).toEqual([{ description: "Monthly minimum top-up, 2026-10", qty: 1, ratePaise: rupees(10_000) }]);
+  });
+  it("is empty when nothing is due", () => {
+    expect(monthlyInvoiceLines({ suitPacks: 0, slabs, minimumPaise: 0, month: "2026-10" })).toEqual([]);
+  });
+  it("rejects a bad month", () => {
+    expect(() => monthlyInvoiceLines({ suitPacks: 1, slabs, minimumPaise: 0, month: "2026-13" })).toThrow();
+  });
+});
+
+describe("monthBounds", () => {
+  it("gives the first and last day", () => {
+    expect(monthBounds("2026-02")).toEqual({ start: "2026-02-01", end: "2026-02-28" });
+    expect(monthBounds("2028-02")).toEqual({ start: "2028-02-01", end: "2028-02-29" });
   });
 });
 

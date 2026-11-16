@@ -7,7 +7,7 @@
  * Counts billable suit packs (one per case, first bundle in the month, IST), prices them with
  * the org's plan, adds GST and stores an immutable invoice with the next number in the FY.
  */
-import { financialYear, formatINR, invoiceNumber, invoiceTotals, monthlyCharge, parseSlabs } from "@civil-suits/domain";
+import { financialYear, formatINR, invoiceNumber, invoiceTotals, monthlyCharge, monthlyInvoiceLines, parseSlabs } from "@civil-suits/domain";
 import { serviceClient } from "../src/supabase";
 
 const SUPPLIER_STATE = "27"; // Maharashtra
@@ -44,15 +44,7 @@ async function main() {
   const charge = monthlyCharge({ suitPacks, slabs, minimumPaise: Number(plan.minimum_paise) });
 
   // One line per slab used, plus the minimum top-up.
-  const lines: { description: string; qty: number; ratePaise: number }[] = [];
-  let from = 0;
-  for (const s of slabs) {
-    const to = s.upTo ?? Infinity;
-    const qty = Math.max(0, Math.min(suitPacks, to) - from);
-    if (qty) lines.push({ description: `Suit packs ${s.upTo ? `${from + 1}–${s.upTo}` : `${from + 1} and above`}, ${month}`, qty, ratePaise: s.ratePaise });
-    from = to;
-  }
-  if (charge.minimumTopUpPaise) lines.push({ description: `Monthly minimum top-up, ${month}`, qty: 1, ratePaise: charge.minimumTopUpPaise });
+  const lines = monthlyInvoiceLines({ suitPacks, slabs, minimumPaise: Number(plan.minimum_paise), month: month! });
   const totals = invoiceTotals(lines, SUPPLIER_STATE, plan.recipient_state);
   if (totals.taxablePaise !== charge.taxablePaise) throw new Error("Line items do not add up to the charge");
 
