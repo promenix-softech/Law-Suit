@@ -1,8 +1,11 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { formatINR, gstSplit, monthlyCharge } from "@civil-suits/domain";
+import { SchemeMeters, SchemePills, UsageMonths } from "@/components/scheme-usage";
 import { TopBar } from "@/components/top-bar";
 import { istMonth, parseSlabs, SUPPLIER } from "@/lib/billing";
+import { getT } from "@/lib/lang";
+import { loadMonthlyUsage, loadOffice } from "@/lib/platform";
 import { createClient } from "@/lib/supabase/server";
 import { fmtDate, title } from "@/lib/ui";
 
@@ -27,10 +30,14 @@ export default async function BillingPage() {
   if (!roleNames.includes("admin") || !profile) redirect("/dashboard");
 
   const month = istMonth();
-  const [{ data: plans }, { data: invoices }, { data: packs }] = await Promise.all([
+  const { t } = await getT();
+  const [{ data: plans }, { data: invoices }, { data: packs }, office, usageMonths] = await Promise.all([
     supabase.from("billing_plans").select("effective_from, slabs, minimum_paise, recipient_state").lte("effective_from", month.today).order("effective_from", { ascending: false }).limit(1),
     supabase.from("invoices").select("id, invoice_no, period_start, period_end, total_paise, status, issued_at").order("issued_at", { ascending: false }).limit(24),
     supabase.rpc("billable_suit_packs", { org: profile.org_id, p_start: month.start, p_end: month.end }),
+    // The office's scheme and its usage: set by Promenix, shown here so the admin knows where the office stands.
+    loadOffice(supabase, profile.org_id),
+    loadMonthlyUsage(supabase, profile.org_id, 12),
   ]);
   const plan = plans?.[0];
   const slabs = plan ? parseSlabs(plan.slabs) : null;
@@ -50,6 +57,28 @@ export default async function BillingPage() {
           <h1 className="mt-2 text-3xl font-semibold tracking-tight">Billing</h1>
           <p className="muted mt-1 text-sm">One suit pack per case, counted when its first e-filing bundle is built. Amounts computed in code.</p>
         </div>
+
+        {office && (
+          <section id="scheme" className="glass-card fade-up p-6" style={{ animationDelay: "40ms" }}>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold">{t("Your scheme")}</h2>
+              <SchemePills office={office} t={t} />
+            </div>
+            {!office.terms && <p className="muted mt-2 text-sm">{t("No scheme is set yet. Promenix sets it; until then nothing is limited.")}</p>}
+            {office.status.blocked && (
+              <p className="mt-3 rounded-xl bg-red-500/10 px-3 py-2 text-sm">{t("New cases cannot be opened until Promenix extends the scheme.")}</p>
+            )}
+            <div className="mt-4">
+              <SchemeMeters office={office} t={t} />
+            </div>
+            <details className="mt-5">
+              <summary className="cursor-pointer text-sm font-medium">{t("Usage, month by month")}</summary>
+              <div className="mt-4">
+                <UsageMonths months={usageMonths} t={t} />
+              </div>
+            </details>
+          </section>
+        )}
 
         <div className="grid gap-5 md:grid-cols-3">
           <div className="glass-card fade-up p-6" style={{ animationDelay: "60ms" }}>

@@ -30,6 +30,18 @@ export type CaseHeader = z.infer<typeof CaseHeader>;
  * Inserts the case (admins only, by RLS) with its borrower and, if given, the facility.
  * The database enforces the rest: maker–checker, office, assignment rules.
  */
+/** SQLSTATE the database raises when the office's scheme refuses something (see 20261116000000). */
+const SCHEME_REFUSAL = "CS001";
+
+/** The database's reason ("scheme: monthly limit" …) in words for the person opening the case. */
+export function schemeRefusal(message: string): string {
+  if (message.includes("monthly limit")) return "Your office's scheme covers no more new cases this month. Ask Promenix to extend it.";
+  if (message.includes("yearly limit")) return "Your office's scheme covers no more new cases this year. Ask Promenix to extend it.";
+  if (message.includes("expired")) return "Your office's scheme has ended. Ask Promenix to renew it before opening new cases.";
+  if (message.includes("not started")) return "Your office's scheme has not started yet.";
+  return "Your office's scheme does not allow this right now. Ask Promenix.";
+}
+
 export async function insertCase(supabase: Supabase, v: CaseHeader): Promise<{ caseId: string; orgId: string } | { error: string }> {
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) return { error: "Sign in again." };
@@ -52,6 +64,7 @@ export async function insertCase(supabase: Supabase, v: CaseHeader): Promise<{ c
     .single();
   if (error || !c) {
     if (error?.code === "23505") return { error: `Case number ${v.caseNo} already exists.` };
+    if (error?.code === SCHEME_REFUSAL) return { error: schemeRefusal(error.message) };
     return { error: "Only an admin can open cases." };
   }
 

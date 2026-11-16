@@ -15,29 +15,37 @@ All on the work branch; nothing merged, no migration applied to the demo databas
 Atomic OCR start (`20261115000000_ocr_start_atomic`), draft path check
 (`20261115010000_draft_path_narrow`), palette search beyond 1,000 cases, nonce-based CSP. Details
 in `docs/STATUS.md` "Review follow-ups (15 Nov)". Left to do:
-1. `security-reviewer` on `origin/ccr-9485de6a-xyehf1..6e1130a` — started twice, cut off by the
-   usage limit both times; run it again and fix what it finds.
-2. Small fix after the review: in `refreshOcr` close the job with `.eq("status", "running")` and
-   log usage only if that update changed the row (two tabs polling can record usage twice).
+1. `security-reviewer` — started twice, cut off by the usage limit both times. Run ONE review at
+   the end over the whole branch (`origin/ccr-9485de6a-xyehf1..HEAD`) and fix what it finds.
+2. Small fix: in `refreshOcr` close the job with `.eq("status", "running")` and log usage only if
+   that update changed the row (two tabs polling can record usage twice).
 
-**B. Owner's request of 15 Nov (in his words: more controls for the super admin, scheme with
-yearly and monthly usage; approval requests in a window of their own).**
-1. Approvals page — done: `/dashboard/approvals` (`lib/approvals-inbox.ts` + tests,
-   `lib/approvals-data.ts`, `approvals/page.tsx`, `approvals/inbox-controls.tsx`), nav link with a
-   badge, dashboard card links to it, Marathi words, e2e in `roles.spec.ts` (16/16 on a fresh
-   stack). Left: look at screenshots (desktop, phone, Marathi) and adjust.
-2. Super admin, database — next. Plan: `platform_admins` (who is a super admin; written only by
-   the service role) + `is_platform_admin()`; `office_schemes` (monthly / yearly scheme, cases
-   allowed per month and per year, valid from–to, what happens at the limit: warn or block new
-   cases, AI job caps, seats); `organizations.suspended_at` with one enforcement point; functions
-   for the super admin that return counts only (never case data): offices with scheme and usage,
-   monthly usage for 12 months; functions to set a scheme, suspend / resume, create an office.
-   RLS tests.
-3. Super admin, pages — after that: `/dashboard/platform` (offices, scheme, usage this month and
-   this year against the allowance) and an office page (scheme form, 12-month usage, controls);
-   the office admin's Billing page shows its own scheme and usage. Marathi words, e2e.
+**B. Owner's request of 15 Nov (more controls for the super admin, scheme with yearly and monthly
+usage; approval requests in a window of their own).**
+1. Approvals page — done and committed: `/dashboard/approvals`, e2e in `roles.spec.ts`,
+   screenshots sent to the owner.
+2. Super admin, database — done and committed: migration `20261116000000_platform_admin`
+   (`platform_admins`, `office_schemes`, `office_scheme_state()`, `office_usage_monthly()`,
+   `platform_set_scheme()`, `platform_set_suspended()`, pausing through `current_org_id()` /
+   `has_role()`, scheme limits on new cases / seats / AI readings), RLS tests.
+3. Super admin, pages — written and committed, typecheck and lint clean, NOT yet tried in a
+   browser: `packages/domain/src/scheme.ts` (+tests), `lib/platform.ts`,
+   `components/scheme-usage.tsx`, `dashboard/platform/page.tsx`, `dashboard/platform/[orgId]/…`,
+   `dashboard/platform/actions.ts`, shell (`dashboard/layout.tsx`: paused notice, "Offices" link),
+   Billing page scheme card, `lib/new-case.ts` `schemeRefusal`. Left to do, in order:
+   a. Marathi words for the new strings (`scratchpad/add_i18n.py <json> <comment>`; if the
+      scratchpad is gone, add the keys to `apps/web/src/lib/i18n.ts` by hand).
+   b. Seed: a platform office (firm code `promenix`) with a demo super admin in
+      `apps/web/scripts/seed-demo.ts` (local / e2e only), service-role insert into
+      `platform_admins`.
+   c. e2e (`apps/web/e2e/platform.spec.ts`): super admin sees the offices, sets a blocking scheme
+      → the office admin is refused a new case with the reason → warn → allowed; pause → the
+      office's people see the notice → resume; an office admin gets 404 on `/dashboard/platform`.
+   d. Screenshots (desktop, Marathi) to the owner.
 4. Then: `pnpm check`, db tests, e2e, `security-reviewer`, STATUS. Ask the owner: which login is
-   the super admin on the live site, applying the migrations, PR, merge.
+   the super admin on the live site, applying the three migrations, PR, merge.
+   Not built (say so): creating a new office and inviting its first admin from the super admin's
+   page (needs a change to the `invite-user` edge function), invoices from the page.
 
 ## Needs the owner
 - Try "New case → From the bank's file" once with a synthetic loan file: the first run against

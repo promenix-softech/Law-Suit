@@ -1,8 +1,28 @@
 import { redirect } from "next/navigation";
+import { signOut } from "@/app/login/actions";
 import { SideNav, type NavItem } from "@/components/side-nav";
+import type { T } from "@/lib/i18n";
 import { myFirmCode, requestFirm } from "@/lib/firm-server";
 import { getT } from "@/lib/lang";
 import { createClient } from "@/lib/supabase/server";
+
+/** Shown to the people of an office the super admin has paused, in place of every page. */
+function OfficePaused({ office, reason, t }: { office?: string; reason?: string | null; t: T }) {
+  return (
+    <main className="grid min-h-screen w-full place-items-center px-4">
+      <div className="glass-card max-w-md p-8 text-center">
+        <p className="text-4xl">⏸</p>
+        <h1 className="mt-3 text-2xl font-semibold tracking-tight">{t("This office's access is paused")}</h1>
+        {office && <p className="muted mt-1 text-sm">{office}</p>}
+        {reason && <p className="mt-4 rounded-xl bg-amber-500/10 px-3 py-2 text-sm">“{reason}”</p>}
+        <p className="muted mt-4 text-sm">{t("Nothing is deleted. Your cases and papers are as you left them; ask Promenix to resume the office.")}</p>
+        <form action={signOut} className="mt-6">
+          <button className="btn px-4 py-2 text-sm">{t("Sign out")}</button>
+        </form>
+      </div>
+    </main>
+  );
+}
 
 /**
  * Shell for every signed-in page: role-aware left navigation and a full-width content area.
@@ -21,11 +41,16 @@ export default async function DashboardLayout({ children }: LayoutProps<"/dashbo
   }
 
   const { t } = await getT();
-  const [{ data: roles }, { count: tasksOpen }, { data: pending }] = await Promise.all([
+  const [{ data: roles }, { count: tasksOpen }, { data: pending }, { data: accessRow }] = await Promise.all([
     supabase.from("user_roles").select("role").eq("user_id", auth.user.id),
     supabase.from("tasks").select("id", { count: "exact", head: true }).eq("assignee_id", auth.user.id).in("status", ["open", "in_progress"]),
     supabase.from("drafts").select("status, created_by, cases!inner(archived_at)").in("status", ["in_approval", "returned"]).is("cases.archived_at", null),
+    supabase.rpc("my_access"),
   ]);
+  // A paused office: the database gives its people no rows at all, so the pages would only fail.
+  // Say what happened instead (the pages below are not rendered).
+  const access = accessRow as { office?: string; suspended?: boolean; reason?: string | null; platform_admin?: boolean } | null;
+  if (access?.suspended) return <OfficePaused office={access.office} reason={access.reason} t={t} />;
   const r = new Set((roles ?? []).map((x) => x.role as string));
   const admin = r.has("admin");
   const fieldOnly = r.size > 0 && [...r].every((x) => x === "field");
@@ -54,6 +79,7 @@ export default async function DashboardLayout({ children }: LayoutProps<"/dashbo
         ]
       : []),
     { href: "/dashboard/help", label: t("How it works"), icon: "?", group: work },
+    ...(access?.platform_admin ? [{ href: "/dashboard/platform", label: t("Offices"), icon: "◆", group: t("Super admin") }] : []),
   ];
 
   return (
