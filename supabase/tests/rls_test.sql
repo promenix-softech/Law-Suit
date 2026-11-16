@@ -2341,6 +2341,221 @@ begin
 exception when insufficient_privilege then raise notice 'ok - an office admin cannot change the firm code';
 end $$;
 
+-- ---------------------------------------------------------------- super admin (platform)
+insert into auth.users (id, email) values
+  ('00000000-0000-0000-0000-0000000000e9', 'super@example.test'),
+  ('00000000-0000-0000-0000-0000000000e8', 'new-person@example.test');
+insert into public.organizations (id, name) values ('99999999-9999-9999-9999-999999999999', 'Platform (test)');
+insert into public.profiles (id, org_id, full_name) values
+  ('00000000-0000-0000-0000-0000000000e9', '99999999-9999-9999-9999-999999999999', 'Super');
+insert into public.user_roles (user_id, org_id, role) values
+  ('00000000-0000-0000-0000-0000000000e9', '99999999-9999-9999-9999-999999999999', 'admin');
+insert into public.platform_admins (user_id) values ('00000000-0000-0000-0000-0000000000e9');
+
+select pg_temp.expect(
+  public.scheme_year_start('2026-04-01', '2026-11-16') = '2026-04-01'
+  and public.scheme_year_start('2026-04-01', '2027-03-31') = '2026-04-01'
+  and public.scheme_year_start('2026-04-01', '2027-04-01') = '2027-04-01'
+  and public.scheme_year_start('2027-01-01', '2026-11-16') = '2027-01-01',
+  'the scheme year starts on the anniversary of valid_from');
+
+-- an office admin is not a super admin, cannot become one and cannot use the super admin's switches
+do $$
+declare
+  org1 constant uuid := '11111111-1111-1111-1111-111111111111';
+  org2 constant uuid := '22222222-2222-2222-2222-222222222222';
+begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', true);
+  set local role authenticated;
+  if public.is_platform_admin() or (select count(*) from public.platform_admins) <> 0 then
+    raise exception 'FAIL: an office admin is, or sees, a super admin';
+  end if;
+  begin
+    insert into public.platform_admins (user_id) values ('00000000-0000-0000-0000-00000000000a');
+    raise exception 'FAIL: an office admin made themselves super admin';
+  exception when insufficient_privilege then
+    raise notice 'ok - nobody can make themselves a super admin';
+  end;
+  begin
+    perform public.platform_set_scheme(org1, 'Free for ever', 'yearly', null, null, current_date, null, 'warn', null, null, null);
+    raise exception 'FAIL: an office admin set a scheme';
+  exception when insufficient_privilege then
+    raise notice 'ok - only the super admin sets a scheme';
+  end;
+  begin
+    insert into public.office_schemes (org_id, scheme_name, period, valid_from) values (org1, 'Free for ever', 'yearly', current_date);
+    raise exception 'FAIL: an office admin wrote a scheme row';
+  exception when insufficient_privilege then
+    raise notice 'ok - a scheme cannot be written directly';
+  end;
+  begin
+    perform public.platform_set_suspended(org2, true, 'rival');
+    raise exception 'FAIL: an office admin paused an office';
+  exception when insufficient_privilege then
+    raise notice 'ok - only the super admin pauses an office';
+  end;
+  begin
+    perform 1 from public.organizations where suspended_at is not null;
+    raise exception 'FAIL: an office member read the paused flag directly';
+  exception when insufficient_privilege then
+    raise notice 'ok - the paused flag is not readable directly';
+  end;
+  if (select count(*) from public.office_scheme_state()) <> 0
+     or (select count(*) from public.office_scheme_state(org2)) <> 0
+     or (select count(*) from public.office_usage_monthly(org2, 12)) <> 0 then
+    raise exception 'FAIL: an office admin read another office''s scheme or usage';
+  end if;
+  raise notice 'ok - an office admin reads no other office''s scheme or usage';
+  if (select count(*) from public.office_scheme_state(org1)) <> 1 or (select count(*) from public.office_usage_monthly(org1, 12)) <> 12 then
+    raise exception 'FAIL: an office admin cannot read their own office''s scheme and usage';
+  end if;
+  raise notice 'ok - an office admin reads their own office''s scheme and 12 months of usage';
+
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000d1', true);
+  if (select count(*) from public.office_scheme_state(org1)) <> 0 or (select count(*) from public.office_usage_monthly(org1, 12)) <> 0 then
+    raise exception 'FAIL: a drafter read the office''s scheme';
+  end if;
+  raise notice 'ok - the scheme and usage are the admin''s business, not a drafter''s';
+  reset role;
+end $$;
+
+-- the super admin sees every office's counts, and none of its content
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000e9');
+select pg_temp.expect(
+  (select count(*) from public.office_scheme_state() where id in ('11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222')) = 2
+  and (select cases_total from public.office_scheme_state('11111111-1111-1111-1111-111111111111')) >= 2
+  and (select is_platform from public.office_scheme_state('99999999-9999-9999-9999-999999999999')),
+  'the super admin sees every office with its counts');
+select pg_temp.expect(
+  (select count(*) from public.cases) = 0 and (select count(*) from public.parties) = 0 and (select count(*) from public.drafts) = 0
+  and (select count(*) from public.profiles where org_id <> '99999999-9999-9999-9999-999999999999') = 0
+  and (select count(*) from public.audit_log where org_id <> '99999999-9999-9999-9999-999999999999') = 0,
+  'but none of an office''s cases, parties, papers, people or audit trail');
+rollback;
+
+-- a scheme: set by the super admin, audited in the office's chain, enforced on new cases, seats and AI readings
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000e9');
+select public.platform_set_scheme('11111111-1111-1111-1111-111111111111', 'Monthly – Office', 'monthly', 0, null,
+  (now() at time zone 'Asia/Kolkata')::date - 40, null, 'block', 0, 5, 'test');
+reset role;
+select pg_temp.expect(
+  (select count(*) from public.audit_log where entity = 'office_schemes' and org_id = '11111111-1111-1111-1111-111111111111'
+     and actor_id = '00000000-0000-0000-0000-0000000000e9') = 1,
+  'a scheme change is in the office''s own audit chain, under the super admin''s name');
+do $$
+begin
+  insert into public.profiles (id, org_id, full_name) values
+    ('00000000-0000-0000-0000-0000000000e8', '11111111-1111-1111-1111-111111111111', 'Sixth Person');
+  raise exception 'FAIL: a person was added beyond the office''s seats';
+exception when sqlstate 'CS001' then
+  raise notice 'ok - an office cannot have more people than its seats';
+end $$;
+
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+select pg_temp.expect((select scheme_name from public.office_schemes) = 'Monthly – Office', 'the office admin reads its own scheme');
+select pg_temp.expect(not public.ai_quota_ok(60, 1000), 'the office''s own AI cap replaces the default');
+do $$
+begin
+  insert into public.cases (org_id, case_no_internal) values ('11111111-1111-1111-1111-111111111111', 'CS-LIMIT-M');
+  raise exception 'FAIL: a case was opened over the monthly limit';
+exception when sqlstate 'CS001' then
+  if sqlerrm <> 'scheme: monthly limit' then raise exception 'FAIL: wrong reason: %', sqlerrm; end if;
+  raise notice 'ok - at the monthly limit a blocking scheme refuses new cases';
+end $$;
+
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000e9');
+select public.platform_set_scheme('11111111-1111-1111-1111-111111111111', 'Yearly – Office', 'yearly', null, 1,
+  (now() at time zone 'Asia/Kolkata')::date - 40, null, 'block', null, null, null);
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+do $$
+begin
+  insert into public.cases (org_id, case_no_internal) values ('11111111-1111-1111-1111-111111111111', 'CS-LIMIT-Y');
+  raise exception 'FAIL: a case was opened over the yearly limit';
+exception when sqlstate 'CS001' then
+  if sqlerrm <> 'scheme: yearly limit' then raise exception 'FAIL: wrong reason: %', sqlerrm; end if;
+  raise notice 'ok - at the yearly limit too';
+end $$;
+
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000e9');
+select public.platform_set_scheme('11111111-1111-1111-1111-111111111111', 'Yearly – Office', 'yearly', null, null,
+  (now() at time zone 'Asia/Kolkata')::date - 400, (now() at time zone 'Asia/Kolkata')::date - 1, 'block', null, null, null);
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+do $$
+begin
+  insert into public.cases (org_id, case_no_internal) values ('11111111-1111-1111-1111-111111111111', 'CS-EXPIRED');
+  raise exception 'FAIL: a case was opened after the scheme ended';
+exception when sqlstate 'CS001' then
+  if sqlerrm <> 'scheme: expired' then raise exception 'FAIL: wrong reason: %', sqlerrm; end if;
+  raise notice 'ok - and after the scheme has ended';
+end $$;
+
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000e9');
+select public.platform_set_scheme('11111111-1111-1111-1111-111111111111', 'Yearly – Office', 'yearly', 0, 0,
+  (now() at time zone 'Asia/Kolkata')::date - 400, (now() at time zone 'Asia/Kolkata')::date - 1, 'warn', null, null, null);
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+insert into public.cases (org_id, case_no_internal) values ('11111111-1111-1111-1111-111111111111', 'CS-WARN');
+select pg_temp.expect(public.ai_quota_ok(60, 1000), 'a scheme that only warns refuses nothing (and without a cap the default applies)');
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000b9');
+insert into public.cases (org_id, case_no_internal) values ('22222222-2222-2222-2222-222222222222', 'OTHER-NO-SCHEME');
+select pg_temp.expect(true, 'an office without a scheme has no limit');
+rollback;
+
+-- pausing an office: its people see and change nothing, whatever they call; another office is untouched
+begin;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000e9');
+do $$
+begin
+  begin
+    perform public.platform_set_suspended('99999999-9999-9999-9999-999999999999', true, 'oops');
+    raise exception 'FAIL: the super admin paused their own office';
+  exception when check_violation then
+    raise notice 'ok - the super admin''s own office cannot be paused';
+  end;
+  begin
+    perform public.platform_set_suspended('11111111-1111-1111-1111-111111111111', true, '  ');
+    raise exception 'FAIL: an office was paused without a reason';
+  exception when check_violation then
+    raise notice 'ok - pausing needs a reason';
+  end;
+end $$;
+select public.platform_set_suspended('11111111-1111-1111-1111-111111111111', true, 'Payment overdue');
+
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+select pg_temp.expect(
+  public.current_org_id() is null and not public.has_role('admin')
+  and (select count(*) from public.cases) = 0 and (select count(*) from public.profiles) = 0
+  and (select count(*) from public.office_scheme_state('11111111-1111-1111-1111-111111111111')) = 0,
+  'a paused office''s admin sees nothing');
+select pg_temp.expect(
+  (public.my_access() ->> 'suspended')::boolean and public.my_access() ->> 'reason' = 'Payment overdue',
+  'and is told that the office is paused, and why');
+do $$
+begin
+  insert into public.cases (org_id, case_no_internal) values ('11111111-1111-1111-1111-111111111111', 'CS-PAUSED');
+  raise exception 'FAIL: a paused office opened a case';
+exception when insufficient_privilege then
+  raise notice 'ok - a paused office can write nothing';
+end $$;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000d1');
+select pg_temp.expect((select count(*) from public.cases) = 0 and (select count(*) from storage.objects) = 0,
+  'nor do its drafters see cases or files');
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000b9');
+select pg_temp.expect(public.current_org_id() = '22222222-2222-2222-2222-222222222222' and not (public.my_access() ->> 'suspended')::boolean,
+  'another office is not affected');
+
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000e9');
+select public.platform_set_suspended('11111111-1111-1111-1111-111111111111', false, null);
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+select pg_temp.expect((select count(*) from public.cases) >= 2 and public.has_role('admin'), 'resumed, the office works again');
+reset role;
+select pg_temp.expect(
+  (select count(*) from public.audit_log where entity = 'organizations' and org_id = '11111111-1111-1111-1111-111111111111'
+     and actor_id = '00000000-0000-0000-0000-0000000000e9') = 2,
+  'pausing and resuming are in the office''s audit chain');
+rollback;
+
 select pg_temp.expect(
   not exists (select 1 from pg_tables where schemaname = 'public' and not rowsecurity),
   'RLS enabled on every public table');
