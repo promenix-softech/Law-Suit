@@ -106,6 +106,17 @@ Deno.serve(async (req) => {
     newUser = false;
   } else {
     userId = invited.data.user.id;
+    // An invited login that never signed in is invited again with the SAME id. Never delete or
+    // re-seat a login that already has an office: in this office it is a re-send, elsewhere a refusal.
+    const { data: had } = await admin.from("profiles").select("org_id").eq("id", userId).maybeSingle();
+    if (had) {
+      if (had.org_id !== orgId) {
+        await record("refused");
+        return json(400, { error: REFUSED });
+      }
+      await record("sent");
+      return json(200, { message: `Invitation sent again to ${input.email}.` });
+    }
     const { error } = forOffice
       ? await asCaller.rpc("platform_seat_admin", { p_org: orgId, p_user: userId, p_full_name: input.fullName })
       : await asCaller.from("profiles").insert({ id: userId, org_id: orgId, full_name: input.fullName });

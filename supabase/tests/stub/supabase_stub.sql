@@ -15,6 +15,10 @@ create table if not exists auth.users (
   id uuid primary key,
   email text
 );
+-- Columns of the real auth.users that the schema reads.
+alter table auth.users add column if not exists invited_at timestamptz;
+alter table auth.users add column if not exists email_confirmed_at timestamptz;
+alter table auth.users add column if not exists last_sign_in_at timestamptz;
 
 create or replace function auth.uid() returns uuid
 language sql stable as $$

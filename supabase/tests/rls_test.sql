@@ -391,7 +391,7 @@ end $$;
 -- tamper with one row (as superuser, bypassing the immutability trigger) and expect detection
 alter table public.audit_log disable trigger audit_log_no_update;
 update public.audit_log set action = 'tampered'
-  where id = (select min(id) + 1 from public.audit_log where org_id = '11111111-1111-1111-1111-111111111111');
+  where id = (select id from public.audit_log where org_id = '11111111-1111-1111-1111-111111111111' order by id offset 1 limit 1);
 alter table public.audit_log enable trigger audit_log_no_update;
 begin;
 select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
@@ -2571,7 +2571,19 @@ select pg_temp.expect(
   'pausing and resuming are in the office''s audit chain');
 
 -- the super admin opens a new office and seats its first admin; nobody else can
-insert into auth.users (id, email) values ('00000000-0000-0000-0000-0000000000e7', 'first-admin@example.test');
+insert into auth.users (id, email, invited_at) values ('00000000-0000-0000-0000-0000000000e7', 'first-admin@example.test', now());
+insert into auth.users (id, email, invited_at, email_confirmed_at, last_sign_in_at) values
+  ('00000000-0000-0000-0000-0000000000e6', 'signed-up@example.test', null, now(), now()),
+  ('00000000-0000-0000-0000-0000000000e5', 'old-invite@example.test', now() - interval '3 days', null, null);
+set local role anon;
+do $$
+begin
+  perform public.platform_create_office('Anon Firm', 'anon-firm');
+  raise exception 'FAIL: anon opened an office';
+exception when insufficient_privilege then
+  raise notice 'ok - anon cannot call the new-office functions';
+end $$;
+reset role;
 select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
 do $$
 begin
@@ -2612,6 +2624,27 @@ begin
   raise exception 'FAIL: a login was moved out of its office';
 exception when unique_violation then
   raise notice 'ok - a login that has an office cannot be seated in another';
+end $$;
+do $$
+begin
+  perform public.platform_seat_admin((select id from new_office), '00000000-0000-0000-0000-0000000000e6', 'Self Signed');
+  raise exception 'FAIL: a login that signed itself up was seated';
+exception when foreign_key_violation then
+  raise notice 'ok - a login that confirmed or signed in by itself cannot be seated';
+end $$;
+do $$
+begin
+  perform public.platform_seat_admin((select id from new_office), '00000000-0000-0000-0000-0000000000e5', 'Old Invite');
+  raise exception 'FAIL: a stale invitation was seated';
+exception when foreign_key_violation then
+  raise notice 'ok - only a login invited in the last day can be seated';
+end $$;
+do $$
+begin
+  perform public.platform_seat_admin('12345678-1234-1234-1234-123456789012', '00000000-0000-0000-0000-0000000000e7', 'Nowhere');
+  raise exception 'FAIL: a login was seated in no office';
+exception when foreign_key_violation then
+  raise notice 'ok - a login cannot be seated in an office that does not exist';
 end $$;
 select public.platform_seat_admin((select id from new_office), '00000000-0000-0000-0000-0000000000e7', 'First Admin');
 select pg_temp.act_as('00000000-0000-0000-0000-0000000000e7');
