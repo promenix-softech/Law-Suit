@@ -727,6 +727,7 @@ const MR: Record<string, string> = {
   "Office opened, but the admin's invitation did not go. Invite the admin again below.": "Office उघडले, पण admin चे invite गेले नाही. खाली पुन्हा invite करा.",
   "Only the super admin can invite into another office.": "दुसऱ्या office मध्ये फक्त super admin invite करू शकतो.",
   "Invite the office's admin only.": "फक्त office च्या admin ला invite करा.",
+<<<<<<< HEAD
   // Super admin: invoices (17 Nov)
   "Invoices": "Invoices",
   "Price per suit pack": "प्रत्येक suit pack ची किंमत",
@@ -800,6 +801,8 @@ const MR: Record<string, string> = {
   "Could not change the invoice.": "Invoice बदलता आले नाही.",
   "Marked paid.": "भरले म्हणून नोंदवले.",
   "Invoice cancelled.": "Invoice रद्द झाले.",
+=======
+>>>>>>> 0277fc74ca50dc7f31fa723ddcac90a0effab32c
 };
 
 export type T = (en: string) => string;
