@@ -2497,6 +2497,20 @@ select public.platform_set_scheme('11111111-1111-1111-1111-111111111111', 'Yearl
 select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
 insert into public.cases (org_id, case_no_internal) values ('11111111-1111-1111-1111-111111111111', 'CS-WARN');
 select pg_temp.expect(public.ai_quota_ok(60, 1000), 'a scheme that only warns refuses nothing (and without a cap the default applies)');
+-- the worker (service role) is held to a blocking scheme too: a bulk upload cannot open cases past it
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000e9');
+select public.platform_set_scheme('11111111-1111-1111-1111-111111111111', 'Monthly – Office', 'monthly', 0, null,
+  (now() at time zone 'Asia/Kolkata')::date - 40, null, 'block', null, null, null);
+reset role;
+do $$
+begin
+  set local role service_role;
+  insert into public.cases (org_id, case_no_internal) values ('11111111-1111-1111-1111-111111111111', 'BATCH-OVER');
+  raise exception 'FAIL: the worker opened a case past a blocking scheme';
+exception when sqlstate 'CS001' then
+  raise notice 'ok - cases opened by the worker are held to the scheme too';
+end $$;
+reset role;
 select pg_temp.act_as('00000000-0000-0000-0000-0000000000b9');
 insert into public.cases (org_id, case_no_internal) values ('22222222-2222-2222-2222-222222222222', 'OTHER-NO-SCHEME');
 select pg_temp.expect(true, 'an office without a scheme has no limit');
@@ -2531,6 +2545,7 @@ select pg_temp.expect(
 select pg_temp.expect(
   (public.my_access() ->> 'suspended')::boolean and public.my_access() ->> 'reason' = 'Payment overdue',
   'and is told that the office is paused, and why');
+select pg_temp.expect(not public.ai_quota_ok(60, 1000), 'a paused office has no AI quota');
 do $$
 begin
   insert into public.cases (org_id, case_no_internal) values ('11111111-1111-1111-1111-111111111111', 'CS-PAUSED');
