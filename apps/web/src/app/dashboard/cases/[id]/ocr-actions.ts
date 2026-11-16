@@ -260,7 +260,9 @@ export async function refreshOcr(jobRowId: string): Promise<ActionResult & { don
     failure = st.status === "rejected" ? "Sarvam rejected the document." : "Processing failed for this document.";
   }
 
-  await supabase
+  // Close the job only if it is still running: when two tabs poll at the same moment, one of them
+  // closes it and logs the usage; the other finds it closed and logs nothing.
+  const { data: closed } = await supabase
     .from("ocr_jobs")
     .update({
       status: failure && !saved ? "failed" : st.status,
@@ -268,7 +270,13 @@ export async function refreshOcr(jobRowId: string): Promise<ActionResult & { don
       pages_succeeded: extract ? st.pagesSucceeded : (st.pagesSucceeded ?? saved),
       error: failure,
     })
-    .eq("id", job.id);
+    .eq("id", job.id)
+    .eq("status", "running")
+    .select("id");
+  if (!closed?.length) {
+    revalidatePath(`/dashboard/cases/${caseId}`);
+    return { ok: true, message: "Already finished.", done: true };
+  }
 
   const pagesBilled = extract ? (st.pagesSucceeded ?? 0) : saved;
   if (pagesBilled) {
