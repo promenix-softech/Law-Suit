@@ -604,6 +604,7 @@ export async function submitForApproval(draftId: string): Promise<ActionResult> 
   if (d.doc_kind === "plaint" && c) await setCaseStatus(supabase, c, "in_approval");
 
   revalidatePath(`/dashboard/cases/${d.case_id}`);
+  revalidatePath("/dashboard/approvals");
   return { ok: true, message: "Sent for approval." };
 }
 
@@ -635,6 +636,6 @@ export async function decideDraft(input: z.infer<typeof Decision>): Promise<Acti
   }
 
   revalidatePath(`/dashboard/cases/${d.case_id}`);
-  revalidatePath("/dashboard");
+  revalidatePath("/dashboard", "layout");
   return { ok: true, message: decision === "approved" ? "Approved." : "Returned to the drafter." };
 }

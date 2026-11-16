@@ -9,14 +9,35 @@ Supabase project `ohdtudvmcahdnqnhfqzp`.
 
 ## Pending
 
-Review follow-ups that need no owner decision (started 15 Nov, on the work branch, not merged):
-1. Atomic OCR start — done: migration `20261115000000_ocr_start_atomic` (claim row `starting`,
-   one active job per scan and pipeline, job facts fixed), `ocr-actions.ts` `startJob`, RLS tests.
-2. Narrow `draft_versions_path_check` — done: migration `20261115010000_draft_path_narrow`, RLS tests; the demo database has no row outside `drafts/` (checked read-only).
-3. Palette search beyond 1,000 cases — done (`lib/palette-search.ts`, unit tests; database search tried in the browser with a temporary small local list).
-4. Nonce-based CSP — done (`lib/csp.ts`, `proxy.ts`, static policy in `next.config.ts`, `e2e/csp.spec.ts`); e2e 14/14.
-5. Then: `pnpm check`, db tests, e2e, `security-reviewer`, STATUS; ask the owner before applying
-   the migrations to the demo database, opening the PR and merging.
+All on the work branch; nothing merged, no migration applied to the demo database.
+
+**A. Review follow-ups (15 Nov) — written and tested, waiting for the security review.**
+Atomic OCR start (`20261115000000_ocr_start_atomic`), draft path check
+(`20261115010000_draft_path_narrow`), palette search beyond 1,000 cases, nonce-based CSP. Details
+in `docs/STATUS.md` "Review follow-ups (15 Nov)". Left to do:
+1. `security-reviewer` on `origin/ccr-9485de6a-xyehf1..6e1130a` — started twice, cut off by the
+   usage limit both times; run it again and fix what it finds.
+2. Small fix after the review: in `refreshOcr` close the job with `.eq("status", "running")` and
+   log usage only if that update changed the row (two tabs polling can record usage twice).
+
+**B. Owner's request of 15 Nov (in his words: more controls for the super admin, scheme with
+yearly and monthly usage; approval requests in a window of their own).**
+1. Approvals page — done: `/dashboard/approvals` (`lib/approvals-inbox.ts` + tests,
+   `lib/approvals-data.ts`, `approvals/page.tsx`, `approvals/inbox-controls.tsx`), nav link with a
+   badge, dashboard card links to it, Marathi words, e2e in `roles.spec.ts` (16/16 on a fresh
+   stack). Left: look at screenshots (desktop, phone, Marathi) and adjust.
+2. Super admin, database — next. Plan: `platform_admins` (who is a super admin; written only by
+   the service role) + `is_platform_admin()`; `office_schemes` (monthly / yearly scheme, cases
+   allowed per month and per year, valid from–to, what happens at the limit: warn or block new
+   cases, AI job caps, seats); `organizations.suspended_at` with one enforcement point; functions
+   for the super admin that return counts only (never case data): offices with scheme and usage,
+   monthly usage for 12 months; functions to set a scheme, suspend / resume, create an office.
+   RLS tests.
+3. Super admin, pages — after that: `/dashboard/platform` (offices, scheme, usage this month and
+   this year against the allowance) and an office page (scheme form, 12-month usage, controls);
+   the office admin's Billing page shows its own scheme and usage. Marathi words, e2e.
+4. Then: `pnpm check`, db tests, e2e, `security-reviewer`, STATUS. Ask the owner: which login is
+   the super admin on the live site, applying the migrations, PR, merge.
 
 ## Needs the owner
 - Try "New case → From the bank's file" once with a synthetic loan file: the first run against

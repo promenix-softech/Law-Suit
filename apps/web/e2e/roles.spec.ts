@@ -100,6 +100,86 @@ test("the approver sees the cases they approve and the approval list", async ({ 
   await expect(page.getByRole("heading", { name: "Awaiting my approval" })).toBeVisible();
 });
 
+/** Opens a folded section of the case page (`open` is a boolean attribute, so ask the element). */
+async function openSection(page: Page, id: string) {
+  const section = page.locator(`details#${id}`);
+  if (!(await section.evaluate((d) => (d as HTMLDetailsElement).open))) await section.locator(":scope > summary").click();
+  return section;
+}
+
+test("a paper sent for approval arrives on the approver's own page: sent back with the reason, fixed, sent again, approved there", async ({ as }) => {
+  const links = await caseLinks(as);
+  const NO = caseNo(3); // drafted by drafter1, approved by approver
+  const REASON = "Correct the interest rate in paragraph 3.";
+
+  // The drafter writes the demand notice and sends it.
+  const drafter = await as("drafter1");
+  await drafter.goto(links.get(NO)!);
+  let drafts = await openSection(drafter, "drafts");
+  const notice = () => drafts.locator(".paper-card").filter({ hasText: "Demand notice" }).first();
+  await notice().getByRole("button", { name: /Generate/ }).click();
+  await notice().getByRole("button", { name: /Submit for approval/ }).click({ timeout: 30_000 });
+  await expect(notice().getByText("With the approver")).toBeVisible();
+
+  // Their approvals page says where it is; they are offered nothing to decide.
+  await drafter.goto("/dashboard/approvals");
+  await expect(drafter.locator("#my-waiting")).toContainText(NO);
+  await expect(drafter.getByRole("button", { name: /Approve/ })).toHaveCount(0);
+
+  // The approver finds it on the approvals page, with who wrote it, and can read it there.
+  const approver = await as("approver");
+  await approver.getByRole("link", { name: /Approvals/ }).first().click();
+  await approver.waitForURL(/\/dashboard\/approvals/);
+  const request = () => approver.locator("article").filter({ hasText: NO });
+  await expect(request()).toContainText("Demand notice");
+  await expect(request()).toContainText("Deepak Demo Drafter");
+  await expect(request()).toContainText("Assigned to you");
+  await request().getByRole("button", { name: /Preview/ }).click();
+  await expect(approver.getByRole("dialog")).toBeVisible();
+  await approver.keyboard.press("Escape");
+
+  // Sending back needs the reason.
+  await request().getByRole("button", { name: /Send back/ }).click();
+  await expect(request().getByRole("button", { name: /Send back to the drafter/ })).toBeDisabled();
+  await request().getByRole("textbox").fill(REASON);
+  await request().getByRole("button", { name: /Send back to the drafter/ }).click();
+  await expect(request()).toHaveCount(0);
+
+  // The drafter sees it back with the reason, and sends it again from the case.
+  await drafter.goto("/dashboard/approvals");
+  const back = drafter.locator("#returned-to-me");
+  await expect(back).toContainText(NO);
+  await expect(back).toContainText(REASON);
+  await back.getByRole("link", { name: /Fix it/ }).click();
+  await drafter.waitForURL(/\/dashboard\/cases\//);
+  drafts = await openSection(drafter, "drafts");
+  await notice().getByRole("button", { name: /Submit for approval/ }).click();
+  await expect(notice().getByText("With the approver")).toBeVisible();
+
+  // The approver sees what was said last time and approves, without opening the case.
+  await approver.goto("/dashboard/approvals");
+  await expect(request()).toContainText("Sent back earlier");
+  await expect(request()).toContainText(REASON);
+  await request().getByRole("button", { name: /Approve/ }).click();
+  await expect(request()).toHaveCount(0);
+  await approver.getByText("My recent decisions").click();
+  const decided = approver.locator("details").filter({ hasText: "My recent decisions" });
+  await expect(decided).toContainText(NO);
+  await expect(decided).toContainText("Approved");
+  await expect(decided).toContainText("Sent back");
+
+  // And the case shows the paper approved.
+  await drafter.reload();
+  drafts = await openSection(drafter, "drafts");
+  await expect(notice().getByText("Approved").first()).toBeVisible();
+});
+
+test("field staff have no approvals page", async ({ as }) => {
+  const page = await as("field");
+  await page.goto("/dashboard/approvals");
+  await expect(page).toHaveURL(/\/dashboard\/tasks/);
+});
+
 test("field staff see only their own tasks, never a case page or the reports", async ({ as }) => {
   const links = await caseLinks(as);
   const page = await as("field");

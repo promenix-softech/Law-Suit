@@ -24,20 +24,23 @@ export default async function DashboardLayout({ children }: LayoutProps<"/dashbo
   const [{ data: roles }, { count: tasksOpen }, { data: pending }] = await Promise.all([
     supabase.from("user_roles").select("role").eq("user_id", auth.user.id),
     supabase.from("tasks").select("id", { count: "exact", head: true }).eq("assignee_id", auth.user.id).in("status", ["open", "in_progress"]),
-    supabase.from("drafts").select("created_by, cases!inner(archived_at)").eq("status", "in_approval").is("cases.archived_at", null),
+    supabase.from("drafts").select("status, created_by, cases!inner(archived_at)").in("status", ["in_approval", "returned"]).is("cases.archived_at", null),
   ]);
   const r = new Set((roles ?? []).map((x) => x.role as string));
   const admin = r.has("admin");
   const fieldOnly = r.size > 0 && [...r].every((x) => x === "field");
-  // Maker-checker: nobody's queue counts their own drafts.
-  const queue = (pending ?? []).filter((d) => d.created_by !== auth.user!.id).length;
+  // What waits for this person on the approvals page: papers to decide (maker-checker: never
+  // their own) and their own papers that were sent back.
+  const canApprove = admin || r.has("approver");
+  const toDecide = canApprove ? (pending ?? []).filter((d) => d.status === "in_approval" && d.created_by !== auth.user!.id).length : 0;
+  const sentBack = (pending ?? []).filter((d) => d.status === "returned" && d.created_by === auth.user!.id).length;
 
   const work = t("Work");
   const office = t("Office");
   const items: NavItem[] = [
     ...(fieldOnly ? [] : [{ href: "/dashboard", label: t("Dashboard"), icon: "▦", group: work }]),
     ...(admin ? [{ href: "/dashboard/cases/new", label: t("New case"), icon: "＋", group: work }] : []),
-    ...(admin || r.has("approver") ? [{ href: "/dashboard#approvals", label: t("Approvals"), icon: "✓", badge: queue, group: work }] : []),
+    ...(canApprove || r.has("drafter") ? [{ href: "/dashboard/approvals", label: t("Approvals"), icon: "✓", badge: toDecide + sentBack, group: work }] : []),
     { href: "/dashboard/tasks", label: t("My tasks"), icon: "☰", badge: tasksOpen ?? 0, group: work },
     ...(admin || r.has("approver") || r.has("drafter") ? [{ href: "/dashboard/reports", label: t("Reports"), icon: "▤", group: work }] : []),
     ...(admin
