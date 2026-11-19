@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Civil Suits — Overview for Advocate Offices</title>
+<style>
+  @page { size: A4; margin: 0; }
+  :root {
+    --ink: #14213d; --muted: #5b6475; --line: #e3e7ef; --bg: #f6f8fc;
+    --brand: #1f4fd1; --brand-2: #0f9d8a; --manual: #b8bfcc; --accent: #f59e0b; --soft: #eaf0ff;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; color: var(--ink); font-family: "Inter", "Segoe UI", "Liberation Sans", "DejaVu Sans", Arial, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .page { width: 210mm; height: 296.6mm; padding: 16mm 16mm 14mm; position: relative; overflow: hidden; page-break-after: always; background: #fff; }
+  .page:last-child { page-break-after: auto; }
+  .foot { position: absolute; left: 16mm; right: 16mm; bottom: 8mm; display: flex; justify-content: space-between; font-size: 8.5pt; color: var(--muted); border-top: 1px solid var(--line); padding-top: 3mm; }
+  h1 { font-size: 30pt; line-height: 1.1; margin: 0 0 4mm; letter-spacing: -0.5px; }
+  h2 { font-size: 19pt; margin: 0 0 2mm; letter-spacing: -0.3px; }
+  h3 { font-size: 11.5pt; margin: 0 0 1.5mm; }
+  p { font-size: 10.5pt; line-height: 1.5; margin: 0 0 3mm; color: #2a3346; }
+  .kicker { text-transform: uppercase; letter-spacing: 2px; font-size: 8.5pt; color: var(--brand); font-weight: 700; margin-bottom: 2mm; }
+  .lead { font-size: 12pt; color: #2a3346; max-width: 160mm; }
+  .note { font-size: 8.5pt; color: var(--muted); line-height: 1.45; }
+  /* cover */
+  .cover { background: linear-gradient(160deg, #0f2a6e 0%, #1f4fd1 55%, #0f9d8a 100%); color: #fff; }
+  .cover h1, .cover p, .cover .kicker { color: #fff; }
+  .cover .kicker { color: #bfe9e2; }
+  .cover .lead { color: #e6edff; font-size: 13pt; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5mm; margin-top: 14mm; }
+  .stat { background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.25); border-radius: 4mm; padding: 6mm 5mm; }
+  .stat b { display: block; font-size: 30pt; line-height: 1; letter-spacing: -1px; }
+  .stat span { display: block; margin-top: 2.5mm; font-size: 10pt; color: #e6edff; line-height: 1.35; }
+  .cover .foot { color: #cfdcff; border-top-color: rgba(255,255,255,0.25); }
+  .pill { display: inline-block; padding: 1.2mm 3mm; border-radius: 10mm; font-size: 8.5pt; font-weight: 700; }
+  .cover .pill { background: rgba(255,255,255,0.16); color: #fff; margin-right: 2mm; margin-bottom: 2mm; }
+  /* cards and grids */
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4mm; }
+  .card { border: 1px solid var(--line); border-radius: 3.5mm; padding: 4.5mm; background: #fff; }
+  .card.soft { background: var(--bg); }
+  .card ul { margin: 1mm 0 0; padding-left: 4.5mm; }
+  .card li { font-size: 9.8pt; line-height: 1.5; margin-bottom: 1mm; color: #2a3346; }
+  .tag { font-size: 8pt; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+  .tag.manual { color: #7a8396; } .tag.platform { color: var(--brand-2); }
+  table.cmp { width: 100%; border-collapse: collapse; font-size: 9.6pt; }
+  table.cmp th, table.cmp td { text-align: left; vertical-align: top; padding: 2.6mm 3mm; border-bottom: 1px solid var(--line); line-height: 1.4; }
+  table.cmp th { font-size: 8.5pt; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); background: var(--bg); }
+  table.cmp td:first-child { font-weight: 700; width: 26%; }
+  table.cmp td.win { color: #0b6b5e; }
+  table.cmp td.win::before { content: "✓ "; font-weight: 700; color: var(--brand-2); }
+  .legend { display: flex; gap: 6mm; font-size: 9pt; color: var(--muted); margin: 2mm 0 3mm; }
+  .legend i { display: inline-block; width: 3.5mm; height: 3.5mm; border-radius: 1mm; margin-right: 1.5mm; vertical-align: -0.6mm; }
+  .big { font-size: 26pt; font-weight: 800; letter-spacing: -1px; color: var(--brand); line-height: 1; }
+  .big.teal { color: var(--brand-2); }
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4mm; margin: 4mm 0 5mm; }
+  .kpi { background: var(--bg); border-radius: 3mm; padding: 4mm; }
+  .kpi small { display: block; font-size: 8.5pt; color: var(--muted); margin-top: 1.5mm; line-height: 1.35; }
+  /* workflow */
+  .flow { display: grid; grid-template-columns: 1fr; gap: 2.2mm; }
+  .step { display: grid; grid-template-columns: 11mm 1fr 44mm; gap: 3.5mm; align-items: center; border: 1px solid var(--line); border-radius: 3mm; padding: 2.8mm 3.5mm; }
+  .step .n { width: 9mm; height: 9mm; border-radius: 50%; background: var(--brand); color: #fff; font-weight: 800; display: flex; align-items: center; justify-content: center; font-size: 10pt; }
+  .step.human .n { background: var(--accent); }
+  .step h3 { margin: 0; font-size: 10.5pt; }
+  .step p { margin: 0.6mm 0 0; font-size: 8.8pt; line-height: 1.38; }
+  .step .who { font-size: 8.3pt; color: var(--muted); text-align: right; line-height: 1.3; }
+  .step .who b { color: var(--ink); display: block; font-size: 8.8pt; }
+  /* features */
+  .feat { border-radius: 3mm; padding: 3.8mm; background: var(--bg); }
+  .feat h3 { color: var(--brand); font-size: 10.5pt; }
+  .feat ul { margin: 0; padding-left: 4mm; }
+  .feat li { font-size: 8.9pt; line-height: 1.42; margin-bottom: 0.8mm; color: #2a3346; }
+  .ico { display: inline-block; width: 6.5mm; height: 6.5mm; border-radius: 1.6mm; background: var(--soft); color: var(--brand); text-align: center; line-height: 6.5mm; font-weight: 800; font-size: 9pt; margin-right: 2mm; vertical-align: 0.4mm; }
+  .cta { background: linear-gradient(135deg, #0f2a6e, #1f4fd1); color: #fff; border-radius: 4mm; padding: 7mm; }
+  .cta h2, .cta p { color: #fff; }
+</style>
+</head>
+<body>
+
+<!-- 1. COVER -->
+<section class="page cover">
+  <div class="kicker">Civil Suits · by Promenix Softech LLP</div>
+  <div style="margin-top: 28mm">
+    <span class="pill">Bank recovery suits</span><span class="pill">Maharashtra courts</span><span class="pill">English + मराठी</span>
+  </div>
+  <h1 style="margin-top: 6mm; font-size: 34pt">From a bundle of loan papers to a court-ready suit — in a fraction of the time.</h1>
+  <p class="lead">Civil Suits reads the bank's loan file, fills in the facts, prepares the full suit set in your office's own format, and builds the e-filing bundle. Your advocates review and approve; the platform does the repetitive work.</p>
+
+  <div class="stats">
+    <div class="stat"><b>~77%</b><span>less staff time per suit<br>(5.5 h → 1.25 h)</span></div>
+    <div class="stat"><b>4.4×</b><span>more suits from the same team</span></div>
+    <div class="stat"><b>~4.25 h</b><span>saved on every suit you file</span></div>
+  </div>
+
+  <div style="position:absolute; left:16mm; right:16mm; bottom:22mm">
+    <p class="note" style="color:#cfdcff">Figures are planning estimates from Promenix's time model (manual hours per stage vs. review time on the platform). We confirm them with a short time study in your office during the pilot.</p>
+  </div>
+  <div class="foot"><span>Civil Suits — overview for advocate offices</span><span>Promenix Softech LLP</span></div>
+</section>
+
+<!-- 2. MANUAL VS PLATFORM -->
+<section class="page">
+  <div class="kicker">Why change</div>
+  <h2>The same suit — two ways of preparing it</h2>
+  <p class="lead">A bank recovery suit is mostly repetition: the same facts typed into a notice, a plaint, an affidavit, a certificate and an index — then formatted for e-filing. That is where the hours go, and where errors creep in.</p>
+
+  <table class="cmp" style="margin-top: 5mm">
+    <thead><tr><th>Stage</th><th>Manual today</th><th>With Civil Suits</th></tr></thead>
+    <tbody>
+      <tr><td>Reading the loan file</td><td>Staff read sanction letter, agreement, statement and notices page by page and note the facts by hand.</td><td class="win">The scan is read automatically; names, amounts, dates and rates are filled in with the source page shown for checking.</td></tr>
+      <tr><td>Amounts and court fee</td><td>Outstanding, interest and court fee worked out on a calculator; mistakes are found late, if at all.</td><td class="win">Calculated by the system from the figures you confirm — the same way every time.</td></tr>
+      <tr><td>Demand notice</td><td>Typed from an old file and edited.</td><td class="win">Generated in English or Marathi, dispatch details recorded on the case.</td></tr>
+      <tr><td>Plaint and supporting papers</td><td>Copy–paste from previous suits; facts re-typed in each document.</td><td class="win">Plaint, list of documents, affidavit, vakalatnama, Bankers' Books certificate and draft decree prepared together from one set of verified facts, in your office's format.</td></tr>
+      <tr><td>Commercial suits — Sec 12A</td><td>Easy to miss the pre-institution mediation step.</td><td class="win">The system flags when 12A mediation applies and blocks filing until the report is recorded.</td></tr>
+      <tr><td>Checking and approval</td><td>Senior reads printouts; corrections go back and forth by hand.</td><td class="win">Built-in drafter → approver workflow; the approver cannot be the person who drafted.</td></tr>
+      <tr><td>E-filing bundle</td><td>Manual PDF conversion, merging, bookmarks and file naming.</td><td class="win">Court-format PDF bundle with index, bookmarks and correct file names in one click.</td></tr>
+      <tr><td>After filing</td><td>Diaries, registers and phone calls for status.</td><td class="win">Hearing diary, limitation dates on every case and a status report per bank, downloadable as CSV.</td></tr>
+    </tbody>
+  </table>
+  <div class="foot"><span>Civil Suits — overview for advocate offices</span><span>2</span></div>
+</section>
+
+<!-- 3. TIME PER SUIT -->
+<section class="page">
+  <div class="kicker">Time per suit</div>
+  <h2>Where the hours are saved</h2>
+  <p class="lead">Estimated staff time for one suit, stage by stage. With the platform, the remaining time is review — reading and confirming, not typing.</p>
+  <div class="legend"><span><i style="background:var(--manual)"></i>Manual (hours)</span><span><i style="background:var(--brand)"></i>With Civil Suits (hours)</span></div>
+
+  <svg viewBox="0 0 640 380" width="100%" role="img" aria-label="Hours per stage, manual vs platform">
+    <g font-family="inherit" font-size="12" fill="#2a3346">
+      <!-- axis: x scale 0..2.2h -> 0..400px starting at x=210 -->
+      <g stroke="#e3e7ef">
+        <line x1="210" y1="10" x2="210" y2="345"/><line x1="301" y1="10" x2="301" y2="345"/><line x1="392" y1="10" x2="392" y2="345"/><line x1="483" y1="10" x2="483" y2="345"/><line x1="574" y1="10" x2="574" y2="345"/>
+      </g>
+      <g fill="#5b6475" font-size="10.5" text-anchor="middle">
+        <text x="210" y="362">0 h</text><text x="301" y="362">0.5 h</text><text x="392" y="362">1 h</text><text x="483" y="362">1.5 h</text><text x="574" y="362">2 h</text>
+      </g>
+      <!-- rows: each 55px -->
+      <g>
+        <text x="200" y="34" text-anchor="end">Reading documents</text>
+        <rect x="210" y="16" width="182" height="15" rx="3" fill="#b8bfcc"/><text x="398" y="28" font-size="10.5" fill="#5b6475">1.00</text>
+        <rect x="210" y="34" width="45.5" height="15" rx="3" fill="#1f4fd1"/><text x="261" y="46" font-size="10.5" fill="#1f4fd1" font-weight="700">0.25</text>
+
+        <text x="200" y="89" text-anchor="end">Demand notice</text>
+        <rect x="210" y="71" width="91" height="15" rx="3" fill="#b8bfcc"/><text x="307" y="83" font-size="10.5" fill="#5b6475">0.50</text>
+        <rect x="210" y="89" width="9.1" height="15" rx="3" fill="#1f4fd1"/><text x="225" y="101" font-size="10.5" fill="#1f4fd1" font-weight="700">0.05</text>
+
+        <text x="200" y="144" text-anchor="end">Plaint drafting</text>
+        <rect x="210" y="126" width="364" height="15" rx="3" fill="#b8bfcc"/><text x="580" y="138" font-size="10.5" fill="#5b6475">2.00</text>
+        <rect x="210" y="144" width="91" height="15" rx="3" fill="#1f4fd1"/><text x="307" y="156" font-size="10.5" fill="#1f4fd1" font-weight="700">0.50</text>
+
+        <text x="200" y="199" text-anchor="end">Affidavit, vakalatnama,</text>
+        <text x="200" y="213" text-anchor="end">BBE certificate</text>
+        <rect x="210" y="181" width="136.5" height="15" rx="3" fill="#b8bfcc"/><text x="352" y="193" font-size="10.5" fill="#5b6475">0.75</text>
+        <rect x="210" y="199" width="18.2" height="15" rx="3" fill="#1f4fd1"/><text x="234" y="211" font-size="10.5" fill="#1f4fd1" font-weight="700">0.10</text>
+
+        <text x="200" y="254" text-anchor="end">Formatting, PDF,</text>
+        <text x="200" y="268" text-anchor="end">e-filing bundle</text>
+        <rect x="210" y="236" width="136.5" height="15" rx="3" fill="#b8bfcc"/><text x="352" y="248" font-size="10.5" fill="#5b6475">0.75</text>
+        <rect x="210" y="254" width="18.2" height="15" rx="3" fill="#1f4fd1"/><text x="234" y="266" font-size="10.5" fill="#1f4fd1" font-weight="700">0.10</text>
+
+        <text x="200" y="309" text-anchor="end">Checking / approval</text>
+        <rect x="210" y="291" width="91" height="15" rx="3" fill="#b8bfcc"/><text x="307" y="303" font-size="10.5" fill="#5b6475">0.50</text>
+        <rect x="210" y="309" width="45.5" height="15" rx="3" fill="#1f4fd1"/><text x="261" y="321" font-size="10.5" fill="#1f4fd1" font-weight="700">0.25</text>
+      </g>
+    </g>
+  </svg>
+
+  <div class="grid2" style="margin-top: 4mm; align-items: stretch">
+    <div class="card soft">
+      <span class="tag manual">Manual</span>
+      <div class="big" style="color:#7a8396; margin-top:2mm">5.5 h</div>
+      <p style="margin-top:2mm">per suit, mostly typing and re-typing the same facts.</p>
+    </div>
+    <div class="card" style="border-color:#bfe9e2; background:#effaf8">
+      <span class="tag platform">With Civil Suits</span>
+      <div class="big teal" style="margin-top:2mm">1.25 h</div>
+      <p style="margin-top:2mm">per suit, spent on checking and approving — the work only an advocate should do.</p>
+    </div>
+  </div>
+  <p class="note" style="margin-top:4mm">Hours are planning assumptions per stage, to be replaced by your office's measured times after the pilot.</p>
+  <div class="foot"><span>Civil Suits — overview for advocate offices</span><span>3</span></div>
+</section>
+
+<!-- 4. CAPACITY -->
+<section class="page">
+  <div class="kicker">Capacity</div>
+  <h2>Grow the number of suits, not the size of the team</h2>
+  <p class="lead">Staff needed to prepare the suits each month (176 working hours per person per month), at today's volume and at a scale-up volume.</p>
+
+  <div class="kpis">
+    <div class="kpi"><div class="big">638 h</div><small>staff hours saved a month at 150 suits</small></div>
+    <div class="kpi"><div class="big">3.6</div><small>full-time staff freed at 150 suits a month</small></div>
+    <div class="kpi"><div class="big teal">≈₹90k</div><small>monthly staff cost freed at 150 suits (at ₹25,000 per person)</small></div>
+    <div class="kpi"><div class="big teal">78 → 18</div><small>staff needed at 2,500 suits a month (≈100 a day)</small></div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>150 suits a month</h3>
+      <div class="legend" style="margin:1mm 0 2mm"><span><i style="background:var(--manual)"></i>Manual</span><span><i style="background:var(--brand)"></i>Civil Suits</span></div>
+      <svg viewBox="0 0 280 210" width="100%" role="img" aria-label="Staff needed at 150 suits a month">
+        <g font-size="11" fill="#2a3346">
+          <line x1="20" y1="175" x2="270" y2="175" stroke="#e3e7ef"/>
+          <!-- scale: 5 staff = 150px -->
+          <rect x="45" y="34" width="70" height="141" rx="4" fill="#b8bfcc"/>
+          <text x="80" y="26" text-anchor="middle" font-weight="700" fill="#5b6475">4.7 staff</text>
+          <text x="80" y="193" text-anchor="middle">Manual · 825 h</text>
+          <rect x="165" y="143" width="70" height="32" rx="4" fill="#1f4fd1"/>
+          <text x="200" y="135" text-anchor="middle" font-weight="700" fill="#1f4fd1">1.1 staff</text>
+          <text x="200" y="193" text-anchor="middle">Civil Suits · 188 h</text>
+        </g>
+      </svg>
+    </div>
+    <div class="card">
+      <h3>2,500 suits a month (≈100 a day)</h3>
+      <div class="legend" style="margin:1mm 0 2mm"><span><i style="background:var(--manual)"></i>Manual</span><span><i style="background:var(--brand)"></i>Civil Suits</span></div>
+      <svg viewBox="0 0 280 210" width="100%" role="img" aria-label="Staff needed at 2500 suits a month">
+        <g font-size="11" fill="#2a3346">
+          <line x1="20" y1="175" x2="270" y2="175" stroke="#e3e7ef"/>
+          <!-- scale: 80 staff = 150px -->
+          <rect x="45" y="29" width="70" height="146" rx="4" fill="#b8bfcc"/>
+          <text x="80" y="21" text-anchor="middle" font-weight="700" fill="#5b6475">≈78 staff</text>
+          <text x="80" y="193" text-anchor="middle">Manual · 13,750 h</text>
+          <rect x="165" y="141" width="70" height="34" rx="4" fill="#1f4fd1"/>
+          <text x="200" y="133" text-anchor="middle" font-weight="700" fill="#1f4fd1">≈18 staff</text>
+          <text x="200" y="193" text-anchor="middle">Civil Suits · 3,125 h</text>
+        </g>
+      </svg>
+    </div>
+  </div>
+
+  <div class="card soft" style="margin-top:5mm">
+    <h3>What this means for your office</h3>
+    <ul>
+      <li>Take on more bank files without hiring in proportion — the team grows by about one person for every four it would otherwise need.</li>
+      <li>Suits reach the court sooner, so limitation risk falls and the bank sees faster action on its NPA accounts.</li>
+      <li>Senior advocates spend their time on review and court work, not on formatting.</li>
+    </ul>
+  </div>
+  <p class="note" style="margin-top:4mm">Assumptions: 5.5 h manual vs 1.25 h on the platform per suit; 176 working hours per person per month; ₹25,000 per staff member per month. Replace with your own figures for an exact comparison.</p>
+  <div class="foot"><span>Civil Suits — overview for advocate offices</span><span>4</span></div>
+</section>
+
+<!-- 5. WORKFLOW -->
+<section class="page">
+  <div class="kicker">Workflow</div>
+  <h2>How a suit moves through the platform</h2>
+  <p class="lead" style="margin-bottom:4mm">Every step is recorded. People decide; the platform prepares.<br><span style="color:var(--brand); font-weight:700">●</span> platform &nbsp; <span style="color:var(--accent); font-weight:700">●</span> your team</p>
+  <div class="flow">
+    <div class="step"><div class="n">1</div><div><h3>Upload the loan file</h3><p>One scan per case, or one large PDF with many loan files — the platform splits it by account.</p></div><div class="who"><b>Office staff</b>Phone or computer</div></div>
+    <div class="step"><div class="n">2</div><div><h3>Automatic reading</h3><p>Pages are read and recognised (sanction letter, agreement, statement, notice); names, amounts, dates and rates are picked out.</p></div><div class="who"><b>Platform</b>Automatic</div></div>
+    <div class="step human"><div class="n">3</div><div><h3>Verify the facts</h3><p>Each value is shown next to the page it came from. Staff confirm or correct — nothing goes into a document unchecked.</p></div><div class="who"><b>Drafter</b>Review, not typing</div></div>
+    <div class="step"><div class="n">4</div><div><h3>Calculations and checks</h3><p>Claim amount, interest, court fee and limitation dates are calculated; Sec 12A mediation is flagged for commercial suits.</p></div><div class="who"><b>Platform</b>Same rules every time</div></div>
+    <div class="step"><div class="n">5</div><div><h3>Demand notice</h3><p>Generated in English or Marathi; dispatch mode, tracking number and date recorded.</p></div><div class="who"><b>Platform + drafter</b></div></div>
+    <div class="step"><div class="n">6</div><div><h3>Full suit set prepared</h3><p>Plaint, list of documents, affidavit, vakalatnama, Bankers' Books certificate, draft decree — in your office's own format.</p></div><div class="who"><b>Platform</b>Edit any paragraph</div></div>
+    <div class="step human"><div class="n">7</div><div><h3>Approval</h3><p>The approver reviews and approves or returns with comments. The person who drafted cannot approve their own work.</p></div><div class="who"><b>Approver / advocate</b>Approvals inbox</div></div>
+    <div class="step"><div class="n">8</div><div><h3>E-filing bundle</h3><p>Court-format PDF with index, bookmarks and correct file names, ready to upload.</p></div><div class="who"><b>Platform</b>One click</div></div>
+    <div class="step human"><div class="n">9</div><div><h3>After filing</h3><p>Hearing diary, field tasks with photo proof (notary, dispatch, e-filing), limitation dates and a status report for each bank.</p></div><div class="who"><b>Whole office</b>Bank-wise reports</div></div>
+  </div>
+  <div class="foot"><span>Civil Suits — overview for advocate offices</span><span>5</span></div>
+</section>
+
+<!-- 6. FEATURES -->
+<section class="page">
+  <div class="kicker">Features</div>
+  <h2>Everything a bank-recovery practice needs</h2>
+  <div class="grid2" style="margin-top:4mm; gap:4mm">
+    <div class="feat"><h3><span class="ico">⇪</span>Case intake</h3><ul>
+      <li>New case from a scan: facts read and filled in for checking</li>
+      <li>Bulk upload: one PDF with many loan files, split by account</li>
+      <li>Court suggested from the branch's district</li>
+      <li>Masters for banks, branches and courts</li></ul></div>
+    <div class="feat"><h3><span class="ico">₹</span>Calculations</h3><ul>
+      <li>Claim amount, interest and amount in words (lakh/crore)</li>
+      <li>Maharashtra court fee and DRT fee</li>
+      <li>Commercial-suit threshold and Sec 12A check</li>
+      <li>Limitation dates, acknowledgment and part-payment record</li></ul></div>
+    <div class="feat"><h3><span class="ico">✎</span>Documents</h3><ul>
+      <li>Demand notice — English and Marathi</li>
+      <li>Plaint: ordinary, Order XXXVII summary, commercial</li>
+      <li>List of documents, affidavit / statement of truth, vakalatnama</li>
+      <li>Bankers' Books certificate, draft decree, interim application</li>
+      <li>Your office's own format; edit any paragraph or upload a corrected Word file</li></ul></div>
+    <div class="feat"><h3><span class="ico">✓</span>Approval and control</h3><ul>
+      <li>Drafter → approver workflow; approver ≠ drafter, enforced</li>
+      <li>Approvals inbox for admins and approvers</li>
+      <li>Roles: admin, drafter, approver, field staff</li>
+      <li>Full, tamper-evident audit trail of every change</li></ul></div>
+    <div class="feat"><h3><span class="ico">⎙</span>E-filing</h3><ul>
+      <li>Court-format PDF bundle (A4, e-filing margins and fonts)</li>
+      <li>Index, bookmarks and e-filing file names</li>
+      <li>Executed documents taken straight from the scan</li></ul></div>
+    <div class="feat"><h3><span class="ico">⌚</span>After filing</h3><ul>
+      <li>Hearing diary and disposal record</li>
+      <li>Field tasks on the phone with photo proof</li>
+      <li>Bank-wise status report and CSV export</li>
+      <li>Archive and restore cases</li></ul></div>
+    <div class="feat"><h3><span class="ico">अ</span>For your team</h3><ul>
+      <li>Marathi and English interface</li>
+      <li>Your own sign-in address (firm code)</li>
+      <li>Invite staff by email; they set their own password</li>
+      <li>Next-step guidance on every case</li></ul></div>
+    <div class="feat"><h3><span class="ico">⛨</span>Security and privacy</h3><ul>
+      <li>Each office sees only its own data</li>
+      <li>Sensitive fields encrypted; Aadhaar stored as last 4 digits only</li>
+      <li>Bulk-upload originals deleted 7 days after the batch is closed</li>
+      <li>Usage plan, invoices and GST handled by Promenix</li></ul></div>
+  </div>
+  <div class="foot"><span>Civil Suits — overview for advocate offices</span><span>6</span></div>
+</section>
+
+<!-- 7. TRUST + CTA -->
+<section class="page">
+  <div class="kicker">Built for legal work</div>
+  <h2>Accurate, accountable, under your control</h2>
+  <div class="grid3" style="margin-top:5mm">
+    <div class="card"><h3>Facts are verified</h3><p>The platform reads documents; your staff confirm every value against the source page before it is used.</p></div>
+    <div class="card"><h3>Law comes from templates</h3><p>Legal paragraphs come from approved, versioned templates in your format — never invented by AI.</p></div>
+    <div class="card"><h3>Numbers come from code</h3><p>Amounts, interest, court fee and limitation are calculated by fixed rules, not guessed.</p></div>
+    <div class="card"><h3>Two-person rule</h3><p>A suit needs an approver who did not draft it — enforced by the system, not just policy.</p></div>
+    <div class="card"><h3>Every change recorded</h3><p>A tamper-evident audit trail shows who did what and when.</p></div>
+    <div class="card"><h3>Your data stays yours</h3><p>Office-wise separation, encryption of sensitive fields and data export at any time.</p></div>
+  </div>
+
+  <div class="cta" style="margin-top:9mm">
+    <div class="kicker" style="color:#bfe9e2">Next step</div>
+    <h2>See it on your own files</h2>
+    <p style="font-size:11pt">We run a short pilot with a few of your recent suits: we measure the time your team spends today, prepare the same suits on Civil Suits, and compare the hours, accuracy and turnaround side by side.</p>
+    <div class="grid3" style="margin-top:5mm">
+      <div class="stat"><b style="font-size:16pt">1</b><span>Share 3–5 sample loan files</span></div>
+      <div class="stat"><b style="font-size:16pt">2</b><span>We set up your office format and logins</span></div>
+      <div class="stat"><b style="font-size:16pt">3</b><span>Compare: your time today vs. on the platform</span></div>
+    </div>
+  </div>
+  <p class="note" style="margin-top:6mm">All time and staff figures in this document are planning estimates for discussion, not a guarantee; they are confirmed with your office's own measurements during the pilot. Screens and documents are shown with demo data only.</p>
+  <div class="foot"><span>Civil Suits — overview for advocate offices</span><span>Promenix Softech LLP</span></div>
+</section>
+
+</body>
+</html>
