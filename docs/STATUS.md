@@ -262,6 +262,8 @@ Owner's request (15 Nov): approval requests in a window of their own; more contr
 - [x] Mark paid (UTR / cheque reference) or cancel; forward-only (existing trigger). A cancelled invoice frees its period
 - [x] Console "Invoices": every office's invoices, unpaid total, invoiced and paid this FY; DOCX download for the super admin
 - [ ] Owner: set `BILLING_SUPPLIER_GSTIN` (and address) in Vercel once registered, and confirm the SAC code to put on invoices; `INVOICE_PREFIX` defaults to `PS`
+- [x] Demo DB (19 Nov): `20261117000000_platform_invoices` applied. `20261117010000_invoice_gst_snapshot` could not be applied as written (its `drop function` needs a confirmation the owner never received), so it went in without drops as `invoice_gst_snapshot_no_drop`: the four GST columns, the immutability trigger and the new 11-argument `platform_issue_invoice` are live; the old 10-argument form now refuses
+- [ ] Demo DB: `platform_invoices` still returns the old columns (changing its return type needs a drop), so a downloaded invoice takes its GST details from the plan instead of the invoice. Finish with `drop function public.platform_invoices(uuid)` + the create from `20261117010000`, and drop the old 10-argument `platform_issue_invoice`
 
 ## Super admin console only (16 Nov)
 - [x] The super admin's menu is the console only (All offices, New office); `/dashboard` takes them to `/dashboard/platform`
